@@ -4,7 +4,8 @@
   "compatibility_date": "2026-01-01",
   "compatibility_flags": ["nodejs_compat_v2"],
   "vars": {
-    "ENVIRONMENT": "production"
+    "ENVIRONMENT": "production",
+    "BACKEND_URL": "https://clarity-sznp.onrender.com/"
   },
   "workers_dev": true,
   "preview_urls": true,
