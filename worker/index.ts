@@ -167,6 +167,26 @@ export default {
       return resp;
     }
 
+    // Proxy all remaining /api/* routes to the Flask backend
+    const backendUrl = (env as any).BACKEND_URL || "http://localhost:5000";
+    if (url.pathname.startsWith("/api/") && url.pathname !== "/api/chat" && url.pathname !== "/api/health" && !url.pathname.startsWith("/api/auth/")) {
+      const target = new URL(url.pathname + url.search, backendUrl);
+      try {
+        const proxyResponse = await fetch(target.toString(), {
+          method: request.method,
+          headers: request.headers,
+          body: ["GET", "HEAD", "OPTIONS"].includes(request.method) ? null : request.body,
+        });
+        return new Response(proxyResponse.body, {
+          status: proxyResponse.status,
+          statusText: proxyResponse.statusText,
+          headers: proxyResponse.headers,
+        });
+      } catch (e: any) {
+        return Response.json({ error: "Backend unreachable: " + (e.message || ""), type: "backend_unavailable" }, { status: 503 });
+      }
+    }
+
     // Fallback: serve static frontend for SPA routes
     return fetch(request);
   },
