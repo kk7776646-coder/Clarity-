@@ -31,11 +31,19 @@ CORS(app, origins=["https://clarity.kk7776646.workers.dev"], supports_credential
 - OPENROUTER_API_KEY: Configure in hosting platform secrets/environment variables. Never commit to source.
 - FLASK_SECRET: Configure in hosting platform secrets/environment variables.
 
+## Render Configuration
+- Root Directory: . (repository root)
+- Build Command: pip install -r requirements.txt
+- Start Command: gunicorn wsgi:app
+- Runtime: Python 3.12 (specified in runtime.txt)
+
 ## Deployment Files (Existing)
 - Procfile
 - runtime.txt
 - wsgi.py
-- server/requirements.txt
+- requirements.txt (at repository root, copied from server/requirements.txt for Render compatibility)
+- server/app.py (Flask backend source)
+- server/ (full backend package)
 
 ## Important Notes
 - Do NOT hardcode `localhost:5000` for production backend access.
