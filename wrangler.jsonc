@@ -1,18 +1,14 @@
 {
-  "name": "clarity-worker",
+  "name": "clarity",
   "main": "worker/index.ts",
   "compatibility_date": "2026-01-01",
   "compatibility_flags": ["nodejs_compat_v2"],
   "vars": {
     "ENVIRONMENT": "production"
   },
-  "routes": [
-    {
-      "pattern": "clarity-*.workers.dev/*",
-      "zone_name": "workers.dev"
-    }
-  ],
-  "site": {
-    "bucket": "./dist"
+  "workers_dev": true,
+  "preview_urls": true,
+  "assets": {
+    "directory": "./dist/client"
   }
 }

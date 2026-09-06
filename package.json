@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "wrangler deploy"
+    "deploy": "npm run postbuild && wrangler deploy",
+    "postbuild": "node -e \"const fs=require('fs'); ['dist/clarity_worker/wrangler.json','dist/clarity/wrangler.json'].forEach(p=>{ if(fs.existsSync(p)){ let c=JSON.parse(fs.readFileSync(p,'utf8')); delete c.no_bundle; fs.writeFileSync(p, JSON.stringify(c)); console.log('Fixed no_bundle in', p); } })\""
   },
   "dependencies": {
     "react": "^19.0.0",
