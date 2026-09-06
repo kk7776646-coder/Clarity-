@@ -1,7 +1,6 @@
-import React from "react";
-import ReactDOM from "react-dom/client";
+// Initialize existing Clarity vanilla JS application
+// This script loads all modules and starts the app
 
-// Import all existing vanilla JS modules so Vite bundles them correctly
 import "../js/lib/utils.js";
 import "../js/lib/icons.js";
 import "../js/lib/dom.js";
@@ -30,18 +29,22 @@ import "../js/pages/model.js";
 import "../js/pages/project.js";
 import "../js/app.js";
 
+// Initialize CSS
 import "../css/tokens.css";
 import "../css/base.css";
 import "../css/layout.css";
 import "../css/components.css";
 import "../css/pages.css";
 
-const App = () => {
-  return React.createElement("div", {
-    className: "app-root-vite",
-    id: "app",
+// Start the application after DOM is loaded
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
+    if (window.NexaRAG && window.NexaRAG.app && typeof window.NexaRAG.app.init === "function") {
+      window.NexaRAG.app.init();
+    }
   });
-};
-
-const root = ReactDOM.createRoot(document.getElementById("app"));
-root.render(React.createElement(App));
+} else {
+  if (window.NexaRAG && window.NexaRAG.app && typeof window.NexaRAG.app.init === "function") {
+    window.NexaRAG.app.init();
+  }
+}
