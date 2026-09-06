@@ -13,4 +13,3 @@ window.Clarity.dom = {
     node.appendChild(child);
   }
 };
-

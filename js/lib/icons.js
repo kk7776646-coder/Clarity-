@@ -52,10 +52,10 @@ window.Clarity.icons = {
   settingsGear: null,
 };
 
-window.Clarity.icons.regenerate = window.Clarity.icons.refresh;
-window.Clarity.icons.delete = window.Clarity.icons.trash;
-window.Clarity.icons.close = window.Clarity.icons.x;
-window.Clarity.icons.settingsGear = window.Clarity.icons.settings;
+window.Clarity.icons.regenerate = window.NexaRAG.icons.refresh;
+window.Clarity.icons.delete = window.NexaRAG.icons.trash;
+window.Clarity.icons.close = window.NexaRAG.icons.x;
+window.Clarity.icons.settingsGear = window.NexaRAG.icons.settings;
 
 window.Clarity.getIcon = function(name, size) {
   const icon = this.icons[name];
@@ -65,4 +65,3 @@ window.Clarity.getIcon = function(name, size) {
   }
   return icon;
 };
-
