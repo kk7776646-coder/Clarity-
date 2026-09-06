@@ -1,4 +1,4 @@
-"""NexaRAG backend.
+"""Clarity backend.
 
 Single Flask app: authentication, model registry, chat streaming, files,
 projects and the static SPA. Provider API keys never leave this process.
