@@ -82,7 +82,7 @@ export default {
     // Auth routes (mirror Flask auth_service behavior securely)
     const authPath = url.pathname;
     const cookieHeader = request.headers.get("Cookie") || "";
-    const sessionCookie = cookieHeader.split(";").map(c => c.trim()).find(c => c.startsWith("nexarag_session="));
+    const sessionCookie = cookieHeader.split(";").map(c => c.trim()).find(c => c.startsWith("clarity_session="));
     const sessionToken = sessionCookie ? sessionCookie.split("=")[1] : null;
 
     if (authPath === "/api/auth/me" && request.method === "GET") {
@@ -121,7 +121,7 @@ export default {
         // Set session cookie securely (mirrors Flask session cookie behavior for first-party SPA)
         sessionResponse.headers.append(
           "Set-Cookie",
-          `nexarag_session=${crypto.randomUUID()}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000`
+          `clarity_session=${crypto.randomUUID()}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000`
         );
         return sessionResponse;
       } catch (e: any) {
@@ -149,7 +149,7 @@ export default {
         resp.headers.set("Content-Type", "application/json");
         resp.headers.append(
           "Set-Cookie",
-          `nexarag_session=${crypto.randomUUID()}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000`
+          `clarity_session=${crypto.randomUUID()}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000`
         );
         return resp;
       } catch (e: any) {
@@ -162,7 +162,7 @@ export default {
       resp.headers.set("Content-Type", "application/json");
       resp.headers.append(
         "Set-Cookie",
-        `nexarag_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`
+        `clarity_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`
       );
       return resp;
     }

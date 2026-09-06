@@ -16,7 +16,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from server.storage.db import execute, query
 
-SESSION_COOKIE = "nexarag_session"
+SESSION_COOKIE = "clarity_session"
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", 60 * 60 * 24 * 30))
 MIN_PASSWORD_LENGTH = 8
 
