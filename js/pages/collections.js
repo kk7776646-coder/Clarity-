@@ -1,13 +1,13 @@
-window.NexaRAG = window.NexaRAG || {};
-window.NexaRAG.pages = window.NexaRAG.pages || {};
+window.Clarity = window.Clarity || {};
+window.Clarity.pages = window.Clarity.pages || {};
 
-window.NexaRAG.pages.collections = async function renderCollectionsPage() {
+window.Clarity.pages.collections = async function renderCollectionsPage() {
   const main = document.getElementById('main');
   if (!main) return;
 
   let files = [];
   try {
-    const data = await window.NexaRAG.api.get("/api/files/shared");
+    const data = await window.Clarity.api.get("/api/files/shared");
     files = data.files || [];
   } catch (e) {}
 
@@ -51,10 +51,11 @@ function collectionCardHtml(key, label, items) {
   return '<article class="collection-card" data-collection="' + key + '">' +
     '<div class="collection-card__top">' +
       '<div class="collection-card__icon">' + (label.split(' ')[0] || '📁') + '</div>' +
-      '<span class="tag">' + window.NexaRAG.utils.escapeHtml(items.length + ' item' + (items.length === 1 ? '' : 's')) + '</span>' +
+      '<span class="tag">' + window.Clarity.utils.escapeHtml(items.length + ' item' + (items.length === 1 ? '' : 's')) + '</span>' +
     '</div>' +
-    '<div><h3>' + window.NexaRAG.utils.escapeHtml(label.replace(/^[^ ]+ /, '')) + '</h3>' +
-    '<div class="collection-card__meta">' + items.slice(0, 4).map(f => window.NexaRAG.utils.escapeHtml(f.filename)).join(', ') + (items.length > 4 ? ', …' : '') + '</div></div>' +
+    '<div><h3>' + window.Clarity.utils.escapeHtml(label.replace(/^[^ ]+ /, '')) + '</h3>' +
+    '<div class="collection-card__meta">' + items.slice(0, 4).map(f => window.Clarity.utils.escapeHtml(f.filename)).join(', ') + (items.length > 4 ? ', …' : '') + '</div></div>' +
     '<div class="spread"><a class="btn btn--outline btn--sm" href="#/knowledge">View all</a></div>' +
   '</article>';
 }
+

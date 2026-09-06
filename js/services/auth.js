@@ -1,4 +1,4 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
 /**
  * Authentication state: holds the current user, renders the login/signup
@@ -9,7 +9,7 @@ window.NexaRAG = window.NexaRAG || {};
  * displayed in the topbar is therefore always the real account, never a
  * placeholder or stale value.
  */
-window.NexaRAG.auth = {
+window.Clarity.auth = {
   _user: null,
   _listeners: new Set(),
 
@@ -174,9 +174,9 @@ window.NexaRAG.auth = {
       };
       try {
         if (mode === "signup") {
-          await window.NexaRAG.auth.signup(payload.email, payload.password, payload.name);
+          await window.Clarity.auth.signup(payload.email, payload.password, payload.name);
         } else {
-          await window.NexaRAG.auth.login(payload.email, payload.password);
+          await window.Clarity.auth.login(payload.email, payload.password);
         }
       } catch (err) {
         errEl.textContent = err.message || "Authentication failed";
@@ -186,7 +186,7 @@ window.NexaRAG.auth = {
       }
       submit.disabled = false;
       // Let app.js navigate to chat.
-      window.NexaRAG.app && window.NexaRAG.app.afterLogin && window.NexaRAG.app.afterLogin();
+      window.Clarity.app && window.Clarity.app.afterLogin && window.Clarity.app.afterLogin();
     });
   },
 

@@ -1,15 +1,15 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
-window.NexaRAG.settings = {
+window.Clarity.settings = {
   defaults: { theme: 'system', density: 'comfortable' },
   get() {
-    const store = window.NexaRAG.store || { get(key, fallback) { return fallback; } };
+    const store = window.Clarity.store || { get(key, fallback) { return fallback; } };
     const saved = store.get('app_settings', {});
     return Object.assign({}, this.defaults, saved || {});
   },
   set(partial) {
     const next = Object.assign(this.get(), partial || {});
-    const store = window.NexaRAG.store || { set() {} };
+    const store = window.Clarity.store || { set() {} };
     store.set('app_settings', next);
     return next;
   },
@@ -17,8 +17,8 @@ window.NexaRAG.settings = {
     const next = theme || this.get().theme || 'system';
     if (!['light', 'dark', 'system'].includes(next)) return;
     this.set({ theme: next });
-    if (window.NexaRAG.theme) {
-      window.NexaRAG.theme.setMode(next);
+    if (window.Clarity.theme) {
+      window.Clarity.theme.setMode(next);
     } else {
       document.documentElement.setAttribute('data-theme', next);
     }

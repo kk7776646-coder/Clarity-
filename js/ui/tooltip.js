@@ -1,6 +1,6 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
-window.NexaRAG.uiTooltip = (function () {
+window.Clarity.uiTooltip = (function () {
   let activeTip = null;
   let hideTimer = null;
   let currentTarget = null;

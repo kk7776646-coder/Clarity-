@@ -1,5 +1,5 @@
-window.NexaRAG = window.NexaRAG || {};
-window.NexaRAG.pages = window.NexaRAG.pages || {};
+window.Clarity = window.Clarity || {};
+window.Clarity.pages = window.Clarity.pages || {};
 
 const THEME_ICONS = {
   light: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>',
@@ -18,16 +18,16 @@ function segmentedGroup(items, type) {
       const icon = type === "theme" ? THEME_ICONS[it.value] : DENSITY_ICONS[it.value];
       return '<button class="segmented__option" type="button" data-' + type + '="' + it.value + '" role="radio" aria-checked="false">' +
         '<span class="segmented__icon">' + icon + '</span>' +
-        '<span class="segmented__label">' + window.NexaRAG.utils.escapeHtml(it.label) + '</span>' +
+        '<span class="segmented__label">' + window.Clarity.utils.escapeHtml(it.label) + '</span>' +
         '</button>';
     }).join("") +
     '</div>';
 }
 
-window.NexaRAG.pages.settings = function renderSettingsPage() {
+window.Clarity.pages.settings = function renderSettingsPage() {
   const main = document.getElementById("main");
   if (!main) return;
-  const current = window.NexaRAG.settings.get();
+  const current = window.Clarity.settings.get();
 
   const page = [
     '<div class="page"><div class="page__inner page__inner--narrow">',
@@ -115,7 +115,7 @@ window.NexaRAG.pages.settings = function renderSettingsPage() {
   const density = document.querySelectorAll('.segmented__option[data-density]');
 
   const refresh = () => {
-    const mode = window.NexaRAG.settings ? window.NexaRAG.settings.get().theme : 'light';
+    const mode = window.Clarity.settings ? window.Clarity.settings.get().theme : 'light';
     theme.forEach(btn => {
       const v = btn.getAttribute('data-theme');
       const active = v === mode;
@@ -134,17 +134,17 @@ window.NexaRAG.pages.settings = function renderSettingsPage() {
 
   theme.forEach(btn => btn.addEventListener('click', () => {
     const v = btn.getAttribute('data-theme');
-    window.NexaRAG.settings.applyTheme(v);
-    window.NexaRAG.theme.setMode(v);
-    window.NexaRAG.toast.show('Theme set to ' + v.charAt(0).toUpperCase() + v.slice(1), 'success');
+    window.Clarity.settings.applyTheme(v);
+    window.Clarity.theme.setMode(v);
+    window.Clarity.toast.show('Theme set to ' + v.charAt(0).toUpperCase() + v.slice(1), 'success');
     refresh();
   }));
 
   density.forEach(btn => btn.addEventListener('click', () => {
     const v = btn.getAttribute('data-density');
-    window.NexaRAG.settings.set({ density: v });
+    window.Clarity.settings.set({ density: v });
     document.documentElement.setAttribute('data-density', v);
-    window.NexaRAG.toast.show('Density set to ' + v, 'success');
+    window.Clarity.toast.show('Density set to ' + v, 'success');
     refresh();
   }));
 
@@ -152,7 +152,7 @@ window.NexaRAG.pages.settings = function renderSettingsPage() {
     if (!confirm('Clear all local preferences?')) return;
     try {
       Object.keys(localStorage).filter(k => k !== 'auth_token').forEach(k => localStorage.removeItem(k));
-      window.NexaRAG.toast.show('Local preferences cleared. Reloading…', 'success');
+      window.Clarity.toast.show('Local preferences cleared. Reloading…', 'success');
       setTimeout(() => window.location.reload(), 600);
     } catch (e) {}
   });

@@ -1,14 +1,14 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
 /**
- * HTTP client for the NexaRAG backend.
+ * HTTP client for the Clarity backend.
  *
  * The SPA and the API share an origin, so the session cookie is sent
  * automatically and no token is ever stored in JavaScript. A 401 response
  * means the session is gone: the auth layer is notified so it can show the
  * sign-in screen instead of leaving stale data on screen.
  */
-window.NexaRAG.api = {
+window.Clarity.api = {
   base: "",
 
   _url(path) {
@@ -37,7 +37,7 @@ window.NexaRAG.api = {
       err.type = (data && data.type) || null;
       err.data = data;
       if (resp.status === 401 && !path.startsWith("/api/auth/")) {
-        window.NexaRAG.auth?.handleSessionExpired?.();
+        window.Clarity.auth?.handleSessionExpired?.();
       }
       throw err;
     }
@@ -85,7 +85,7 @@ window.NexaRAG.api = {
       const err = new Error((data && data.error) || resp.statusText || "Upload failed");
       err.status = resp.status;
       err.type = (data && data.type) || null;
-      if (resp.status === 401) window.NexaRAG.auth?.handleSessionExpired?.();
+      if (resp.status === 401) window.Clarity.auth?.handleSessionExpired?.();
       throw err;
     }
     return data;
@@ -118,7 +118,7 @@ window.NexaRAG.api = {
           } catch (e) { detail = txt; }
         }
       } catch (e) { /* body unavailable */ }
-      if (resp.status === 401) window.NexaRAG.auth?.handleSessionExpired?.();
+      if (resp.status === 401) window.Clarity.auth?.handleSessionExpired?.();
       if (onError) onError({ message: detail, type, status: resp.status });
       return "";
     }
@@ -153,3 +153,4 @@ window.NexaRAG.api = {
     return full;
   },
 };
+

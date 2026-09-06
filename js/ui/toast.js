@@ -1,6 +1,6 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
-window.NexaRAG.toast = {
+window.Clarity.toast = {
   show(message, type) {
     const root = document.getElementById('toasts');
     if (!root) return;
@@ -13,3 +13,4 @@ window.NexaRAG.toast = {
     }, 2400);
   }
 };
+

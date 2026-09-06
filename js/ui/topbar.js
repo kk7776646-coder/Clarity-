@@ -1,6 +1,6 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
-window.NexaRAG.uiTopbar = {
+window.Clarity.uiTopbar = {
   _menuBound: false,
 
   _getInitials(name) {
@@ -13,8 +13,8 @@ window.NexaRAG.uiTopbar = {
   },
 
   updateModelChip() {
-    if (window.NexaRAG.modelSelector) {
-      window.NexaRAG.modelSelector.renderChip("modelChip");
+    if (window.Clarity.modelSelector) {
+      window.Clarity.modelSelector.renderChip("modelChip");
     }
   },
 
@@ -30,15 +30,15 @@ window.NexaRAG.uiTopbar = {
     btn.addEventListener("click", () => {
       const current = document.documentElement.getAttribute("data-theme") || "light";
       const next = current === "dark" ? "light" : "dark";
-      window.NexaRAG.settings.applyTheme(next);
-      window.NexaRAG.toast.show("Theme switched to " + next, "success");
+      window.Clarity.settings.applyTheme(next);
+      window.Clarity.toast.show("Theme switched to " + next, "success");
       syncLabel();
     });
   },
 
   async initModelSelector() {
-    if (window.NexaRAG.modelSelector) {
-      await window.NexaRAG.modelSelector.load();
+    if (window.Clarity.modelSelector) {
+      await window.Clarity.modelSelector.load();
     }
     this._bindModelDropdown();
   },
@@ -57,7 +57,7 @@ window.NexaRAG.uiTopbar = {
     const avatarImgDropdown = document.getElementById("userMenuAvatarImgDropdown");
     const nameEl = document.getElementById("userMenuName");
     const emailFullLabel = document.getElementById("userMenuEmailFull");
-    const user = window.NexaRAG.auth && window.NexaRAG.auth.user;
+    const user = window.Clarity.auth && window.Clarity.auth.user;
     if (!button || !user) return;
 
     const email = user.email || "";
@@ -96,7 +96,7 @@ window.NexaRAG.uiTopbar = {
     applyPhoto(avatarImg, initialEl, avatarEl);
     applyPhoto(avatarImgDropdown, initialDropdown, avatarDropdown);
 
-    if (window.NexaRAG.uiTooltip) window.NexaRAG.uiTooltip.bind(button);
+    if (window.Clarity.uiTooltip) window.Clarity.uiTooltip.bind(button);
 
     if (this._menuBound) return;
     this._menuBound = true;
@@ -133,7 +133,7 @@ window.NexaRAG.uiTopbar = {
     });
     menu.querySelector('[data-user-action="logout"]')?.addEventListener("click", async () => {
       close();
-      await window.NexaRAG.auth.logout();
+      await window.Clarity.auth.logout();
     });
   },
 
@@ -143,7 +143,7 @@ window.NexaRAG.uiTopbar = {
     if (!chip || !dropdown || dropdown._bound) return;
     dropdown._bound = true;
 
-    window.NexaRAG.modelSelector.renderDropdown("modelSelectorDropdown");
+    window.Clarity.modelSelector.renderDropdown("modelSelectorDropdown");
 
     const place = () => {
       const rect = chip.getBoundingClientRect();
@@ -177,3 +177,4 @@ window.NexaRAG.uiTopbar = {
     });
   },
 };
+

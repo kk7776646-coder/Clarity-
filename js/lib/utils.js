@@ -1,4 +1,4 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
 const _MIME_BY_EXT = {
   '.py': 'text/x-python',
@@ -36,7 +36,7 @@ const _MIME_BY_EXT = {
   '.sql': 'application/sql',
 };
 
-window.NexaRAG.utils = {
+window.Clarity.utils = {
   MIME_BY_EXT: _MIME_BY_EXT,
 
   getMimeType(ext) {
@@ -98,3 +98,4 @@ window.NexaRAG.utils = {
     return prefix + '-' + Math.random().toString(36).slice(2, 9) + '-' + Date.now().toString(36);
   }
 };
+

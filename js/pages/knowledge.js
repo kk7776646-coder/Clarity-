@@ -1,14 +1,14 @@
-window.NexaRAG = window.NexaRAG || {};
-window.NexaRAG.pages = window.NexaRAG.pages || {};
+window.Clarity = window.Clarity || {};
+window.Clarity.pages = window.Clarity.pages || {};
 
-window.NexaRAG.pages.knowledge = async function renderKnowledgePage() {
+window.Clarity.pages.knowledge = async function renderKnowledgePage() {
   const main = document.getElementById('main');
   if (!main) return;
 
   let files = [];
   let loadError = null;
   try {
-    const data = await window.NexaRAG.api.get("/api/files/shared");
+    const data = await window.Clarity.api.get("/api/files/shared");
     files = data.files || [];
   } catch (err) {
     loadError = err.message || "Failed to load knowledge base";
@@ -29,7 +29,7 @@ window.NexaRAG.pages.knowledge = async function renderKnowledgePage() {
     '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>',
     ' Refresh</button>',
     '</div></header>',
-    loadError ? '<div class="alert alert--danger">' + window.NexaRAG.utils.escapeHtml(loadError) + '</div>' : '',
+    loadError ? '<div class="alert alert--danger">' + window.Clarity.utils.escapeHtml(loadError) + '</div>' : '',
     '<div id="kbDropzone" class="dropzone">',
       '<div class="dropzone__inner">',
         '<svg class="icon" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
@@ -58,8 +58,8 @@ function fileRowHtml(f) {
       '<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>' +
     '</div>' +
     '<div class="file-row__main">' +
-      '<div class="file-row__name">' + window.NexaRAG.utils.escapeHtml(f.filename) + '</div>' +
-      '<div class="file-row__meta"><span class="tag tag--xs">' + window.NexaRAG.utils.escapeHtml(type) + '</span> <span class="muted">' + size + ' • ' + window.NexaRAG.utils.escapeHtml(date) + '</span></div>' +
+      '<div class="file-row__name">' + window.Clarity.utils.escapeHtml(f.filename) + '</div>' +
+      '<div class="file-row__meta"><span class="tag tag--xs">' + window.Clarity.utils.escapeHtml(type) + '</span> <span class="muted">' + size + ' • ' + window.Clarity.utils.escapeHtml(date) + '</span></div>' +
     '</div>' +
     '<div class="file-row__actions">' +
       '<button class="btn btn--ghost btn--icon-sm" data-kb-action="preview" data-file-id="' + f.id + '" title="Preview">' +
@@ -85,7 +85,7 @@ function formatSize(bytes) {
 function bindKnowledgeEvents() {
   const fileInput = document.getElementById('kbFileInput');
   const dz = document.getElementById('kbDropzone');
-  document.getElementById('refreshKbBtn')?.addEventListener('click', () => window.NexaRAG.app.navigate('#/knowledge'));
+  document.getElementById('refreshKbBtn')?.addEventListener('click', () => window.Clarity.app.navigate('#/knowledge'));
 
   if (fileInput) {
     fileInput.addEventListener('change', async (e) => {
@@ -121,47 +121,47 @@ async function uploadKbFiles(files) {
   const valid = [];
   for (const f of files) {
     if (f.size > maxSize) {
-      window.NexaRAG.toast.show(f.name + ' is too large (max 50MB)', 'danger');
+      window.Clarity.toast.show(f.name + ' is too large (max 50MB)', 'danger');
       continue;
     }
     valid.push(f);
   }
   if (valid.length === 0) return;
-  window.NexaRAG.toast.show('Uploading ' + valid.length + ' file(s)...', 'info');
+  window.Clarity.toast.show('Uploading ' + valid.length + ' file(s)...', 'info');
   try {
     const fd = new FormData();
     valid.forEach(f => fd.append('files', f, f.name));
-    const resp = await fetch(window.NexaRAG.api.base + '/api/files/upload', { method: 'POST', body: fd });
+    const resp = await fetch(window.Clarity.api.base + '/api/files/upload', { method: 'POST', body: fd });
     const data = await resp.json();
     let okCount = 0, failCount = 0;
     for (const r of (data.files || [])) {
       if (r.ok) okCount++;
-      else { failCount++; window.NexaRAG.toast.show('Failed: ' + (r.error || r.filename), 'danger'); }
+      else { failCount++; window.Clarity.toast.show('Failed: ' + (r.error || r.filename), 'danger'); }
     }
-    if (okCount) window.NexaRAG.toast.show('Uploaded ' + okCount + ' file(s)', 'success');
-    window.NexaRAG.app.navigate('#/knowledge');
+    if (okCount) window.Clarity.toast.show('Uploaded ' + okCount + ' file(s)', 'success');
+    window.Clarity.app.navigate('#/knowledge');
   } catch (err) {
-    window.NexaRAG.toast.show('Upload failed: ' + (err.message || ''), 'danger');
+    window.Clarity.toast.show('Upload failed: ' + (err.message || ''), 'danger');
   }
 }
 
 async function previewKbFile(id) {
   try {
-    const data = await window.NexaRAG.api.get('/api/files/' + id + '/content');
+    const data = await window.Clarity.api.get('/api/files/' + id + '/content');
     const content = data.content || '(No text content extracted)';
     const isImage = data.type === 'image';
     const body = isImage
-      ? '<div style="text-align:center;"><img src="' + window.NexaRAG.api.base + '/api/files/' + id + '/raw" style="max-width:100%;max-height:60vh;" /></div>'
-      : '<pre style="white-space:pre-wrap;max-height:60vh;overflow:auto;background:var(--surface-muted);padding:12px;border-radius:8px;font-size:12.5px;">' + window.NexaRAG.utils.escapeHtml(content) + '</pre>';
-    window.NexaRAG.modal.open('File preview', body, '<button class="btn btn--primary" type="button" data-modal-close="true">Close</button>');
+      ? '<div style="text-align:center;"><img src="' + window.Clarity.api.base + '/api/files/' + id + '/raw" style="max-width:100%;max-height:60vh;" /></div>'
+      : '<pre style="white-space:pre-wrap;max-height:60vh;overflow:auto;background:var(--surface-muted);padding:12px;border-radius:8px;font-size:12.5px;">' + window.Clarity.utils.escapeHtml(content) + '</pre>';
+    window.Clarity.modal.open('File preview', body, '<button class="btn btn--primary" type="button" data-modal-close="true">Close</button>');
   } catch (err) {
-    window.NexaRAG.toast.show('Preview failed: ' + (err.message || ''), 'danger');
+    window.Clarity.toast.show('Preview failed: ' + (err.message || ''), 'danger');
   }
 }
 
 function downloadKbFile(id) {
   const a = document.createElement('a');
-  a.href = window.NexaRAG.api.base + '/api/files/' + id + '/raw';
+  a.href = window.Clarity.api.base + '/api/files/' + id + '/raw';
   a.download = '';
   document.body.appendChild(a);
   a.click();
@@ -171,10 +171,11 @@ function downloadKbFile(id) {
 async function deleteKbFile(id) {
   if (!confirm('Remove this file from the knowledge base?')) return;
   try {
-    await window.NexaRAG.api.del('/api/files/' + id);
-    window.NexaRAG.toast.show('File removed', 'success');
-    window.NexaRAG.app.navigate('#/knowledge');
+    await window.Clarity.api.del('/api/files/' + id);
+    window.Clarity.toast.show('File removed', 'success');
+    window.Clarity.app.navigate('#/knowledge');
   } catch (err) {
-    window.NexaRAG.toast.show('Delete failed: ' + (err.message || ''), 'danger');
+    window.Clarity.toast.show('Delete failed: ' + (err.message || ''), 'danger');
   }
 }
+

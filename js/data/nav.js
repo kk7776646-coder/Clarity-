@@ -1,10 +1,10 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
 /**
  * Navigation configuration.
  * Every entry here maps to a real implemented route in js/app.js.
  */
-window.NexaRAG.data = {
+window.Clarity.data = {
   nav: [
     { id: 'chat', label: 'Chat', href: '#/chat', icon: 'chat' },
     { id: 'home', label: 'Home', href: '#/home', icon: 'house' },

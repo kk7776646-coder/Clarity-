@@ -1,7 +1,7 @@
-window.NexaRAG = window.NexaRAG || {};
-window.NexaRAG.pages = window.NexaRAG.pages || {};
+window.Clarity = window.Clarity || {};
+window.Clarity.pages = window.Clarity.pages || {};
 
-window.NexaRAG.pages.home = async function renderHomePage() {
+window.Clarity.pages.home = async function renderHomePage() {
   const main = document.getElementById('main');
   if (!main) return;
 
@@ -9,15 +9,15 @@ window.NexaRAG.pages.home = async function renderHomePage() {
   let filesCount = 0;
   let projectsCount = 0;
   try {
-    const c = await window.NexaRAG.api.get("/api/conversations");
+    const c = await window.Clarity.api.get("/api/conversations");
     conversations = (c.conversations || []).slice(0, 5);
   } catch (e) {}
   try {
-    const f = await window.NexaRAG.api.get("/api/files/shared");
+    const f = await window.Clarity.api.get("/api/files/shared");
     filesCount = (f.files || []).length;
   } catch (e) {}
   try {
-    const p = await window.NexaRAG.api.get("/api/projects");
+    const p = await window.Clarity.api.get("/api/projects");
     projectsCount = (p.projects || []).length;
   } catch (e) {}
 
@@ -25,7 +25,7 @@ window.NexaRAG.pages.home = async function renderHomePage() {
     { label: "Conversations", value: String(conversations.length) },
     { label: "Knowledge files", value: String(filesCount) },
     { label: "Projects", value: String(projectsCount) },
-    { label: "Active model", value: (window.NexaRAG.modelSelector && window.NexaRAG.modelSelector.getActive()?.name) || "—" },
+    { label: "Active model", value: (window.Clarity.modelSelector && window.Clarity.modelSelector.getActive()?.name) || "—" },
   ];
 
   main.innerHTML = [
@@ -42,7 +42,7 @@ window.NexaRAG.pages.home = async function renderHomePage() {
       '</div>',
     '</div></section>',
     '<section class="metrics">',
-    metrics.map(m => '<article class="metric card"><div class="card__body"><div class="metric__label">' + window.NexaRAG.utils.escapeHtml(m.label) + '</div><div class="metric__value">' + window.NexaRAG.utils.escapeHtml(m.value) + '</div></div></article>').join(''),
+    metrics.map(m => '<article class="metric card"><div class="card__body"><div class="metric__label">' + window.Clarity.utils.escapeHtml(m.label) + '</div><div class="metric__value">' + window.Clarity.utils.escapeHtml(m.value) + '</div></div></article>').join(''),
     '</section>',
     '<section class="grid-2">',
       '<div class="panel"><div class="panel__body">',
@@ -76,7 +76,8 @@ function recentChatHtml(conv) {
     title = title.slice(0, 47) + '...';
   }
   return '<a class="list__item" href="#/chat/' + conv.id + '" data-open-conv="' + conv.id + '" style="text-decoration:none;color:inherit;">' +
-    '<div><div class="knowledge-item__title">' + window.NexaRAG.utils.escapeHtml(title || "New conversation") + '</div>' +
-    '<div class="knowledge-item__desc">' + window.NexaRAG.utils.escapeHtml(String(conv.message_count || 0) + ' message' + (conv.message_count === 1 ? '' : 's')) + '</div></div>' +
+    '<div><div class="knowledge-item__title">' + window.Clarity.utils.escapeHtml(title || "New conversation") + '</div>' +
+    '<div class="knowledge-item__desc">' + window.Clarity.utils.escapeHtml(String(conv.message_count || 0) + ' message' + (conv.message_count === 1 ? '' : 's')) + '</div></div>' +
     '<span class="tag">Open</span></a>';
 }
+

@@ -1,6 +1,6 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
-window.NexaRAG.store = {
+window.Clarity.store = {
   get(key, fallback) {
     try {
       const raw = localStorage.getItem(key);
@@ -21,3 +21,4 @@ window.NexaRAG.store = {
     localStorage.removeItem(key);
   }
 };
+

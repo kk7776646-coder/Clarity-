@@ -1,6 +1,6 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
-window.NexaRAG.uiChat = {
+window.Clarity.uiChat = {
   _activeConversation: null,
   _isStreaming: false,
   _abortController: null,
@@ -17,15 +17,15 @@ window.NexaRAG.uiChat = {
   },
 
   _loadState() {
-    this._attachedFiles = window.NexaRAG.store.get("chat_attachments", []);
-    this._activeModel = window.NexaRAG.store.get("active_model", null);
-    this._currentProject = window.NexaRAG.store.get("current_project", null);
+    this._attachedFiles = window.Clarity.store.get("chat_attachments", []);
+    this._activeModel = window.Clarity.store.get("active_model", null);
+    this._currentProject = window.Clarity.store.get("current_project", null);
   },
 
   _saveState() {
-    window.NexaRAG.store.set("chat_attachments", this._attachedFiles);
-    window.NexaRAG.store.set("active_model", this._activeModel);
-    window.NexaRAG.store.set("current_project", this._currentProject);
+    window.Clarity.store.set("chat_attachments", this._attachedFiles);
+    window.Clarity.store.set("active_model", this._activeModel);
+    window.Clarity.store.set("current_project", this._currentProject);
   },
 
   /**
@@ -34,14 +34,14 @@ window.NexaRAG.uiChat = {
    * first paint. Never a hardcoded or display name.
    */
   _resolveModelId() {
-    const fromSelector = window.NexaRAG.modelSelector && window.NexaRAG.modelSelector.activeId();
+    const fromSelector = window.Clarity.modelSelector && window.Clarity.modelSelector.activeId();
     return fromSelector || this._activeModel || null;
   },
 
   async startNewConversation() {
     this._activeConversation = null;
     this._firstMessagePending = false;
-    window.NexaRAG.store.remove("active_conversation");
+    window.Clarity.store.remove("active_conversation");
     this._attachedFiles = [];
     this._currentProject = null;
     this._saveState();
@@ -55,20 +55,20 @@ window.NexaRAG.uiChat = {
   async loadConversation(cid) {
     this._stopStreaming();
     try {
-      const data = await window.NexaRAG.api.get(`/api/conversations/${cid}`);
+      const data = await window.Clarity.api.get(`/api/conversations/${cid}`);
       this._activeConversation = cid;
       this._firstMessagePending = false;
-      window.NexaRAG.store.set("active_conversation", cid);
+      window.Clarity.store.set("active_conversation", cid);
       this.renderChat(data.messages);
     } catch (err) {
       this._isStreaming = false;
       this._syncComposerStreaming();
       if (err.status === 404 || (err.data && err.data.type === "not_found")) {
-        window.NexaRAG.store.remove("active_conversation");
-        window.NexaRAG.toast.show("Conversation not found. Starting new chat.", "warning");
+        window.Clarity.store.remove("active_conversation");
+        window.Clarity.toast.show("Conversation not found. Starting new chat.", "warning");
         await this.startNewConversation();
       } else {
-        window.NexaRAG.toast.show("Failed to load conversation", "danger");
+        window.Clarity.toast.show("Failed to load conversation", "danger");
       }
     }
   },
@@ -134,7 +134,7 @@ window.NexaRAG.uiChat = {
   },
 
   _renderEmptyState() {
-    const modelName = (window.NexaRAG.modelSelector && window.NexaRAG.modelSelector.getActive()?.name) || "AI";
+    const modelName = (window.Clarity.modelSelector && window.Clarity.modelSelector.getActive()?.name) || "AI";
     return [
       '<div class="chat-empty">',
       '<div class="chat-empty__inner">',
@@ -142,7 +142,7 @@ window.NexaRAG.uiChat = {
       '<svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>',
       '</div>',
       '<h1 class="chat-empty__title">How can I help you today?</h1>',
-      '<p class="chat-empty__sub">Ask questions, analyze documents, or explore your projects. Powered by <strong>' + window.NexaRAG.utils.escapeHtml(modelName) + '</strong>.</p>',
+      '<p class="chat-empty__sub">Ask questions, analyze documents, or explore your projects. Powered by <strong>' + window.Clarity.utils.escapeHtml(modelName) + '</strong>.</p>',
       '<div class="chat-empty__suggestions">',
       '<button class="chat-empty__chip" data-suggestion="Explain how the RAG pipeline works in this app"><span class="chat-empty__chip-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 0-8 8c0 3.4 2.1 6.3 5 7.5V20h6v-2.5c2.9-1.2 5-4.1 5-7.5a8 8 0 0 0-8-8z"/></svg></span> Explain RAG</button>',
       '<button class="chat-empty__chip" data-suggestion="Write a Python function to parse CSV files"><span class="chat-empty__chip-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/><line x1="8" y1="9" x2="10" y2="9"/></svg></span> Write Python</button>',
@@ -170,7 +170,7 @@ window.NexaRAG.uiChat = {
     } else {
       try {
         const rawContent = String(msg.content || "");
-        const rendered = window.NexaRAG.markdown.render(rawContent);
+        const rendered = window.Clarity.markdown.render(rawContent);
         contentHtml = '<div class="message__content">' + rendered + "</div>";
       } catch (e) {
         contentHtml = '<div class="message__content"><p class="error-text">Failed to render message.</p></div>';
@@ -292,11 +292,11 @@ window.NexaRAG.uiChat = {
       '<div class="attachment-file-card">',
         '<div class="attachment-file-card__icon">' + icon + '</div>',
         '<div class="attachment-file-card__info">',
-          '<div class="attachment-file-card__name">' + window.NexaRAG.utils.escapeHtml(name) + '</div>',
+          '<div class="attachment-file-card__name">' + window.Clarity.utils.escapeHtml(name) + '</div>',
           previewHtml,
         '</div>',
         '<div class="attachment-file-card__actions">',
-          '<button type="button" class="btn btn--ghost btn--sm file-preview-btn" data-file-id="' + fileId + '" data-file-name="' + window.NexaRAG.utils.escapeHtml(name) + '" title="Preview">',
+          '<button type="button" class="btn btn--ghost btn--sm file-preview-btn" data-file-id="' + fileId + '" data-file-name="' + window.Clarity.utils.escapeHtml(name) + '" title="Preview">',
             '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 6v6l4 2"/></svg>',
             ' Preview',
           '</button>',
@@ -327,11 +327,11 @@ window.NexaRAG.uiChat = {
     const container = document.getElementById("chatComposer");
     if (!container) return;
     this._attachedFiles = (this._attachedFiles || []).filter(a => a && a.id);
-    window.NexaRAG.composer.mount(container, (value, attachments) => {
+    window.Clarity.composer.mount(container, (value, attachments) => {
       this._attachedFiles = attachments || [];
       this.sendMessage(value, this._attachedFiles);
     }, this._resolveModelId(), this._attachedFiles);
-    window.NexaRAG.composer.setStreaming(this._isStreaming, () => this._stopStreaming());
+    window.Clarity.composer.setStreaming(this._isStreaming, () => this._stopStreaming());
   },
 
   _openFilePreview(att) {
@@ -357,7 +357,7 @@ window.NexaRAG.uiChat = {
 
     let contentHtml = "";
     if (isImage) {
-      contentHtml = '<img src="/api/files/' + fileId + '/raw" alt="' + window.NexaRAG.utils.escapeHtml(fileName) + '" class="preview-image" />';
+      contentHtml = '<img src="/api/files/' + fileId + '/raw" alt="' + window.Clarity.utils.escapeHtml(fileName) + '" class="preview-image" />';
     } else {
       contentHtml = this._buildCodePreview(fileId, fileName, att.content || "");
     }
@@ -373,11 +373,11 @@ window.NexaRAG.uiChat = {
       '<div class="preview-header">',
         '<div class="preview-header__info">',
           '<span class="preview-header__icon">' + icon + '</span>',
-          '<span class="preview-header__name">' + window.NexaRAG.utils.escapeHtml(fileName) + '</span>',
+          '<span class="preview-header__name">' + window.Clarity.utils.escapeHtml(fileName) + '</span>',
           '<span class="preview-header__meta">Python File • 2.1 KB</span>',
         '</div>',
         '<div class="preview-header__actions">',
-          '<a href="/api/files/' + fileId + '/raw" download="' + window.NexaRAG.utils.escapeHtml(fileName) + '" class="btn btn--ghost btn--sm" title="Download">Download</a>',
+          '<a href="/api/files/' + fileId + '/raw" download="' + window.Clarity.utils.escapeHtml(fileName) + '" class="btn btn--ghost btn--sm" title="Download">Download</a>',
           '<button class="btn btn--ghost btn--icon-sm" type="button" id="previewCloseBtn" title="Close preview" aria-label="Close preview">',
             '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
           '</button>',
@@ -415,9 +415,9 @@ window.NexaRAG.uiChat = {
     return [
       '<div class="preview-code">',
         '<div class="preview-line-numbers">',
-          '<pre><code class="language-plaintext">' + window.NexaRAG.utils.escapeHtml(lineNumbers) + '</code></pre>',
+          '<pre><code class="language-plaintext">' + window.Clarity.utils.escapeHtml(lineNumbers) + '</code></pre>',
         '</div>',
-        '<pre class="preview-source"><code class="language-' + langClass + '">' + window.NexaRAG.utils.escapeHtml(codeContent) + '</code></pre>',
+        '<pre class="preview-source"><code class="language-' + langClass + '">' + window.Clarity.utils.escapeHtml(codeContent) + '</code></pre>',
       '</div>'
     ].join("");
   },
@@ -429,7 +429,7 @@ window.NexaRAG.uiChat = {
         const fileId = btn.getAttribute("data-file-id");
         const fileName = btn.getAttribute("data-file-name");
         // Fetch content from server
-        fetch(window.NexaRAG.api.base + "/api/files/" + fileId + "/raw")
+        fetch(window.Clarity.api.base + "/api/files/" + fileId + "/raw")
           .then(r => r.text())
           .then(text => {
             this._previewFile = { file_id: fileId, name: fileName, content: text, mime: "text/plain" };
@@ -450,7 +450,7 @@ window.NexaRAG.uiChat = {
   },
 
   _syncComposerStreaming() {
-    window.NexaRAG.composer.setStreaming(this._isStreaming, () => this._stopStreaming());
+    window.Clarity.composer.setStreaming(this._isStreaming, () => this._stopStreaming());
   },
 
   async sendMessage(content, attachments) {
@@ -458,20 +458,20 @@ window.NexaRAG.uiChat = {
     const cid = this._activeConversation;
     if (!cid) {
       try {
-        const convData = await window.NexaRAG.api.post("/api/conversations", {
+        const convData = await window.Clarity.api.post("/api/conversations", {
           title: content.trim(),
           model_id: this._resolveModelId(),
         });
         this._activeConversation = convData.id;
         this._firstMessagePending = false;
-        window.NexaRAG.store.set("active_conversation", convData.id);
-        if (window.NexaRAG.uiSidebar) window.NexaRAG.uiSidebar.refresh();
+        window.Clarity.store.set("active_conversation", convData.id);
+        if (window.Clarity.uiSidebar) window.Clarity.uiSidebar.refresh();
         setTimeout(() => {
           const input = document.getElementById("composerInput");
           if (input) input.focus();
         }, 50);
       } catch (err) {
-        window.NexaRAG.toast.show("Failed to create conversation: " + (err.message || "unknown"), "danger");
+        window.Clarity.toast.show("Failed to create conversation: " + (err.message || "unknown"), "danger");
         return;
       }
     }
@@ -479,11 +479,11 @@ window.NexaRAG.uiChat = {
     const hasImages = attachments && attachments.some(a => a.type === "image");
     if (hasImages) {
       const modelId = this._resolveModelId();
-      const caps = window.NexaRAG.modelSelector && window.NexaRAG.modelSelector.getCapabilities(modelId);
+      const caps = window.Clarity.modelSelector && window.Clarity.modelSelector.getCapabilities(modelId);
       if (!caps || !caps.vision) {
         this._isStreaming = false;
         this._syncComposerStreaming();
-        window.NexaRAG.toast.show("This model does not support image input. Please select a Vision-capable model.", "danger");
+        window.Clarity.toast.show("This model does not support image input. Please select a Vision-capable model.", "danger");
         return;
       }
     }
@@ -552,7 +552,7 @@ window.NexaRAG.uiChat = {
     this._abortController = new AbortController();
 
     try {
-      const response = await fetch(window.NexaRAG.api.base + `/api/conversations/${cid}/chat`, {
+      const response = await fetch(window.Clarity.api.base + `/api/conversations/${cid}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
@@ -746,7 +746,7 @@ window.NexaRAG.uiChat = {
         if (!content && !streaming) {
           contentEl.innerHTML = '<div class="message__empty">No response generated.</div>';
         } else {
-          let html = window.NexaRAG.markdown.render(content);
+          let html = window.Clarity.markdown.render(content);
           if (streaming) html += '<span class="cursor"></span>';
           contentEl.innerHTML = html;
         }
@@ -796,8 +796,8 @@ window.NexaRAG.uiChat = {
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
       '</div>',
       '<div class="error-block__body">',
-      '<div class="error-block__title">' + window.NexaRAG.utils.escapeHtml(friendly.title) + '</div>',
-      '<div class="error-block__detail">' + window.NexaRAG.utils.escapeHtml(friendly.detail) + '</div>',
+      '<div class="error-block__title">' + window.Clarity.utils.escapeHtml(friendly.title) + '</div>',
+      '<div class="error-block__detail">' + window.Clarity.utils.escapeHtml(friendly.detail) + '</div>',
       '</div>',
       '</div>'
     ].join("");
@@ -884,9 +884,9 @@ window.NexaRAG.uiChat = {
           const text = this._extractText(msgEl);
           try {
             await navigator.clipboard.writeText(text);
-            window.NexaRAG.toast.show("Copied to clipboard", "success");
+            window.Clarity.toast.show("Copied to clipboard", "success");
           } catch (e) {
-            window.NexaRAG.toast.show("Copy failed", "danger");
+            window.Clarity.toast.show("Copy failed", "danger");
           }
         }
         break;
@@ -952,11 +952,11 @@ window.NexaRAG.uiChat = {
     const hasImages = lastUser.attachments && lastUser.attachments.some(a => a.type === "image");
     if (hasImages) {
       const modelId = this._resolveModelId();
-      const caps = window.NexaRAG.modelSelector && window.NexaRAG.modelSelector.getCapabilities(modelId);
+      const caps = window.Clarity.modelSelector && window.Clarity.modelSelector.getCapabilities(modelId);
       if (!caps || !caps.vision) {
         this._isStreaming = false;
         this._syncComposerStreaming();
-        window.NexaRAG.toast.show("This model does not support image input. Please select a Vision-capable model.", "danger");
+        window.Clarity.toast.show("This model does not support image input. Please select a Vision-capable model.", "danger");
         return;
       }
     }
@@ -964,7 +964,7 @@ window.NexaRAG.uiChat = {
     this._abortController = new AbortController();
 
     try {
-      const response = await fetch(window.NexaRAG.api.base + `/api/conversations/${cid}/regenerate`, {
+      const response = await fetch(window.Clarity.api.base + `/api/conversations/${cid}/regenerate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1132,12 +1132,12 @@ window.NexaRAG.uiChat = {
     wrapper.querySelector('[data-edit-action="save"]').addEventListener("click", async () => {
       const newValue = textarea.value.trim();
       if (!newValue) return;
-      bubble.innerHTML = window.NexaRAG.markdown.render(newValue);
+      bubble.innerHTML = window.Clarity.markdown.render(newValue);
 
       const cid = this._activeConversation;
       if (cid) {
         try {
-          await window.NexaRAG.api.post("/api/conversations/" + cid + "/messages/" + msg.id + "/edit", { content: newValue });
+          await window.Clarity.api.post("/api/conversations/" + cid + "/messages/" + msg.id + "/edit", { content: newValue });
         } catch (e) { /* best effort */ }
       }
 
@@ -1167,11 +1167,11 @@ window.NexaRAG.uiChat = {
     const hasImages = attachments.some(a => a.type === "image");
     if (hasImages) {
       const modelId = this._resolveModelId();
-      const caps = window.NexaRAG.modelSelector && window.NexaRAG.modelSelector.getCapabilities(modelId);
+      const caps = window.Clarity.modelSelector && window.Clarity.modelSelector.getCapabilities(modelId);
       if (!caps || !caps.vision) {
         this._isStreaming = false;
         this._syncComposerStreaming();
-        window.NexaRAG.toast.show("This model does not support image input. Please select a Vision-capable model.", "danger");
+        window.Clarity.toast.show("This model does not support image input. Please select a Vision-capable model.", "danger");
         return;
       }
     }
@@ -1180,7 +1180,7 @@ window.NexaRAG.uiChat = {
     this._abortController = new AbortController();
 
     try {
-      const response = await fetch(window.NexaRAG.api.base + `/api/conversations/${cid}/chat`, {
+      const response = await fetch(window.Clarity.api.base + `/api/conversations/${cid}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: newValue, model_id: this._resolveModelId(), file_ids, project_id: projectId }),
@@ -1323,7 +1323,7 @@ window.NexaRAG.uiChat = {
   _replaceUserMessage(msgId, newContent, convEl) {
     const el = convEl.querySelector(`[data-msg-id="${msgId}"] .message__content`);
     if (el) {
-      el.innerHTML = window.NexaRAG.markdown.render(newContent);
+      el.innerHTML = window.Clarity.markdown.render(newContent);
     }
   },
 
@@ -1364,7 +1364,7 @@ window.NexaRAG.uiChat = {
         const codeEl = btn.closest(".code-block").querySelector("code");
         const text = codeEl ? codeEl.textContent : "";
         navigator.clipboard.writeText(text).then(() => {
-          window.NexaRAG.toast.show("Code copied", "success");
+          window.Clarity.toast.show("Code copied", "success");
         });
       };
       btn.addEventListener("click", btn._handler);
@@ -1396,7 +1396,7 @@ window.NexaRAG.uiChat = {
         const fileId = btn.getAttribute("data-file-id");
         const fileName = btn.getAttribute("data-file-name");
         // Fetch file content for preview
-        fetch(window.NexaRAG.api.base + "/api/files/" + fileId + "/raw")
+        fetch(window.Clarity.api.base + "/api/files/" + fileId + "/raw")
           .then(r => r.text())
           .then(text => {
             this._previewFile = { file_id: fileId, name: fileName, content: text, mime: "text/plain" };
@@ -1439,9 +1439,9 @@ window.NexaRAG.uiChat = {
   },
 
   _refreshSidebarAfterMessage() {
-    if (window.NexaRAG.uiSidebar) {
-      window.NexaRAG.uiSidebar.loadConversations().then(() => {
-        window.NexaRAG.uiSidebar.render();
+    if (window.Clarity.uiSidebar) {
+      window.Clarity.uiSidebar.loadConversations().then(() => {
+        window.Clarity.uiSidebar.render();
       });
     }
   },
@@ -1450,7 +1450,7 @@ window.NexaRAG.uiChat = {
     const cid = this._activeConversation;
     if (!cid || !title) return;
     try {
-      await window.NexaRAG.api.patch(`/api/conversations/${cid}/title`, { title });
+      await window.Clarity.api.patch(`/api/conversations/${cid}/title`, { title });
     } catch (err) {
       console.error("Failed to update conversation title:", err);
     }
@@ -1467,17 +1467,17 @@ window.NexaRAG.uiChat = {
     const opts = options || {};
     this._activeModel = modelId || null;
     if (opts.persist !== false) this._saveState();
-    if (window.NexaRAG.uiTopbar) {
-      window.NexaRAG.uiTopbar.updateModelChip();
+    if (window.Clarity.uiTopbar) {
+      window.Clarity.uiTopbar.updateModelChip();
     }
   },
 
   clearConversation() {
     const cid = this._activeConversation;
     if (cid) {
-      window.NexaRAG.api.del(`/api/conversations/${cid}`).then(() => {
+      window.Clarity.api.del(`/api/conversations/${cid}`).then(() => {
         this._activeConversation = null;
-        window.NexaRAG.store.remove("active_conversation");
+        window.Clarity.store.remove("active_conversation");
         this.renderChat([{ role: "assistant", content: "Chat cleared. Start a new conversation or pick one from the sidebar." }]);
       });
     }
@@ -1488,3 +1488,4 @@ window.NexaRAG.uiChat = {
     this._saveState();
   },
 };
+

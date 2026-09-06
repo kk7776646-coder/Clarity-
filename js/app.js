@@ -1,12 +1,12 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
-window.NexaRAG.app = {
+window.Clarity.app = {
   async init() {
-    const state = window.NexaRAG.settings.get();
-    if (window.NexaRAG.theme && typeof window.NexaRAG.theme.init === "function") {
-      window.NexaRAG.theme.init();
+    const state = window.Clarity.settings.get();
+    if (window.Clarity.theme && typeof window.Clarity.theme.init === "function") {
+      window.Clarity.theme.init();
     }
-    window.NexaRAG.settings.applyTheme(state.theme || "system");
+    window.Clarity.settings.applyTheme(state.theme || "system");
     document.documentElement.setAttribute("data-density", state.density || "comfortable");
 
     const sidebar = document.getElementById("sidebar");
@@ -16,53 +16,53 @@ window.NexaRAG.app = {
       sidebar.classList.toggle("is-open", !isMobile);
       if (!isMobile) sidebar.classList.remove("is-rail");
     }
-    if (window.NexaRAG.sources && typeof window.NexaRAG.sources.toggle === "function") {
-      window.NexaRAG.sources.toggle(false);
+    if (window.Clarity.sources && typeof window.Clarity.sources.toggle === "function") {
+      window.Clarity.sources.toggle(false);
     }
 
-    window.NexaRAG.uiChat.init();
-    window.NexaRAG.uiTopbar.renderThemeToggle();
-    window.NexaRAG.uiSidebar.render();
+    window.Clarity.uiChat.init();
+    window.Clarity.uiTopbar.renderThemeToggle();
+    window.Clarity.uiSidebar.render();
 
     this.bindGlobalEvents();
 
     // Auth gate first: nothing that needs a session is requested until the
     // session is known, so no request can 401 during startup.
-    const user = await window.NexaRAG.auth.refresh();
+    const user = await window.Clarity.auth.refresh();
     if (!user) {
-      window.NexaRAG.auth.renderGate();
+      window.Clarity.auth.renderGate();
     } else {
-      window.NexaRAG.auth.clearGate();
-      window.NexaRAG.uiTopbar.renderUserMenu();
-      await window.NexaRAG.uiTopbar.initModelSelector();
-      await window.NexaRAG.uiSidebar.refresh();
+      window.Clarity.auth.clearGate();
+      window.Clarity.uiTopbar.renderUserMenu();
+      await window.Clarity.uiTopbar.initModelSelector();
+      await window.Clarity.uiSidebar.refresh();
       const hash = (window.location.hash || "").trim();
       if (!hash || hash === "#/") {
         window.location.hash = "#/chat";
       }
-      await this.navigate(window.NexaRAG.utils.routeFromHash());
+      await this.navigate(window.Clarity.utils.routeFromHash());
     }
 
     // React to future auth changes (logout, session expiry).
-    window.NexaRAG.auth.onChange((nextUser) => {
+    window.Clarity.auth.onChange((nextUser) => {
       if (!nextUser) {
-        window.NexaRAG.auth.renderGate();
+        window.Clarity.auth.renderGate();
         return;
       }
-      window.NexaRAG.auth.clearGate();
-      window.NexaRAG.uiTopbar.renderUserMenu();
+      window.Clarity.auth.clearGate();
+      window.Clarity.uiTopbar.renderUserMenu();
     });
   },
 
   async afterLogin() {
-    window.NexaRAG.auth.clearGate();
-    window.NexaRAG.uiTopbar.renderUserMenu();
-    await window.NexaRAG.uiTopbar.initModelSelector();
-    if (window.NexaRAG.uiSidebar) await window.NexaRAG.uiSidebar.refresh();
+    window.Clarity.auth.clearGate();
+    window.Clarity.uiTopbar.renderUserMenu();
+    await window.Clarity.uiTopbar.initModelSelector();
+    if (window.Clarity.uiSidebar) await window.Clarity.uiSidebar.refresh();
     if (window.location.hash !== "#/chat") {
       window.location.hash = "#/chat";
     }
-    await this.navigate(window.NexaRAG.utils.routeFromHash());
+    await this.navigate(window.Clarity.utils.routeFromHash());
   },
 
   bindGlobalEvents() {
@@ -110,7 +110,7 @@ window.NexaRAG.app = {
           sidebarCollapse.setAttribute("aria-label", "Collapse sidebar");
           sidebarCollapse.setAttribute("title", "Collapse sidebar");
         }
-        if (window.NexaRAG.uiTooltip) window.NexaRAG.uiTooltip.refresh();
+        if (window.Clarity.uiTooltip) window.Clarity.uiTooltip.refresh();
       });
     }
     if (scrim) {
@@ -122,7 +122,7 @@ window.NexaRAG.app = {
     document.querySelectorAll("[data-theme-set]").forEach((button) => {
       button.addEventListener("click", () => {
         const theme = button.getAttribute("data-theme-set");
-        window.NexaRAG.settings.applyTheme(theme);
+        window.Clarity.settings.applyTheme(theme);
       });
     });
 
@@ -140,7 +140,7 @@ window.NexaRAG.app = {
     const newChatBtn = document.getElementById("newChatBtn");
     if (newChatBtn) {
       newChatBtn.addEventListener("click", () => {
-        window.NexaRAG.uiChat.startNewConversation();
+        window.Clarity.uiChat.startNewConversation();
         window.location.hash = "#/chat";
       });
     }
@@ -148,7 +148,7 @@ window.NexaRAG.app = {
     const sidebarNewChat = document.getElementById("sidebarNewChat");
     if (sidebarNewChat) {
       sidebarNewChat.addEventListener("click", () => {
-        window.NexaRAG.uiChat.startNewConversation();
+        window.Clarity.uiChat.startNewConversation();
         window.location.hash = "#/chat";
       });
     }
@@ -156,12 +156,12 @@ window.NexaRAG.app = {
     const refreshConv = document.getElementById("refreshConversations");
     if (refreshConv) {
       refreshConv.addEventListener("click", () => {
-        window.NexaRAG.uiSidebar.loadConversations();
+        window.Clarity.uiSidebar.loadConversations();
       });
     }
 
     window.addEventListener("hashchange", () => {
-      this.navigate(window.NexaRAG.utils.routeFromHash());
+      this.navigate(window.Clarity.utils.routeFromHash());
     });
 
     window.addEventListener("resize", () => {
@@ -189,9 +189,9 @@ window.NexaRAG.app = {
     if (path.startsWith("#/chat/")) {
       const cid = path.replace("#/chat/", "");
       if (cid) {
-        await window.NexaRAG.uiChat.loadConversation(cid);
+        await window.Clarity.uiChat.loadConversation(cid);
       } else {
-        window.NexaRAG.uiChat.renderChat();
+        window.Clarity.uiChat.renderChat();
       }
       return;
     }
@@ -209,25 +209,26 @@ window.NexaRAG.app = {
     );
 
     if (page === "chat") {
-      const cid = window.NexaRAG.store.get("active_conversation");
+      const cid = window.Clarity.store.get("active_conversation");
       if (cid) {
-        await window.NexaRAG.uiChat.loadConversation(cid);
+        await window.Clarity.uiChat.loadConversation(cid);
       } else {
-        window.NexaRAG.uiChat.renderChat();
+        window.Clarity.uiChat.renderChat();
       }
     } else {
-      const handler = window.NexaRAG.pages && window.NexaRAG.pages[page];
+      const handler = window.Clarity.pages && window.Clarity.pages[page];
       if (typeof handler === "function") await handler(path);
     }
 
-    if (window.NexaRAG.uiSidebar) window.NexaRAG.uiSidebar.render();
-    if (window.NexaRAG.uiTopbar) {
-      window.NexaRAG.uiTopbar.renderThemeToggle();
-      await window.NexaRAG.uiTopbar.initModelSelector();
+    if (window.Clarity.uiSidebar) window.Clarity.uiSidebar.render();
+    if (window.Clarity.uiTopbar) {
+      window.Clarity.uiTopbar.renderThemeToggle();
+      await window.Clarity.uiTopbar.initModelSelector();
     }
   },
 };
 
 document.addEventListener("DOMContentLoaded", function () {
-  window.NexaRAG.app.init();
+  window.Clarity.app.init();
 });
+

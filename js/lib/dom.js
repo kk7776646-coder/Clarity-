@@ -1,5 +1,5 @@
-window.NexaRAG = window.NexaRAG || {};
-window.NexaRAG.dom = {
+window.Clarity = window.Clarity || {};
+window.Clarity.dom = {
   empty(node) {
     if (!node) return;
     while (node.firstChild) node.removeChild(node.firstChild);
@@ -13,3 +13,4 @@ window.NexaRAG.dom = {
     node.appendChild(child);
   }
 };
+

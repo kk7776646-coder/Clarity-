@@ -1,5 +1,5 @@
-window.NexaRAG = window.NexaRAG || {};
-window.NexaRAG.pages = window.NexaRAG.pages || {};
+window.Clarity = window.Clarity || {};
+window.Clarity.pages = window.Clarity.pages || {};
 
 const MODEL_PROVIDERS = [
   { id: "openrouter", label: "OpenRouter", defaultBase: "https://openrouter.ai/api/v1", needsKey: true },
@@ -16,7 +16,7 @@ const MODEL_PROVIDERS = [
 
 function escapeAttr(s) { return String(s ?? "").replace(/"/g, "&quot;"); }
 
-window.NexaRAG.pages.model = async function renderModelPage() {
+window.Clarity.pages.model = async function renderModelPage() {
   const main = document.getElementById("main");
   if (!main) return;
 
@@ -24,7 +24,7 @@ window.NexaRAG.pages.model = async function renderModelPage() {
   let activeId = null;
   let loadError = null;
   try {
-    const data = await window.NexaRAG.api.get("/api/models");
+    const data = await window.Clarity.api.get("/api/models");
     models = data.models || [];
     activeId = data.active;
   } catch (err) {
@@ -36,7 +36,7 @@ window.NexaRAG.pages.model = async function renderModelPage() {
     if (b.id === activeId) return 1;
     return (a.name || "").localeCompare(b.name || "");
   });
-  window.NexaRAG.pages._modelCache = sortedModels;
+  window.Clarity.pages._modelCache = sortedModels;
 
   main.innerHTML = [
     '<div class="page"><div class="page__inner">',
@@ -51,7 +51,7 @@ window.NexaRAG.pages.model = async function renderModelPage() {
     '<svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px;"><path d="M12 5v14M5 12h14"/></svg>',
     ' Add Models</button>',
     '</div></header>',
-    loadError ? '<div class="alert alert--danger">' + window.NexaRAG.utils.escapeHtml(loadError) + '</div>' : '',
+    loadError ? '<div class="alert alert--danger">' + window.Clarity.utils.escapeHtml(loadError) + '</div>' : '',
     '<section class="model-grid">',
     sortedModels.length === 0 ? '<div class="empty-state">No models configured. Click "Add Models" to add your first one.</div>' : '',
     sortedModels.map(modelCardHtml).join(""),
@@ -75,7 +75,7 @@ function statusBadge(model) {
 }
 
 function modelCardHtml(model) {
-  const isActive = model.is_active || model.id === (window.NexaRAG.modelSelector && window.NexaRAG.modelSelector._active);
+  const isActive = model.is_active || model.id === (window.Clarity.modelSelector && window.Clarity.modelSelector._active);
   const caps = model.capabilities || {};
   const capTags = [];
   if (caps.text) capTags.push('<span class="tag tag--xs">Text</span>');
@@ -88,22 +88,22 @@ function modelCardHtml(model) {
   const isUserModel = !!model.isUser;
   const enabled = model.enabled !== false;
   const lastTested = model.lastTestedAt ? new Date(model.lastTestedAt * 1000).toLocaleString() : null;
-  const lastErr = model.lastError ? '<div class="muted" style="font-size:12px;color:var(--color-danger,#c0392b);margin-top:4px;">' + window.NexaRAG.utils.escapeHtml(model.lastError) + '</div>' : '';
+  const lastErr = model.lastError ? '<div class="muted" style="font-size:12px;color:var(--color-danger,#c0392b);margin-top:4px;">' + window.Clarity.utils.escapeHtml(model.lastError) + '</div>' : '';
 
   return '<article class="card model-card ' + (isActive ? "is-active" : "") + ' ' + (enabled ? "" : "is-disabled") + '" data-model-id="' + escapeAttr(model.id) + '">' +
     '<div class="card__body">' +
       '<div class="model-card__head">' +
-        '<h3>' + window.NexaRAG.utils.escapeHtml(model.name) + '</h3>' +
-        '<span class="tag">' + window.NexaRAG.utils.escapeHtml(model.provider || "custom") + '</span>' +
+        '<h3>' + window.Clarity.utils.escapeHtml(model.name) + '</h3>' +
+        '<span class="tag">' + window.Clarity.utils.escapeHtml(model.provider || "custom") + '</span>' +
         statusBadge(model) +
       '</div>' +
       '<div class="model-card__body">' +
-        '<div class="muted">Registry ID: <code>' + window.NexaRAG.utils.escapeHtml(model.id) + '</code></div>' +
-        '<div class="muted">Provider Model: <code>' + window.NexaRAG.utils.escapeHtml(model.modelName || model.id) + '</code></div>' +
-        (model.baseUrl ? '<div class="muted">Base URL: <code>' + window.NexaRAG.utils.escapeHtml(model.baseUrl) + '</code></div>' : '') +
+        '<div class="muted">Registry ID: <code>' + window.Clarity.utils.escapeHtml(model.id) + '</code></div>' +
+        '<div class="muted">Provider Model: <code>' + window.Clarity.utils.escapeHtml(model.modelName || model.id) + '</code></div>' +
+        (model.baseUrl ? '<div class="muted">Base URL: <code>' + window.Clarity.utils.escapeHtml(model.baseUrl) + '</code></div>' : '') +
       '</div>' +
       '<div class="model-card__meta">' + capTags.join("") + '</div>' +
-      (lastTested ? '<div class="muted" style="font-size:12px;">Last tested: ' + window.NexaRAG.utils.escapeHtml(lastTested) + '</div>' : '') +
+      (lastTested ? '<div class="muted" style="font-size:12px;">Last tested: ' + window.Clarity.utils.escapeHtml(lastTested) + '</div>' : '') +
       lastErr +
       '<div class="model-card__foot">' +
         '<span class="muted">' + (model.contextWindow || "?") + ' ctx</span>' +
@@ -125,26 +125,26 @@ function modelCardHtml(model) {
 function bindModelPageEvents() {
   document.getElementById("addModelBtn")?.addEventListener("click", () => openAddModelsModal());
   document.getElementById("refreshModelsBtn")?.addEventListener("click", () => {
-    if (window.NexaRAG.modelSelector) window.NexaRAG.modelSelector.load();
-    window.NexaRAG.app.navigate("#/model");
+    if (window.Clarity.modelSelector) window.Clarity.modelSelector.load();
+    window.Clarity.app.navigate("#/model");
   });
 
   document.querySelectorAll('[data-action="select"]').forEach(btn => {
     btn.addEventListener("click", async () => {
       if (btn.disabled) return;
       const id = btn.getAttribute("data-model-id");
-      await window.NexaRAG.modelSelector.select(id);
-      window.NexaRAG.app.navigate("#/model");
+      await window.Clarity.modelSelector.select(id);
+      window.Clarity.app.navigate("#/model");
     });
   });
   document.querySelectorAll('[data-action="edit"]').forEach(btn => {
     btn.addEventListener("click", async () => {
       const id = btn.getAttribute("data-model-id");
-      let model = (window.NexaRAG.pages._modelCache || []).find(m => m.id === id) ||
-                  (window.NexaRAG.modelSelector && window.NexaRAG.modelSelector.getModel(id));
+      let model = (window.Clarity.pages._modelCache || []).find(m => m.id === id) ||
+                  (window.Clarity.modelSelector && window.Clarity.modelSelector.getModel(id));
       if (!model) {
         try {
-          const res = await window.NexaRAG.api.get("/api/models/" + encodeURIComponent(id));
+          const res = await window.Clarity.api.get("/api/models/" + encodeURIComponent(id));
           model = res;
         } catch (e) {}
       }
@@ -156,12 +156,12 @@ function bindModelPageEvents() {
       const id = btn.getAttribute("data-model-id");
       if (!confirm("Delete model '" + id + "'? Existing conversations remain intact.")) return;
       try {
-        await window.NexaRAG.api.del("/api/models/" + encodeURIComponent(id));
-        window.NexaRAG.toast.show("Model deleted", "success");
-        if (window.NexaRAG.modelSelector) await window.NexaRAG.modelSelector.load();
-        window.NexaRAG.app.navigate("#/model");
+        await window.Clarity.api.del("/api/models/" + encodeURIComponent(id));
+        window.Clarity.toast.show("Model deleted", "success");
+        if (window.Clarity.modelSelector) await window.Clarity.modelSelector.load();
+        window.Clarity.app.navigate("#/model");
       } catch (err) {
-        window.NexaRAG.toast.show("Delete failed: " + (err.message || ""), "danger");
+        window.Clarity.toast.show("Delete failed: " + (err.message || ""), "danger");
       }
     });
   });
@@ -170,12 +170,12 @@ function bindModelPageEvents() {
       const id = btn.getAttribute("data-model-id");
       const willEnable = btn.textContent.trim() === "Enable";
       try {
-        await window.NexaRAG.api.post("/api/models/" + encodeURIComponent(id) + "/enable", { enabled: willEnable });
-        window.NexaRAG.toast.show(willEnable ? "Model enabled" : "Model disabled", "success");
-        if (window.NexaRAG.modelSelector) await window.NexaRAG.modelSelector.load();
-        window.NexaRAG.app.navigate("#/model");
+        await window.Clarity.api.post("/api/models/" + encodeURIComponent(id) + "/enable", { enabled: willEnable });
+        window.Clarity.toast.show(willEnable ? "Model enabled" : "Model disabled", "success");
+        if (window.Clarity.modelSelector) await window.Clarity.modelSelector.load();
+        window.Clarity.app.navigate("#/model");
       } catch (err) {
-        window.NexaRAG.toast.show("Update failed: " + (err.message || ""), "danger");
+        window.Clarity.toast.show("Update failed: " + (err.message || ""), "danger");
       }
     });
   });
@@ -198,7 +198,7 @@ function openModelModal(existing) {
   const cap = (k, label) => '<label class="check"><input type="checkbox" name="cap_' + k + '" ' + (caps[k] ? "checked" : "") + '><span class="check__label">' + label + '</span></label>';
 
   const maskedKeyNote = isEdit && m.hasApiKey
-    ? '<div class="muted" style="margin-top:4px;">Current key on file: <code>' + window.NexaRAG.utils.escapeHtml(m.apiKeyMasked || '••••••') + '</code></div>'
+    ? '<div class="muted" style="margin-top:4px;">Current key on file: <code>' + window.Clarity.utils.escapeHtml(m.apiKeyMasked || '••••••') + '</code></div>'
     : '';
 
   const body = [
@@ -258,7 +258,7 @@ function openModelModal(existing) {
     '<button class="btn btn--primary" type="button" id="modelSaveBtn">' + (isEdit ? "Save changes" : "Save model") + '</button>',
   ].join("");
 
-  window.NexaRAG.modal.open(isEdit ? "Edit model" : "Add model", body, actions);
+  window.Clarity.modal.open(isEdit ? "Edit model" : "Add model", body, actions);
 
   _modelMappings = [{ id: m.id, modelName: m.modelName }];
 
@@ -296,7 +296,7 @@ function openModelModal(existing) {
     }
     showTestResult("Testing connection with " + payload.modelName + "…", null);
     try {
-      const res = await window.NexaRAG.api.post("/api/models/test", payload);
+      const res = await window.Clarity.api.post("/api/models/test", payload);
       const ok = !!res.ok;
       let msg;
       if (ok) {
@@ -314,12 +314,12 @@ function openModelModal(existing) {
       showTestResult(msg + (res.note ? " — " + res.note : ""), ok);
       if (ok) {
         try {
-          await window.NexaRAG.api.post("/api/models/set-active", { model_id: payload.id });
+          await window.Clarity.api.post("/api/models/set-active", { model_id: payload.id });
         } catch (e) {}
-        if (window.NexaRAG.modelSelector) await window.NexaRAG.modelSelector.load();
-        window.NexaRAG.app.navigate("#/model");
-        window.NexaRAG.modal.close();
-        window.NexaRAG.toast.show("Model verified — status: Available", "success");
+        if (window.Clarity.modelSelector) await window.Clarity.modelSelector.load();
+        window.Clarity.app.navigate("#/model");
+        window.Clarity.modal.close();
+        window.Clarity.toast.show("Model verified — status: Available", "success");
       }
     } catch (err) {
       showTestResult("✗ Test failed: " + (err.message || ""), false);
@@ -329,16 +329,16 @@ function openModelModal(existing) {
   document.getElementById("modelSaveBtn").addEventListener("click", async () => {
     const payload = collectEditModelForm();
     if (!payload.id || !payload.modelName) {
-      window.NexaRAG.toast.show("Registry ID and Provider Model ID are required", "danger");
+      window.Clarity.toast.show("Registry ID and Provider Model ID are required", "danger");
       return;
     }
     try {
       if (isEdit) {
-        await window.NexaRAG.api.put("/api/models/" + encodeURIComponent(existing.id), payload);
+        await window.Clarity.api.put("/api/models/" + encodeURIComponent(existing.id), payload);
       } else {
-        await window.NexaRAG.api.post("/api/models", payload);
+        await window.Clarity.api.post("/api/models", payload);
         try {
-          await window.NexaRAG.api.post("/api/models/set-active", { model_id: payload.id });
+          await window.Clarity.api.post("/api/models/set-active", { model_id: payload.id });
         } catch (e) {}
       }
 
@@ -366,7 +366,7 @@ function openModelModal(existing) {
             enabled: true,
           };
           try {
-            await window.NexaRAG.api.post("/api/models", additionalPayload);
+            await window.Clarity.api.post("/api/models", additionalPayload);
             additionalCount++;
           } catch (e) {
             console.warn("Failed to create additional model:", e);
@@ -375,15 +375,15 @@ function openModelModal(existing) {
       }
 
       if (isEdit) {
-        window.NexaRAG.toast.show("Model updated" + (additionalCount > 0 ? " and " + additionalCount + " additional model(s) added" : ""), "success");
+        window.Clarity.toast.show("Model updated" + (additionalCount > 0 ? " and " + additionalCount + " additional model(s) added" : ""), "success");
       } else {
-        window.NexaRAG.toast.show("Model added" + (additionalCount > 0 ? " and " + additionalCount + " additional model(s) added" : ""), "success");
+        window.Clarity.toast.show("Model added" + (additionalCount > 0 ? " and " + additionalCount + " additional model(s) added" : ""), "success");
       }
-      if (window.NexaRAG.modelSelector) await window.NexaRAG.modelSelector.load();
-      window.NexaRAG.modal.close();
-      window.NexaRAG.app.navigate("#/model");
+      if (window.Clarity.modelSelector) await window.Clarity.modelSelector.load();
+      window.Clarity.modal.close();
+      window.Clarity.app.navigate("#/model");
     } catch (err) {
-      window.NexaRAG.toast.show("Save failed: " + (err.message || ""), "danger");
+      window.Clarity.toast.show("Save failed: " + (err.message || ""), "danger");
     }
   });
 }
@@ -521,7 +521,7 @@ function openAddModelsModal() {
     '<button class="btn btn--primary" type="button" id="saveModelsBtn">Save Models</button>',
   ].join("");
 
-  window.NexaRAG.modal.open("Add Models", body, actions);
+  window.Clarity.modal.open("Add Models", body, actions);
 
   document.getElementById("mf-provider")?.addEventListener("change", () => {
     const sel = document.getElementById("mf-provider");
@@ -562,7 +562,7 @@ function openAddModelsModal() {
       }
 
       try {
-        await window.NexaRAG.api.post("/api/models", payload);
+        await window.Clarity.api.post("/api/models", payload);
         successCount++;
       } catch (err) {
         failCount++;
@@ -571,10 +571,10 @@ function openAddModelsModal() {
     }
 
     if (successCount > 0) {
-      window.NexaRAG.toast.show(successCount + " model(s) added" + (failCount > 0 ? " (" + failCount + " failed)" : ""), failCount > 0 ? "warning" : "success");
-      if (window.NexaRAG.modelSelector) await window.NexaRAG.modelSelector.load();
-      window.NexaRAG.modal.close();
-      window.NexaRAG.app.navigate("#/model");
+      window.Clarity.toast.show(successCount + " model(s) added" + (failCount > 0 ? " (" + failCount + " failed)" : ""), failCount > 0 ? "warning" : "success");
+      if (window.Clarity.modelSelector) await window.Clarity.modelSelector.load();
+      window.Clarity.modal.close();
+      window.Clarity.app.navigate("#/model");
     } else {
       showAddModelsResultNew("Failed to add models:\n" + errors.join("\n"), false);
     }

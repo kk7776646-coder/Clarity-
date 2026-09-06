@@ -1,7 +1,7 @@
-window.NexaRAG = window.NexaRAG || {};
-window.NexaRAG.pages = window.NexaRAG.pages || {};
+window.Clarity = window.Clarity || {};
+window.Clarity.pages = window.Clarity.pages || {};
 
-window.NexaRAG.pages.project = async function renderProjectPage(route) {
+window.Clarity.pages.project = async function renderProjectPage(route) {
   const main = document.getElementById("main");
   if (!main) return;
   const projectId = route ? route.replace("#/project/", "").trim() : null;
@@ -15,13 +15,13 @@ async function renderProjectList(main) {
   let projects = [];
   let defaultProjectId = null;
   try {
-    const data = await window.NexaRAG.api.get("/api/projects");
+    const data = await window.Clarity.api.get("/api/projects");
     projects = data.projects || [];
   } catch (err) {
-    window.NexaRAG.toast.show("Failed to load projects", "danger");
+    window.Clarity.toast.show("Failed to load projects", "danger");
   }
   try {
-    const def = await window.NexaRAG.api.get("/api/projects/default");
+    const def = await window.Clarity.api.get("/api/projects/default");
     defaultProjectId = def.id;
   } catch (e) {}
 
@@ -55,10 +55,10 @@ async function renderProjectList(main) {
     const name = prompt("Project name:", "My Project");
     if (name && name.trim()) {
       try {
-        const data = await window.NexaRAG.api.post("/api/projects", { name: name.trim() });
+        const data = await window.Clarity.api.post("/api/projects", { name: name.trim() });
         window.location.hash = "#/project/" + data.id;
       } catch (err) {
-        window.NexaRAG.toast.show("Failed to create project", "danger");
+        window.Clarity.toast.show("Failed to create project", "danger");
       }
     }
   });
@@ -80,7 +80,7 @@ async function renderProjectList(main) {
       dz.classList.remove("is-dragover");
       const f = Array.from(e.dataTransfer.files || []).find(x => x.name.toLowerCase().endsWith(".zip"));
       if (f) await uploadProjectZip(f);
-      else window.NexaRAG.toast.show("Please drop a .zip file", "danger");
+      else window.Clarity.toast.show("Please drop a .zip file", "danger");
     });
   }
 
@@ -92,15 +92,15 @@ async function renderProjectList(main) {
       else if (action === "delete") {
         if (!confirm("Delete this project? This cannot be undone.")) return;
         try {
-          await window.NexaRAG.api.del("/api/projects/" + id);
-          window.NexaRAG.toast.show("Project deleted", "success");
-          window.NexaRAG.app.navigate("#/project");
+          await window.Clarity.api.del("/api/projects/" + id);
+          window.Clarity.toast.show("Project deleted", "success");
+          window.Clarity.app.navigate("#/project");
         } catch (err) {
-          window.NexaRAG.toast.show("Delete failed: " + (err.message || ""), "danger");
+          window.Clarity.toast.show("Delete failed: " + (err.message || ""), "danger");
         }
       } else if (action === "ask") {
-        window.NexaRAG.uiChat.attachProject(id);
-        window.NexaRAG.toast.show("Project attached to chat context", "success");
+        window.Clarity.uiChat.attachProject(id);
+        window.Clarity.toast.show("Project attached to chat context", "success");
         window.location.hash = "#/chat";
       }
     });
@@ -110,8 +110,8 @@ async function renderProjectList(main) {
 function projectCardHtml(p, isDefault) {
   return '<article class="card project-card">' +
     '<div class="card__body">' +
-      '<div class="project-card__head"><h3>' + window.NexaRAG.utils.escapeHtml(p.name) + '</h3>' + (isDefault ? '<span class="tag tag--xs">Default</span>' : '') + '</div>' +
-      '<div class="muted">Project ' + window.NexaRAG.utils.escapeHtml(p.id) + '</div>' +
+      '<div class="project-card__head"><h3>' + window.Clarity.utils.escapeHtml(p.name) + '</h3>' + (isDefault ? '<span class="tag tag--xs">Default</span>' : '') + '</div>' +
+      '<div class="muted">Project ' + window.Clarity.utils.escapeHtml(p.id) + '</div>' +
       '<div class="hstack" style="margin-top:12px;gap:6px;">' +
         '<button class="btn btn--primary btn--sm" type="button" data-project-action="open" data-project-id="' + p.id + '">Open</button>' +
         '<button class="btn btn--outline btn--sm" type="button" data-project-action="ask" data-project-id="' + p.id + '">Ask AI</button>' +
@@ -123,37 +123,37 @@ function projectCardHtml(p, isDefault) {
 
 async function uploadProjectZip(file) {
   if (!file.name.toLowerCase().endsWith(".zip")) {
-    window.NexaRAG.toast.show("Only .zip files are supported", "danger");
+    window.Clarity.toast.show("Only .zip files are supported", "danger");
     return;
   }
-  window.NexaRAG.toast.show("Uploading " + file.name + "...", "info");
+  window.Clarity.toast.show("Uploading " + file.name + "...", "info");
   try {
     const fd = new FormData();
     fd.append("files", file, file.name);
-    const resp = await fetch(window.NexaRAG.api.base + "/api/files/upload", { method: "POST", body: fd });
+    const resp = await fetch(window.Clarity.api.base + "/api/files/upload", { method: "POST", body: fd });
     const data = await resp.json();
     const r = (data.files || [])[0];
     if (!r || !r.ok) {
-      window.NexaRAG.toast.show("Upload failed: " + (r?.error || "unknown"), "danger");
+      window.Clarity.toast.show("Upload failed: " + (r?.error || "unknown"), "danger");
       return;
     }
     const name = file.name.replace(/\.zip$/i, "");
-    const proj = await window.NexaRAG.api.post("/api/projects", { name, description: "Uploaded from " + file.name });
+    const proj = await window.Clarity.api.post("/api/projects", { name, description: "Uploaded from " + file.name });
     const projectId = proj.id;
     if (r.extracted && r.extracted.length > 0) {
-      window.NexaRAG.toast.show("Indexing " + r.extracted.length + " files...", "info");
+      window.Clarity.toast.show("Indexing " + r.extracted.length + " files...", "info");
       try {
-        await window.NexaRAG.api.post("/api/projects/" + projectId + "/index");
-        window.NexaRAG.toast.show("Index complete", "success");
+        await window.Clarity.api.post("/api/projects/" + projectId + "/index");
+        window.Clarity.toast.show("Index complete", "success");
       } catch (e) {
-        window.NexaRAG.toast.show("Indexing failed (project still created)", "warning");
+        window.Clarity.toast.show("Indexing failed (project still created)", "warning");
       }
     } else {
-      window.NexaRAG.toast.show("Project created", "success");
+      window.Clarity.toast.show("Project created", "success");
     }
     window.location.hash = "#/project/" + projectId;
   } catch (err) {
-    window.NexaRAG.toast.show("Upload failed: " + (err.message || ""), "danger");
+    window.Clarity.toast.show("Upload failed: " + (err.message || ""), "danger");
   }
 }
 
@@ -161,7 +161,7 @@ async function renderProjectDetail(main, projectId) {
   let tree = {};
   let loadError = null;
   try {
-    const t = await window.NexaRAG.api.get("/api/projects/" + projectId + "/tree");
+    const t = await window.Clarity.api.get("/api/projects/" + projectId + "/tree");
     tree = t.tree || {};
   } catch (err) {
     loadError = "Failed to load project tree: " + (err.message || "");
@@ -172,7 +172,7 @@ async function renderProjectDetail(main, projectId) {
   const hasValidName = projectId && !/[#/]/.test(projectId) && projectId.trim() !== "";
   const showError = loadError && hasFiles;
   const titleHtml = hasValidName
-    ? '<h1 class="page__title">Project: ' + window.NexaRAG.utils.escapeHtml(projectId) + '</h1>'
+    ? '<h1 class="page__title">Project: ' + window.Clarity.utils.escapeHtml(projectId) + '</h1>'
     : '';
 
   main.innerHTML = [
@@ -187,7 +187,7 @@ async function renderProjectDetail(main, projectId) {
     ' Re-index</button>',
     '<button class="btn btn--primary btn--sm" id="attachToChatBtn" type="button"' + (hasFiles ? '' : ' disabled') + '>Ask AI about this project</button>',
     '</div></header>',
-    showError ? '<div class="project-notice">' + window.NexaRAG.utils.escapeHtml(loadError) + '</div>' : '',
+    showError ? '<div class="project-notice">' + window.Clarity.utils.escapeHtml(loadError) + '</div>' : '',
     '<section class="grid-2 project-section">',
     '<div class="panel"><div class="panel__head"><h2>Project Tree</h2></div><div class="panel__body project-tree">' +
       (flatFiles.length === 0 ? '<div class="empty-state">No files. Upload a ZIP to populate this project.</div>' : renderTree(tree)) +
@@ -201,8 +201,8 @@ async function renderProjectDetail(main, projectId) {
 
   document.getElementById("backToProjectsBtn")?.addEventListener("click", () => window.location.hash = "#/project");
   document.getElementById("attachToChatBtn")?.addEventListener("click", () => {
-    window.NexaRAG.uiChat.attachProject(projectId);
-    window.NexaRAG.toast.show("Project attached to chat", "success");
+    window.Clarity.uiChat.attachProject(projectId);
+    window.Clarity.toast.show("Project attached to chat", "success");
     window.location.hash = "#/chat";
   });
   document.getElementById("indexProjectBtn")?.addEventListener("click", async () => {
@@ -210,10 +210,10 @@ async function renderProjectDetail(main, projectId) {
     btn.disabled = true;
     btn.textContent = "Indexing...";
     try {
-      await window.NexaRAG.api.post("/api/projects/" + projectId + "/index");
-      window.NexaRAG.toast.show("Index complete", "success");
+      await window.Clarity.api.post("/api/projects/" + projectId + "/index");
+      window.Clarity.toast.show("Index complete", "success");
     } catch (err) {
-      window.NexaRAG.toast.show("Index failed: " + (err.message || ""), "danger");
+      window.Clarity.toast.show("Index failed: " + (err.message || ""), "danger");
     } finally {
       btn.disabled = false;
       btn.innerHTML = '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg> Re-index';
@@ -226,10 +226,10 @@ async function renderProjectDetail(main, projectId) {
       const action = btn.getAttribute("data-file-action");
       if (action === "preview") await previewProjectFile(projectId, path);
       else if (action === "analyze") {
-        window.NexaRAG.uiChat.attachProject(projectId);
+        window.Clarity.uiChat.attachProject(projectId);
         const fileName = path.split("/").pop();
-        window.NexaRAG.uiChat._pendingPrompt = "Analyze the file " + fileName + " (path: " + path + ") and explain what it does.";
-        window.NexaRAG.toast.show("Project attached. Open chat to send the question.", "info");
+        window.Clarity.uiChat._pendingPrompt = "Analyze the file " + fileName + " (path: " + path + ") and explain what it does.";
+        window.Clarity.toast.show("Project attached. Open chat to send the question.", "info");
         window.location.hash = "#/chat";
       }
     });
@@ -237,15 +237,15 @@ async function renderProjectDetail(main, projectId) {
 }
 
 function fileItemHtml(f) {
-  return '<div class="file-item" data-file-path="' + window.NexaRAG.utils.escapeHtml(f.path) + '">' +
+  return '<div class="file-item" data-file-path="' + window.Clarity.utils.escapeHtml(f.path) + '">' +
     '<span class="file-item__icon">' + fileTypeIcon(f.ext) + '</span>' +
-    '<span class="file-item__name">' + window.NexaRAG.utils.escapeHtml(f.name) + '</span>' +
+    '<span class="file-item__name">' + window.Clarity.utils.escapeHtml(f.name) + '</span>' +
     '<span class="muted">' + formatSize(f.size) + '</span>' +
     '<div class="file-item__actions">' +
-      '<button class="btn btn--ghost btn--icon-sm" data-file-action="preview" data-file-path="' + window.NexaRAG.utils.escapeHtml(f.path) + '" title="Preview" aria-label="Preview file">' +
+      '<button class="btn btn--ghost btn--icon-sm" data-file-action="preview" data-file-path="' + window.Clarity.utils.escapeHtml(f.path) + '" title="Preview" aria-label="Preview file">' +
         '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>' +
       '</button>' +
-      '<button class="btn btn--ghost btn--icon-sm" data-file-action="analyze" data-file-path="' + window.NexaRAG.utils.escapeHtml(f.path) + '" title="Analyze with AI" aria-label="Analyze with AI">' +
+      '<button class="btn btn--ghost btn--icon-sm" data-file-action="analyze" data-file-path="' + window.Clarity.utils.escapeHtml(f.path) + '" title="Analyze with AI" aria-label="Analyze with AI">' +
         '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>' +
       '</button>' +
     '</div>' +
@@ -282,18 +282,18 @@ function flattenTree(node, prefix, out) {
 
 async function previewProjectFile(projectId, path) {
   try {
-    const data = await window.NexaRAG.api.get("/api/projects/" + projectId + "/file?path=" + encodeURIComponent(path));
+    const data = await window.Clarity.api.get("/api/projects/" + projectId + "/file?path=" + encodeURIComponent(path));
     const content = data.content || "(Empty file)";
     const ext = (path.split(".").pop() || "").toLowerCase();
-    const lang = window.NexaRAG.markdown ? window.NexaRAG.markdown.normalizeLang(ext) : "";
-    const highlighted = window.NexaRAG.markdown && window.NexaRAG.markdown.highlightCode
-      ? window.NexaRAG.markdown.highlightCode(content, lang)
-      : window.NexaRAG.utils.escapeHtml(content);
-    const body = '<div class="file-preview-head"><strong>' + window.NexaRAG.utils.escapeHtml(path) + '</strong><span class="muted">' + content.length + ' chars</span></div>' +
+    const lang = window.Clarity.markdown ? window.Clarity.markdown.normalizeLang(ext) : "";
+    const highlighted = window.Clarity.markdown && window.Clarity.markdown.highlightCode
+      ? window.Clarity.markdown.highlightCode(content, lang)
+      : window.Clarity.utils.escapeHtml(content);
+    const body = '<div class="file-preview-head"><strong>' + window.Clarity.utils.escapeHtml(path) + '</strong><span class="muted">' + content.length + ' chars</span></div>' +
       '<pre class="code-block"><code class="language-' + lang + '">' + highlighted + '</code></pre>';
-    window.NexaRAG.modal.open("File: " + path, body, '<button class="btn btn--primary" type="button" data-modal-close="true">Close</button>');
+    window.Clarity.modal.open("File: " + path, body, '<button class="btn btn--primary" type="button" data-modal-close="true">Close</button>');
   } catch (err) {
-    window.NexaRAG.toast.show("Preview failed: " + (err.message || ""), "danger");
+    window.Clarity.toast.show("Preview failed: " + (err.message || ""), "danger");
   }
 }
 
@@ -311,7 +311,7 @@ function renderTree(node, prefix) {
     const connector = isLast ? "└─" : "├─";
     html += '<div class="tree-item" style="margin-left:' + (prefix.length * 0.6) + 'em">' +
       '<span class="tree-connector">' + connector + '</span>' + icon +
-      '<span class="tree-name">' + window.NexaRAG.utils.escapeHtml(key) + '</span>' +
+      '<span class="tree-name">' + window.Clarity.utils.escapeHtml(key) + '</span>' +
       (value && value.size ? '<span class="tree-size">' + formatSize(value.size) + '</span>' : '') +
       '</div>';
     if (!isFile && value && value.children) {
@@ -327,3 +327,4 @@ function formatSize(bytes) {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
+

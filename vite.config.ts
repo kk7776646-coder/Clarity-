@@ -6,6 +6,9 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    rollupOptions: {
+      external: [".venv/**", "node_modules/**"],
+    },
   },
   server: {
     proxy: {

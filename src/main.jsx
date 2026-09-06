@@ -39,12 +39,13 @@ import "../css/pages.css";
 // Start the application after DOM is loaded
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
-    if (window.NexaRAG && window.NexaRAG.app && typeof window.NexaRAG.app.init === "function") {
-      window.NexaRAG.app.init();
+    if (window.Clarity && window.Clarity.app && typeof window.Clarity.app.init === "function") {
+      window.Clarity.app.init();
     }
   });
 } else {
-  if (window.NexaRAG && window.NexaRAG.app && typeof window.NexaRAG.app.init === "function") {
-    window.NexaRAG.app.init();
+  if (window.Clarity && window.Clarity.app && typeof window.Clarity.app.init === "function") {
+    window.Clarity.app.init();
   }
 }
+

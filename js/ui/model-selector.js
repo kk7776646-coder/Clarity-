@@ -1,4 +1,4 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
 /**
  * Model selector.
@@ -8,7 +8,7 @@ window.NexaRAG = window.NexaRAG || {};
  * There is no client-side fallback list: if the request fails the selector
  * reports the real error instead of inventing a model.
  */
-window.NexaRAG.modelSelector = {
+window.Clarity.modelSelector = {
   _models: [],
   _active: null,
   _error: null,
@@ -22,7 +22,7 @@ window.NexaRAG.modelSelector = {
 
   async load() {
     try {
-      const data = await window.NexaRAG.api.get("/api/models");
+      const data = await window.Clarity.api.get("/api/models");
       this._models = data.models || [];
       this._active = data.active || null;
       this._error = null;
@@ -32,9 +32,9 @@ window.NexaRAG.modelSelector = {
       this._error = err.message || "Could not load models";
     }
     // Keep the chat's selection in step with the backend's stored selection.
-    if (window.NexaRAG.uiChat) window.NexaRAG.uiChat.setModel(this._active, { persist: false });
+    if (window.Clarity.uiChat) window.Clarity.uiChat.setModel(this._active, { persist: false });
     this._updateAllContainers();
-    if (window.NexaRAG.uiTopbar) window.NexaRAG.uiTopbar.updateModelChip();
+    if (window.Clarity.uiTopbar) window.Clarity.uiTopbar.updateModelChip();
     return this._models;
   },
 
@@ -76,24 +76,24 @@ window.NexaRAG.modelSelector = {
     if (!modelId) return false;
     const target = this.getModel(modelId);
     if (!target) {
-      window.NexaRAG.toast.show("That model is no longer available", "danger");
+      window.Clarity.toast.show("That model is no longer available", "danger");
       return false;
     }
     if (target.enabled === false) {
-      window.NexaRAG.toast.show("Cannot select a disabled model", "danger");
+      window.Clarity.toast.show("Cannot select a disabled model", "danger");
       return false;
     }
     try {
-      await window.NexaRAG.api.post("/api/models/set-active", { model_id: modelId });
+      await window.Clarity.api.post("/api/models/set-active", { model_id: modelId });
     } catch (err) {
-      window.NexaRAG.toast.show("Failed to select model: " + (err.message || ""), "danger");
+      window.Clarity.toast.show("Failed to select model: " + (err.message || ""), "danger");
       return false;
     }
     this._active = modelId;
-    if (window.NexaRAG.uiChat) window.NexaRAG.uiChat.setModel(modelId);
+    if (window.Clarity.uiChat) window.Clarity.uiChat.setModel(modelId);
     this._updateAllContainers();
-    if (window.NexaRAG.uiTopbar) window.NexaRAG.uiTopbar.updateModelChip();
-    window.NexaRAG.toast.show("Model switched to " + (target.name || modelId), "success");
+    if (window.Clarity.uiTopbar) window.Clarity.uiTopbar.updateModelChip();
+    window.Clarity.toast.show("Model switched to " + (target.name || modelId), "success");
     return true;
   },
 
@@ -107,7 +107,7 @@ window.NexaRAG.modelSelector = {
     const container = document.getElementById(containerId);
     if (!container) return;
     const active = this.getActive();
-    const escape = window.NexaRAG.utils.escapeHtml;
+    const escape = window.Clarity.utils.escapeHtml;
 
     if (!active) {
       const message = this._error ? "Models unavailable" : "Select a model";
@@ -142,7 +142,7 @@ window.NexaRAG.modelSelector = {
 
   _renderInto(container) {
     if (!container) return;
-    const escape = window.NexaRAG.utils.escapeHtml;
+    const escape = window.Clarity.utils.escapeHtml;
 
     if (this._error) {
       container.innerHTML =
@@ -230,3 +230,4 @@ window.NexaRAG.modelSelector = {
     }
   },
 };
+

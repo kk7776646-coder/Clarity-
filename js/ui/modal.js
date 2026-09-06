@@ -1,6 +1,6 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
-window.NexaRAG.modal = {
+window.Clarity.modal = {
   _onKeydown: null,
 
   open(title, bodyHtml, actions) {
@@ -8,7 +8,7 @@ window.NexaRAG.modal = {
     if (!root) return;
     root.innerHTML = [
       '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">',
-      '<div class="modal__head"><h3 id="modalTitle">' + window.NexaRAG.utils.escapeHtml(title || 'Dialog') + '</h3><button class="btn btn--ghost btn--icon-sm" type="button" data-modal-close="true" aria-label="Close">',
+      '<div class="modal__head"><h3 id="modalTitle">' + window.Clarity.utils.escapeHtml(title || 'Dialog') + '</h3><button class="btn btn--ghost btn--icon-sm" type="button" data-modal-close="true" aria-label="Close">',
       '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>',
       '</button></div>',
       '<div class="modal__body">' + (bodyHtml || '') + '</div>',
@@ -49,3 +49,4 @@ window.NexaRAG.modal = {
     root.innerHTML = '';
   }
 };
+

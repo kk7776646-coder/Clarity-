@@ -1,9 +1,9 @@
 /**
- * NexaRAG Icon Library — Standard Lucide icons
+ * Clarity Icon Library — Standard Lucide icons
  * All icons: 24x24 viewBox, stroke-width="2", stroke-linecap="round", stroke-linejoin="round"
  * Theme-aware: uses currentColor for fill/stroke
  */
-window.NexaRAG.icons = {
+window.Clarity.icons = {
   edit: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>',
   settings: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>',
@@ -52,12 +52,12 @@ window.NexaRAG.icons = {
   settingsGear: null,
 };
 
-window.NexaRAG.icons.regenerate = window.NexaRAG.icons.refresh;
-window.NexaRAG.icons.delete = window.NexaRAG.icons.trash;
-window.NexaRAG.icons.close = window.NexaRAG.icons.x;
-window.NexaRAG.icons.settingsGear = window.NexaRAG.icons.settings;
+window.Clarity.icons.regenerate = window.Clarity.icons.refresh;
+window.Clarity.icons.delete = window.Clarity.icons.trash;
+window.Clarity.icons.close = window.Clarity.icons.x;
+window.Clarity.icons.settingsGear = window.Clarity.icons.settings;
 
-window.NexaRAG.getIcon = function(name, size) {
+window.Clarity.getIcon = function(name, size) {
   const icon = this.icons[name];
   if (!icon) return '';
   if (size && size !== 16) {
@@ -65,3 +65,4 @@ window.NexaRAG.getIcon = function(name, size) {
   }
   return icon;
 };
+

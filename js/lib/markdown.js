@@ -1,4 +1,4 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
 (function () {
   var LANG_KEYWORDS = {
@@ -412,7 +412,7 @@ window.NexaRAG = window.NexaRAG || {};
     return html;
   }
 
-  window.NexaRAG.markdown = {
+  window.Clarity.markdown = {
     render: renderMarkdown,
     escapeHtml: escapeHtml,
     highlightCode: highlightCode,
@@ -420,3 +420,4 @@ window.NexaRAG = window.NexaRAG || {};
     slugify: slugify,
   };
 })();
+

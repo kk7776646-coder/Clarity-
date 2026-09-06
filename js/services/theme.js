@@ -1,6 +1,6 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
-window.NexaRAG.theme = {
+window.Clarity.theme = {
   state: {
     mode: 'system',
     current: 'light',
@@ -9,7 +9,7 @@ window.NexaRAG.theme = {
 
   init() {
     this.state.system = this.getSystemPreference();
-    const saved = (window.NexaRAG.settings && window.NexaRAG.settings.get().theme) || null;
+    const saved = (window.Clarity.settings && window.Clarity.settings.get().theme) || null;
     if (saved && ['light', 'dark', 'system'].includes(saved)) {
       this.state.mode = saved;
     } else {

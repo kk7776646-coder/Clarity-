@@ -1,6 +1,6 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
-window.NexaRAG.composer = {
+window.Clarity.composer = {
   _attachedFiles: [],
   _isStreaming: false,
   _onStop: null,
@@ -140,17 +140,17 @@ container.innerHTML = [
     }
 
     for (const err of errors) {
-      window.NexaRAG.toast.show(err, "danger");
+      window.Clarity.toast.show(err, "danger");
     }
     if (validFiles.length === 0) return;
 
-    window.NexaRAG.toast.show(`Uploading ${validFiles.length} file(s)...`, "info");
+    window.Clarity.toast.show(`Uploading ${validFiles.length} file(s)...`, "info");
 
     try {
       const formData = new FormData();
       validFiles.forEach(f => formData.append("files", f, f.name));
 
-      const resp = await fetch(window.NexaRAG.api.base + "/api/files/upload", {
+      const resp = await fetch(window.Clarity.api.base + "/api/files/upload", {
         method: "POST",
         body: formData,
       });
@@ -159,7 +159,7 @@ container.innerHTML = [
       for (const result of (data.files || [])) {
         if (result.ok && result.file_type === "archive") {
           const projectName = validFiles.find(f => f.name === result.filename)?.name || "Uploaded Project";
-          const projResp = await fetch(window.NexaRAG.api.base + "/api/projects", {
+          const projResp = await fetch(window.Clarity.api.base + "/api/projects", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: projectName, description: "Auto-created from upload" }),
@@ -168,7 +168,7 @@ container.innerHTML = [
           const projectId = projData.id;
 
           if (result.extracted && result.extracted.length > 0) {
-            await fetch(window.NexaRAG.api.base + `/api/projects/${projectId}/index`, { method: "POST" });
+            await fetch(window.Clarity.api.base + `/api/projects/${projectId}/index`, { method: "POST" });
           }
 
           this._attachedFiles.push({
@@ -199,27 +199,27 @@ container.innerHTML = [
             });
           }
         } else {
-          window.NexaRAG.toast.show(`Failed to upload ${result.filename}: ${result.error || "unknown error"}`, "danger");
+          window.Clarity.toast.show(`Failed to upload ${result.filename}: ${result.error || "unknown error"}`, "danger");
         }
       }
 
       if (validFiles.length > 0) {
-        window.NexaRAG.toast.show(`Uploaded ${validFiles.length} file(s)`, "success");
+        window.Clarity.toast.show(`Uploaded ${validFiles.length} file(s)`, "success");
         this._refreshAttachments();
         this._syncSendButton();
       }
     } catch (err) {
-      window.NexaRAG.toast.show("Upload failed: " + (err.message || "network error"), "danger");
+      window.Clarity.toast.show("Upload failed: " + (err.message || "network error"), "danger");
     }
   },
 
   async _getFileUrl(fileId) {
-    return window.NexaRAG.api.base + `/api/files/${fileId}/raw`;
+    return window.Clarity.api.base + `/api/files/${fileId}/raw`;
   },
 
   async _getFileContent(fileId) {
     try {
-      const data = await window.NexaRAG.api.get(`/api/files/${fileId}/content`);
+      const data = await window.Clarity.api.get(`/api/files/${fileId}/content`);
       return data.content || "";
     } catch (err) {
       return "";
@@ -259,7 +259,7 @@ container.innerHTML = [
         : isProject
         ? `<span class="attachment-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l1.5 2H18.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z"/></svg></span>`
         : `<span class="attachment-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>`;
-      const safeName = window.NexaRAG.utils.escapeHtml(att.name || "file");
+      const safeName = window.Clarity.utils.escapeHtml(att.name || "file");
       return `<span class="attachment-preview-item" data-attach-id="${att.id}" title="${safeName}">
         ${typeIcon}
         <span class="attachment-name">${safeName}</span>
@@ -278,8 +278,8 @@ container.innerHTML = [
         const item = btn.closest("[data-attach-id]");
         const fileId = item.getAttribute("data-attach-id");
         this.removeFile(fileId);
-        window.NexaRAG.uiChat._attachedFiles = this._attachedFiles;
-        window.NexaRAG.uiChat._saveState();
+        window.Clarity.uiChat._attachedFiles = this._attachedFiles;
+        window.Clarity.uiChat._saveState();
       });
     });
   },
@@ -292,3 +292,4 @@ container.innerHTML = [
     this._attachedFiles = [];
   },
 };
+

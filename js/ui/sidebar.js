@@ -1,11 +1,11 @@
-window.NexaRAG = window.NexaRAG || {};
+window.Clarity = window.Clarity || {};
 
-window.NexaRAG.uiSidebar = {
+window.Clarity.uiSidebar = {
   _conversations: [],
 
   async loadConversations() {
     try {
-      const data = await window.NexaRAG.api.get("/api/conversations");
+      const data = await window.Clarity.api.get("/api/conversations");
       this._conversations = data.conversations || [];
     } catch (err) {
       console.error("Failed to load conversations:", err);
@@ -24,17 +24,17 @@ window.NexaRAG.uiSidebar = {
         const isDefaultChatRoute = route === "#/" && item.href === "#/chat";
         const active = route === item.href || isDefaultChatRoute ? "is-active" : "";
         const icon = this._getIcon(item.icon);
-        return '<a class="nav__item ' + active + '" href="' + item.href + '" aria-label="' + window.NexaRAG.utils.escapeHtml(item.label) + '" data-tooltip="' + window.NexaRAG.utils.escapeHtml(item.label) + '"><span class="nav__icon">' + icon + '</span><span class="nav__label">' + window.NexaRAG.utils.escapeHtml(item.label) + '</span></a>';
+        return '<a class="nav__item ' + active + '" href="' + item.href + '" aria-label="' + window.Clarity.utils.escapeHtml(item.label) + '" data-tooltip="' + window.Clarity.utils.escapeHtml(item.label) + '"><span class="nav__icon">' + icon + '</span><span class="nav__label">' + window.Clarity.utils.escapeHtml(item.label) + '</span></a>';
       }).join('');
     };
-    renderLinks((window.NexaRAG.data && window.NexaRAG.data.nav) || [], navRoot);
-    renderLinks((window.NexaRAG.data && window.NexaRAG.data.secondaryNav) || [], secondaryNav);
+    renderLinks((window.Clarity.data && window.Clarity.data.nav) || [], navRoot);
+    renderLinks((window.Clarity.data && window.Clarity.data.secondaryNav) || [], secondaryNav);
     this._updateRecent();
 
     // Wire tooltip on every interactive sidebar element (only shows when rail).
     const sidebar = document.getElementById("sidebar");
-    if (sidebar && window.NexaRAG.uiTooltip) {
-      window.NexaRAG.uiTooltip.bindSidebar(sidebar);
+    if (sidebar && window.Clarity.uiTooltip) {
+      window.Clarity.uiTooltip.bindSidebar(sidebar);
     }
   },
 
@@ -73,7 +73,7 @@ window.NexaRAG.uiSidebar = {
       if (title.length > 40) {
         title = title.slice(0, 37) + '...';
       }
-      return '<li><a class="recent__item" href="#/chat/' + item.id + '"><span class="recent__title">' + window.NexaRAG.utils.escapeHtml(title || "New conversation") + '</span><span class="recent__time">' + timeStr + '</span></a></li>';
+      return '<li><a class="recent__item" href="#/chat/' + item.id + '"><span class="recent__title">' + window.Clarity.utils.escapeHtml(title || "New conversation") + '</span><span class="recent__time">' + timeStr + '</span></a></li>';
     }).join('');
   },
 
