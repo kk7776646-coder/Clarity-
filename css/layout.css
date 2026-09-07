@@ -157,8 +157,13 @@
 .sidebar.is-rail .nav__badge,
 .sidebar.is-rail .nav-section,
 .sidebar.is-rail .profile__meta,
-.sidebar.is-rail .profile__chev {
-  display: none;
+.sidebar.is-rail .profile__chev,
+.sidebar.is-rail .sidebar__scroll,
+.sidebar.is-rail .sidebar__foot,
+.sidebar.is-rail .sidebar__collapse,
+.sidebar.is-rail .sidebar-search,
+.sidebar.is-rail .sidebar__nav-section {
+  display: none !important;
 }
 
 .sidebar.is-rail .nav__item.is-active::before {
@@ -175,45 +180,33 @@
 
 .sidebar.is-rail .sidebar__head {
   justify-content: center;
+  padding: var(--s-2);
+  border-bottom: none;
+  height: auto;
+  min-height: 56px;
 }
 
 .sidebar.is-rail .brand {
   justify-content: center;
-  flex: 1;
+  flex: 0 0 auto;
+  width: 100%;
+  margin: 0;
+  padding: 8px 0;
+  border-radius: var(--r-md);
+  transition: background var(--t-fast) var(--ease);
 }
 
-.sidebar.is-rail .chat-sidebar__new {
-  display: flex;
-  justify-content: center;
-  padding: var(--s-2) 0;
+.sidebar.is-rail .brand:hover {
+  background: var(--surface-hover);
 }
 
-.sidebar.is-rail .chat-sidebar__new .btn--primary {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: 10px;
-  justify-content: center;
-  box-shadow: 0 1px 3px rgba(95,90,246,0.2);
+.sidebar.is-rail .brand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
-.sidebar.is-rail .chat-sidebar__new .btn--primary span {
-  display: none;
-}
-
-.sidebar.is-rail .brand,
-.sidebar.is-rail .nav__item,
-.sidebar.is-rail .profile__btn {
-  justify-content: center;
-}
-
-.sidebar.is-rail .sidebar__search .field__kbd,
-.sidebar.is-rail .sidebar__search .input {
-  display: none;
-}
-
-.sidebar.is-rail .sidebar__search .field {
-  justify-content: center;
+.sidebar.is-rail .brand__mark {
+  margin: 0;
 }
 
 /* ------------------------------- Shell ------------------------------ */

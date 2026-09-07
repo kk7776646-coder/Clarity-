@@ -81,15 +81,25 @@ window.Clarity.app = {
       if (scrim) scrim.hidden = !isOpen;
     };
 
-    if (brand) {
+if (brand) {
       brand.addEventListener("click", (event) => {
         const isMobile = window.innerWidth < 1024;
         if (isMobile && sidebar) {
           event.preventDefault();
-          // Always open on mobile when tapping it.
           sidebar.classList.add("is-open");
           if (scrim) scrim.hidden = false;
-        } else if (sidebar && sidebar.classList.contains("is-rail")) {
+          return;
+        }
+        if (sidebar && sidebar.classList.contains("is-rail")) {
+          event.preventDefault();
+          sidebar.classList.remove("is-rail");
+        }
+      });
+      brand.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const isMobile = window.innerWidth < 1024;
+        if (isMobile) return;
+        if (sidebar && sidebar.classList.contains("is-rail")) {
           event.preventDefault();
           sidebar.classList.remove("is-rail");
         }
@@ -114,6 +124,31 @@ if (sidebarCollapse) {
         if (window.Clarity.uiTooltip) window.Clarity.uiTooltip.refresh();
       });
       syncCollapseAffordance();
+    }
+    // Single source of truth: re-sync every toggleable affordance whenever the
+    // sidebar's expanded/collapsed state changes. The brand is the new
+    // collapsed-mode toggle.
+    const syncSidebarState = () => {
+      const isRail = sidebar && sidebar.classList.contains("is-rail");
+      const brand = document.getElementById("sidebarBrand");
+      if (brand) {
+        brand.setAttribute("aria-expanded", isRail ? "false" : "true");
+        brand.setAttribute("aria-label", isRail ? "Open sidebar" : "Go to home");
+        if (isRail) {
+          brand.setAttribute("role", "button");
+          brand.setAttribute("tabindex", "0");
+          brand.setAttribute("title", "Open sidebar");
+          brand.setAttribute("data-tip-bound", "1");
+        } else {
+          brand.removeAttribute("role");
+          brand.removeAttribute("tabindex");
+          brand.removeAttribute("data-tip-bound");
+        }
+      }
+    };
+    if (sidebar) {
+      new MutationObserver(syncSidebarState).observe(sidebar, { attributes: true, attributeFilter: ["class"] });
+      syncSidebarState();
     }
     if (scrim) {
       scrim.addEventListener("click", () => {
