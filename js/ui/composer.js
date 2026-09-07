@@ -15,7 +15,7 @@ container.innerHTML = [
       '<div class="composer__attachments" id="composerAttachments"></div>',
       '<div class="composer__row">',
         '<div class="composer__field">',
-          '<textarea id="composerInput" rows="1" placeholder="Message Clarity... (Enter to send, Shift+Enter for newline)" aria-label="Message input"></textarea>',
+          '<textarea id="composerInput" rows="1" placeholder="Message Clarity" aria-label="Message input"></textarea>',
         '</div>',
         '<div class="composer__actions">',
           '<button class="composer__upload" id="composerUpload" type="button" title="Attach files" aria-label="Attach files">',

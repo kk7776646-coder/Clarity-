@@ -218,7 +218,7 @@ window.Clarity.uiChat = {
   },
 
   _renderAssistantControls(msg, isStreaming, isError) {
-    if (isStreaming) {
+if (isStreaming) {
       return `<div class="message__controls"><button class="message-control" data-action="stop" type="button" title="Stop generation" aria-label="Stop generation">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
         <span>Stop</span>
@@ -226,9 +226,9 @@ window.Clarity.uiChat = {
     }
     if (isError) {
       return `<div class="message__controls message__controls--error">
-        <button class="message-control" data-action="retry" type="button" title="Retry" aria-label="Retry">
+        <button class="message-control" data-action="regenerate" type="button" title="Regenerate response" aria-label="Regenerate response">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
-          <span>Retry</span>
+          <span>Regenerate</span>
         </button>
         <button class="message-control" data-action="change-model" type="button" title="Change model" aria-label="Change model">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
@@ -610,11 +610,18 @@ window.Clarity.uiChat = {
                 }
                 this._refreshSidebarAfterMessage();
                 return;
-              } else if (event.error) {
+} else if (event.error) {
                 this._updateBotMessage(botMsg.id, "", true, event.error);
                 this._isStreaming = false;
                 this._syncComposerStreaming();
-                this._bindMessageControls();
+                botMsg.streaming = false;
+                botMsg.error = event.error;
+                const errEl = document.querySelector(`[data-msg-id="${botMsg.id}"]`);
+                if (errEl) {
+                  errEl.innerHTML = this._renderMessage(botMsg);
+                  this._bindMessageControls();
+                  this._renderErrorActions(errEl, event.error, botMsg.id, false);
+                }
                 this._scrollToBottom();
                 return;
               } else if (event.done) {
@@ -673,11 +680,18 @@ window.Clarity.uiChat = {
               }
               this._refreshSidebarAfterMessage();
               return;
-            } else if (event.error) {
+} else if (event.error) {
               this._updateBotMessage(botMsg.id, "", true, event.error);
               this._isStreaming = false;
               this._syncComposerStreaming();
-              this._bindMessageControls();
+              botMsg.streaming = false;
+              botMsg.error = event.error;
+              const errEl = document.querySelector(`[data-msg-id="${botMsg.id}"]`);
+              if (errEl) {
+                errEl.innerHTML = this._renderMessage(botMsg);
+                this._bindMessageControls();
+                this._renderErrorActions(errEl, event.error, botMsg.id, false);
+              }
               this._scrollToBottom();
               return;
             } else if (event.done) {
@@ -713,17 +727,24 @@ window.Clarity.uiChat = {
           }
         }
       }
-    } catch (err) {
+} catch (err) {
       if (err.name === "AbortError") return;
       const errInfo = {
         message: err.message || "Connection failed",
         type: err.type || "network_error",
         status: err.status,
       };
-      this._updateBotMessage(botMsg.id, errInfo.message, true, errInfo);
+      this._updateBotMessage(botMsg.id, errInfo.message, false, errInfo);
       this._isStreaming = false;
       this._syncComposerStreaming();
-      this._bindMessageControls();
+      botMsg.streaming = false;
+      botMsg.error = errInfo;
+      const errEl = document.querySelector(`[data-msg-id="${botMsg.id}"]`);
+      if (errEl) {
+        errEl.innerHTML = this._renderMessage(botMsg);
+        this._bindMessageControls();
+        this._renderErrorActions(errEl, errInfo, botMsg.id, false);
+      }
       this._scrollToBottom();
     } finally {
       this._abortController = null;
@@ -1010,9 +1031,17 @@ window.Clarity.uiChat = {
                 this._bindMessageControls();
                 this._scrollToBottom();
                 return;
-              } else if (event.error) {
-                this._updateBotMessage(botMsg.id, "", true, event.error);
+} else if (event.error) {
+                this._updateBotMessage(botMsg.id, "", false, event.error);
                 this._isStreaming = false;
+                botMsg.streaming = false;
+                botMsg.error = event.error;
+                const errEl = document.querySelector(`[data-msg-id="${botMsg.id}"]`);
+                if (errEl) {
+                  errEl.innerHTML = this._renderMessage(botMsg);
+                  this._bindMessageControls();
+                  this._renderErrorActions(errEl, event.error, botMsg.id, false);
+                }
                 return;
               } else if (event.done) {
                 if (event.attachments) botAttachments = event.attachments;
@@ -1053,10 +1082,18 @@ window.Clarity.uiChat = {
               this._bindMessageControls();
               this._scrollToBottom();
               return;
-            } else if (event.error) {
-              this._updateBotMessage(botMsg.id, "", true, event.error);
+} else if (event.error) {
+              this._updateBotMessage(botMsg.id, "", false, event.error);
               this._isStreaming = false;
               this._syncComposerStreaming();
+              botMsg.streaming = false;
+              botMsg.error = event.error;
+              const errEl = document.querySelector(`[data-msg-id="${botMsg.id}"]`);
+              if (errEl) {
+                errEl.innerHTML = this._renderMessage(botMsg);
+                this._bindMessageControls();
+                this._renderErrorActions(errEl, event.error, botMsg.id, false);
+              }
               return;
             } else if (event.done) {
               if (event.attachments) botAttachments = event.attachments;
@@ -1079,11 +1116,20 @@ window.Clarity.uiChat = {
           } catch (e) {}
         }
       }
-    } catch (err) {
+} catch (err) {
       if (err.name === "AbortError") return;
-      this._updateBotMessage(botMsg.id, err.message || "Error", true, { message: err.message, type: "network_error" });
+      const errInfo = { message: err.message || "Connection failed", type: "network_error" };
+      this._updateBotMessage(botMsg.id, errInfo.message, false, errInfo);
       this._isStreaming = false;
       this._syncComposerStreaming();
+      botMsg.streaming = false;
+      botMsg.error = errInfo;
+      const errEl = document.querySelector(`[data-msg-id="${botMsg.id}"]`);
+      if (errEl) {
+        errEl.innerHTML = this._renderMessage(botMsg);
+        this._bindMessageControls();
+        this._renderErrorActions(errEl, errInfo, botMsg.id, false);
+      }
     } finally {
       this._abortController = null;
     }
@@ -1242,10 +1288,18 @@ window.Clarity.uiChat = {
               this._scrollToBottom();
               this._refreshSidebarAfterMessage();
               return;
-            } else if (event.error) {
-              this._updateBotMessage(botMsg.id, event.error.message || "Error", true, event.error);
+} else if (event.error) {
+              this._updateBotMessage(botMsg.id, event.error.message || "Error", false, event.error);
               this._isStreaming = false;
               this._syncComposerStreaming();
+              botMsg.streaming = false;
+              botMsg.error = event.error;
+              const errEl = document.querySelector(`[data-msg-id="${botMsg.id}"]`);
+              if (errEl) {
+                errEl.innerHTML = this._renderMessage(botMsg);
+                this._bindMessageControls();
+                this._renderErrorActions(errEl, event.error, botMsg.id, false);
+              }
               return;
             } else if (event.done) {
               if (event.attachments) botAttachments = event.attachments;
@@ -1290,9 +1344,17 @@ window.Clarity.uiChat = {
             this._scrollToBottom();
             this._refreshSidebarAfterMessage();
             return;
-          } else if (event.error) {
-            this._updateBotMessage(botMsg.id, event.error.message || "Error", true, event.error);
+} else if (event.error) {
+            this._updateBotMessage(botMsg.id, event.error.message || "Error", false, event.error);
             this._isStreaming = false;
+            botMsg.streaming = false;
+            botMsg.error = event.error;
+            const errEl = document.querySelector(`[data-msg-id="${botMsg.id}"]`);
+            if (errEl) {
+              errEl.innerHTML = this._renderMessage(botMsg);
+              this._bindMessageControls();
+              this._renderErrorActions(errEl, event.error, botMsg.id, false);
+            }
             return;
           } else if (event.done) {
             if (event.attachments) botAttachments = event.attachments;
