@@ -262,25 +262,6 @@ class ModelConfig:
                 "enabled": True,
                 "isUser": False,
             })
-        if os.environ.get("OPENROUTER_API_KEY"):
-            out.append({
-                "id": "openrouter-mixtral",
-                "name": "Mixtral 8x7B (OpenRouter)",
-                "modelName": "mistralai/mixtral-8x7b-instruct",
-                "provider": "openrouter",
-                "baseUrl": "https://openrouter.ai/api/v1",
-                "apiKey": os.environ["OPENROUTER_API_KEY"],
-                "modelType": "text",
-                "capabilities": {"text": True, "vision": False, "imageGeneration": False, "codeGeneration": True, "fileAnalysis": True, "streaming": True},
-                "contextWindow": 32000,
-                "maxOutputTokens": 4096,
-                "defaultTemperature": 0.7,
-                "defaultTopP": 1.0,
-                "supportsStreaming": True,
-                "status": "available",
-                "enabled": True,
-                "isUser": False,
-            })
         gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if gemini_key:
             out.append({
