@@ -290,40 +290,40 @@
 .status--streaming { background: var(--accent); animation: pulse 1.4s infinite; }
 .status--error { background: var(--danger); }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-.message__content { color: #111; font-size: 14.5px; line-height: 1.7; word-break: break-word; }
-[data-theme="dark"] .message__content { color: #E5E7EB; }
+.message__content { color: var(--ink); font-size: 14.5px; line-height: 1.7; word-break: break-word; }
+[data-theme="dark"] .message__content { color: var(--ink); }
 [data-theme="dark"] .message--user .message__content { color: #fff; }
 .message__content--error { color: #991b1b; }
 
 [data-theme="dark"] .message--error .message__bubble { background: #1c0a0a; border-color: rgba(239, 68, 68, 0.35); }
 [data-theme="dark"] .message__content--error { color: #f87171; }
-.message__content--empty, .message__empty { color: #6b7280; font-style: italic; font-size: 13.5px; padding: 4px 0; }
-[data-theme="dark"] .message__content--empty, [data-theme="dark"] .message__empty { color: #9ca3af; }
+.message__content--empty, .message__empty { color: var(--ink-muted); font-style: italic; font-size: 13.5px; padding: 4px 0; }
+[data-theme="dark"] .message__content--empty, [data-theme="dark"] .message__empty { color: var(--ink-muted); }
 
 /* Messages typography */
-.message__content h1, .message__content h2, .message__content h3, .message__content h4, .message__content h5, .message__content h6 { margin: 14px 0 8px; font-weight: 600; color: #111; letter-spacing: -0.01em; line-height: 1.3; }
+.message__content h1, .message__content h2, .message__content h3, .message__content h4, .message__content h5, .message__content h6 { margin: 14px 0 8px; font-weight: 600; color: var(--ink); letter-spacing: -0.01em; line-height: 1.3; }
 .message__content h1:first-child, .message__content h2:first-child, .message__content h3:first-child, .message__content h4:first-child { margin-top: 0; }
 .message__content h1 { font-size: 1.5rem; }
 .message__content h2 { font-size: 1.3rem; }
 .message__content h3 { font-size: 1.15rem; }
 .message__content h4 { font-size: 1.05rem; }
 .message__content h5 { font-size: 0.95rem; }
-.message__content h6 { font-size: 0.85rem; color: #555; }
-.message__content p { margin: 8px 0; color: #111; }
+.message__content h6 { font-size: 0.85rem; color: var(--ink-muted); }
+.message__content p { margin: 8px 0; color: var(--ink); }
 .message__content p:first-child { margin-top: 0; }
 .message__content p:last-child { margin-bottom: 0; }
-.message__content ul, .message__content ol { margin: 8px 0 8px 22px; padding: 0; color: #111; }
+.message__content ul, .message__content ol { margin: 8px 0 8px 22px; padding: 0; color: var(--ink); }
 .message__content li { margin: 3px 0; }
-.message__content strong { font-weight: 700; color: #111; }
+.message__content strong { font-weight: 700; color: var(--ink); }
 .message__content em { font-style: italic; }
-.message__content blockquote { margin: 12px 0; padding: 8px 14px; border-left: 3px solid #d4d4d8; background: #f9fafb; border-radius: 0 8px 8px 0; color: #374151; }
+.message__content blockquote { margin: 12px 0; padding: 8px 14px; border-left: 3px solid var(--line-strong); background: var(--surface-muted); border-radius: 0 8px 8px 0; color: var(--ink-soft); }
 .message__content a { color: #2563eb; text-decoration: underline; text-underline-offset: 2px; }
 .message__content img { max-width: 100%; border-radius: 8px; margin: 6px 0; display: block; }
-.message__content table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; }
-.message__content th, .message__content td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; color: #111; }
-.message__content th { background: #f9fafb; font-weight: 600; }
-.message__content hr { border: 0; border-top: 1px solid #e5e7eb; margin: 14px 0; }
-.message__content code:not(.code-block) { display: inline; padding: 2px 6px; background: #f3f4f6; border-radius: 4px; font-family: var(--font-mono); font-size: 0.88em; color: #be185d; border: 1px solid #e5e7eb; }
+.message__content table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.message__content th, .message__content td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; color: var(--ink); }
+.message__content th { background: var(--surface-muted); font-weight: 600; }
+.message__content hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+.message__content > code, .message__content p > code, .message__content li > code, .message__content h1 > code, .message__content h2 > code, .message__content h3 > code, .message__content h4 > code, .message__content h5 > code, .message__content h6 > code { display: inline; padding: 2px 6px; background: var(--surface-muted); border-radius: 4px; font-family: var(--font-mono); font-size: 0.88em; color: #be185d; border: 1px solid var(--line); }
 
 /* Dark theme message typography */
 [data-theme="dark"] .message__content h1,

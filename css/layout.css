@@ -39,6 +39,7 @@
   flex: none;
   padding: 0 20px;
   border-bottom: 1px solid var(--line);
+  position: relative;
   transition: border-color var(--t-base) var(--ease);
 }
 
@@ -87,7 +88,17 @@
   gap: 6px;
 }
 
+.sidebar.is-rail .brand {
+  justify-content: center;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
 .sidebar.is-rail .sidebar__collapse {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   margin-left: 0;
 }
 
@@ -416,6 +427,10 @@
     .sidebar__collapse,
     .sidebar__rail-expand {
       display: none !important;
+    }
+
+    .topbar {
+      z-index: 60;
     }
   }
 
