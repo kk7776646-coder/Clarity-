@@ -460,7 +460,9 @@ function collectEditModelForm() {
 let _modelMappings = [];
 
 function openAddModelsModal() {
-  _modelMappings = [{ id: "", modelName: "" }];
+  _modelMappings = [
+    { id: "", modelName: "", displayName: "" },
+  ];
 
   const providerOptions = MODEL_PROVIDERS.map(p =>
     '<option value="' + p.id + '">' + p.label + '</option>'
@@ -468,50 +470,40 @@ function openAddModelsModal() {
 
   const body = [
     '<form id="addModelsForm" class="add-models-form" autocomplete="off">',
+      '<p class="muted" style="margin-bottom:16px;">',
+        'Add multiple models using the same provider connection. The API key is stored once and shared by every model below.',
+      '</p>',
+
       '<div class="model-form__section">',
-        '<div class="model-form__row">',
-          '<label class="model-form__label" for="mf-name">Display name <span class="req">*</span></label>',
-          '<input class="input model-form__input" id="mf-name" type="text" name="name" required value="" placeholder="My Llama">',
-        '</div>',
-        '<div class="model-form__row">',
-          '<label class="model-form__label">Provider Model Mappings <span class="req">*</span></label>',
-          '<div class="muted" style="margin-bottom:8px;">Add one or more provider model ID mappings. Each mapping creates an independent model entry.</div>',
-        '</div>',
-        '<div id="modelMappingsContainer">',
-          createModelMappingHTML(0, _modelMappings[0]),
-        '</div>',
-        '<button type="button" class="btn btn--outline btn--sm" id="addMappingBtn" style="margin-top:8px;">',
-          '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
-          ' Add Model',
-        '</button>',
-      '</div>',
-      '<div class="model-form__section">',
+        '<div class="model-form__section-title">Provider configuration</div>',
         '<div class="model-form__row model-form__row--2">',
           '<div class="model-form__field">',
             '<label class="model-form__label" for="mf-provider">Provider <span class="req">*</span></label>',
             '<select class="input model-form__input" id="mf-provider" name="provider">' + providerOptions + '</select>',
           '</div>',
           '<div class="model-form__field">',
-            '<label class="model-form__label" for="mf-base">Base URL</label>',
+            '<label class="model-form__label" for="mf-base">Base URL <span class="req">*</span></label>',
             '<input class="input model-form__input" id="mf-base" type="text" name="baseUrl" value="" placeholder="https://openrouter.ai/api/v1">',
           '</div>',
         '</div>',
         '<div class="model-form__row">',
-          '<label class="model-form__label" for="mf-key">API key</label>',
-          '<input class="input model-form__input" id="mf-key" type="password" name="apiKey" value="" placeholder="sk-... (leave blank to skip)">',
+          '<label class="model-form__label" for="mf-key">API key <span class="req">*</span></label>',
+          '<input class="input model-form__input" id="mf-key" type="password" name="apiKey" value="" placeholder="sk-or-v1-..." autocomplete="new-password">',
+          '<div class="muted">One API key can power multiple models. It is stored once and reused for every model in this form.</div>',
         '</div>',
-        '<fieldset class="model-form__caps">',
-          '<legend class="model-form__caps-legend">Capabilities</legend>',
-          '<div class="check-grid">',
-            '<label class="check"><input type="checkbox" name="cap_text" checked><span class="check__label">Text</span></label>',
-            '<label class="check"><input type="checkbox" name="cap_vision"><span class="check__label">Vision</span></label>',
-            '<label class="check"><input type="checkbox" name="cap_codeGeneration"><span class="check__label">Code</span></label>',
-            '<label class="check"><input type="checkbox" name="cap_imageGeneration"><span class="check__label">Image</span></label>',
-            '<label class="check"><input type="checkbox" name="cap_fileAnalysis"><span class="check__label">Files</span></label>',
-            '<label class="check"><input type="checkbox" name="cap_streaming" checked><span class="check__label">Stream</span></label>',
-          '</div>',
-        '</fieldset>',
       '</div>',
+
+      '<div class="model-form__section">',
+        '<div class="model-form__section-title">Models using this API key</div>',
+        '<div id="modelMappingsContainer">',
+          createModelMappingHTML(0, _modelMappings[0]),
+        '</div>',
+        '<button type="button" class="btn btn--outline btn--sm" id="addMappingBtn" style="margin-top:8px;">',
+          '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
+          ' Add Another Model',
+        '</button>',
+      '</div>',
+
       '<div id="addModelsResult" class="model-form__result" style="display:none;"></div>',
     '</form>'
   ].join("");
@@ -535,7 +527,7 @@ function openAddModelsModal() {
   });
 
   document.getElementById("addMappingBtn")?.addEventListener("click", () => {
-    _modelMappings.push({ id: "", modelName: "" });
+    _modelMappings.push({ id: "", modelName: "", displayName: "" });
     const idx = _modelMappings.length - 1;
     const container = document.getElementById("modelMappingsContainer");
     if (container) {
@@ -587,16 +579,35 @@ function createModelMappingHTML(index, mapping) {
     : '<button type="button" class="btn btn--ghost btn--sm" onclick="removeModelMapping(' + index + ')" style="margin-left:auto;">Remove</button>';
 
   return [
-    '<div class="model-mapping" id="modelMapping' + index + '" data-mapping-index="' + index + '" style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px;">',
-      '<div style="flex:1;">',
-        '<label class="model-form__label" for="mapping-id-' + index + '">Registry ID <span class="req">*</span></label>',
-        '<input class="input model-form__input" id="mapping-id-' + index + '" type="text" name="mappings[' + index + '][id]" required value="' + escapeAttr(mapping.id || "") + '" placeholder="my-llama">',
+    '<div class="model-mapping card" id="modelMapping' + index + '" data-mapping-index="' + index + '" style="padding:12px;margin-bottom:12px;">',
+      '<div class="hstack" style="justify-content:space-between;align-items:center;margin-bottom:8px;">',
+        '<strong style="font-size:13px;">Model ' + (index + 1) + '</strong>',
+        removeBtn,
       '</div>',
-      '<div style="flex:1;">',
-        '<label class="model-form__label" for="mapping-mname-' + index + '">Provider model ID <span class="req">*</span></label>',
-        '<input class="input model-form__input" id="mapping-mname-' + index + '" type="text" name="mappings[' + index + '][modelName]" required value="' + escapeAttr(mapping.modelName || "") + '" placeholder="meta-llama/llama-3.3-70b-instruct">',
+      '<div class="model-form__row">',
+        '<label class="model-form__label" for="mapping-name-' + index + '">Display name <span class="req">*</span></label>',
+        '<input class="input model-form__input" id="mapping-name-' + index + '" type="text" name="mappings[' + index + '][displayName]" value="' + escapeAttr(mapping.displayName || "") + '" placeholder="Llama 3.3 70B">',
       '</div>',
-      removeBtn,
+      '<div class="model-form__row model-form__row--2">',
+        '<div class="model-form__field">',
+          '<label class="model-form__label" for="mapping-id-' + index + '">Registry ID <span class="req">*</span></label>',
+          '<input class="input model-form__input" id="mapping-id-' + index + '" type="text" name="mappings[' + index + '][id]" required value="' + escapeAttr(mapping.id || "") + '" placeholder="llama-3-70b">',
+        '</div>',
+        '<div class="model-form__field">',
+          '<label class="model-form__label" for="mapping-mname-' + index + '">Provider model ID <span class="req">*</span></label>',
+          '<input class="input model-form__input" id="mapping-mname-' + index + '" type="text" name="mappings[' + index + '][modelName]" required value="' + escapeAttr(mapping.modelName || "") + '" placeholder="meta-llama/llama-3.3-70b-instruct">',
+        '</div>',
+      '</div>',
+      '<fieldset class="model-form__caps" style="margin-top:8px;">',
+        '<legend class="model-form__caps-legend">Capabilities</legend>',
+        '<div class="check-grid">',
+          '<label class="check"><input type="checkbox" name="mappings[' + index + '][cap_text]" checked><span class="check__label">Text</span></label>',
+          '<label class="check"><input type="checkbox" name="mappings[' + index + '][cap_streaming]" checked><span class="check__label">Stream</span></label>',
+          '<label class="check"><input type="checkbox" name="mappings[' + index + '][cap_codeGeneration]"><span class="check__label">Code</span></label>',
+          '<label class="check"><input type="checkbox" name="mappings[' + index + '][cap_fileAnalysis]"><span class="check__label">Files</span></label>',
+          '<label class="check"><input type="checkbox" name="mappings[' + index + '][cap_vision]"><span class="check__label">Vision</span></label>',
+        '</div>',
+      '</fieldset>',
     '</div>'
   ].join("");
 }
@@ -612,43 +623,43 @@ function removeModelMapping(index) {
 function collectAddModelsFormNew() {
   const payloads = [];
 
-  const name = document.getElementById("mf-name")?.value?.trim() || "";
   const provider = document.getElementById("mf-provider")?.value || "openai";
   const baseUrl = document.getElementById("mf-base")?.value?.trim() || "";
   const apiKey = document.getElementById("mf-key")?.value || "";
-
-  const capabilities = {
-    text: document.querySelector("[name='cap_text']")?.checked || false,
-    vision: document.querySelector("[name='cap_vision']")?.checked || false,
-    codeGeneration: document.querySelector("[name='cap_codeGeneration']")?.checked || false,
-    imageGeneration: document.querySelector("[name='cap_imageGeneration']")?.checked || false,
-    fileAnalysis: document.querySelector("[name='cap_fileAnalysis']")?.checked || false,
-    streaming: document.querySelector("[name='cap_streaming']")?.checked || false,
-  };
 
   const mappingContainer = document.getElementById("modelMappingsContainer");
   if (!mappingContainer) return payloads;
 
   const mappings = mappingContainer.querySelectorAll(".model-mapping");
-  mappings.forEach((el, i) => {
+  mappings.forEach((el) => {
     const idx = el.getAttribute("data-mapping-index");
     if (_modelMappings[idx] === null) return;
 
+    const displayName = el.querySelector("[name='mappings[" + idx + "][displayName]']")?.value?.trim() || "";
     const mappingId = el.querySelector("[name='mappings[" + idx + "][id]']")?.value?.trim() || "";
     const mappingModelName = el.querySelector("[name='mappings[" + idx + "][modelName]']")?.value?.trim() || "";
 
     if (!mappingId && !mappingModelName) return;
 
-    const displayName = name || mappingModelName.split("/").pop() || mappingId;
+    const capabilities = {
+      text: el.querySelector("[name='mappings[" + idx + "][cap_text]']")?.checked || false,
+      vision: el.querySelector("[name='mappings[" + idx + "][cap_vision]']")?.checked || false,
+      codeGeneration: el.querySelector("[name='mappings[" + idx + "][cap_codeGeneration]']")?.checked || false,
+      imageGeneration: false,
+      fileAnalysis: el.querySelector("[name='mappings[" + idx + "][cap_fileAnalysis]']")?.checked || false,
+      streaming: el.querySelector("[name='mappings[" + idx + "][cap_streaming]']")?.checked || false,
+    };
+
+    const name = displayName || mappingModelName.split("/").pop() || mappingId;
 
     payloads.push({
-      name: displayName,
+      name,
       id: mappingId,
       modelName: mappingModelName,
       provider,
       baseUrl,
       apiKey,
-      capabilities: { ...capabilities },
+      capabilities,
       status: "untested",
       enabled: true,
     });
