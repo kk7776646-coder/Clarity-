@@ -179,13 +179,9 @@ window.Clarity.uiChat = {
         '<rect x="28" y="36" width="8" height="1.6" rx="0.8" fill="#8b5cf6" opacity="0.55"/>',
       '</svg>',
       '</div>',
-      '<h1 class="chat-empty__title">How can I help you today?</h1>',
-      '<p class="chat-empty__sub">Ask questions, analyze documents, or explore your projects. Powered by <strong>' + window.Clarity.utils.escapeHtml(modelName) + '</strong>.</p>',
-      '<div class="chat-empty__suggestions">',
-      '<button class="chat-empty__chip" data-suggestion="Explain how the RAG pipeline works in this app"><span class="chat-empty__chip-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 0-8 8c0 3.4 2.1 6.3 5 7.5V20h6v-2.5c2.9-1.2 5-4.1 5-7.5a8 8 0 0 0-8-8z"/></svg></span> Explain RAG</button>',
-      '<button class="chat-empty__chip" data-suggestion="Write a Python function to parse CSV files"><span class="chat-empty__chip-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/><line x1="8" y1="9" x2="10" y2="9"/></svg></span> Write Python</button>',
-      '<button class="chat-empty__chip" data-suggestion="Summarize the latest documents in my knowledge base"><span class="chat-empty__chip-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg></span> Summarize docs</button>',
-      '<button class="chat-empty__chip" data-suggestion="Help me debug a JavaScript error"><span class="chat-empty__chip-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span> Debug code</button>',
+      '<h1 class="chat-empty__title">What are you working on?</h1>
+      '<p class="chat-empty__sub">Powered by <strong>' + window.Clarity.utils.escapeHtml(modelName) + '</strong>.</p>',
+
       '</div>',
       '</div>',
       '</div>',

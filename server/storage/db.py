@@ -131,6 +131,112 @@ CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_files_conv ON files(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_proj_files ON project_files(project_id);
 CREATE INDEX IF NOT EXISTS idx_embeddings_proj ON embeddings(project_id);
+
+-- Whole-project analysis: versions, runs, evidence, knowledge claims and
+-- debug sessions. Added as separate tables alongside the existing schema;
+-- no existing tables or columns are dropped or renamed.
+CREATE TABLE IF NOT EXISTS project_versions (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    version_number INTEGER NOT NULL,
+    label TEXT,
+    source TEXT,
+    created_at REAL NOT NULL,
+    file_count INTEGER DEFAULT 0,
+    note TEXT,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS analysis_runs (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    version_id TEXT,
+    user_id TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    stage TEXT NOT NULL DEFAULT 'scanning',
+    started_at REAL NOT NULL,
+    completed_at REAL,
+    files_discovered INTEGER DEFAULT 0,
+    files_analyzed INTEGER DEFAULT 0,
+    chunks_indexed INTEGER DEFAULT 0,
+    error_count INTEGER DEFAULT 0,
+    warning_count INTEGER DEFAULT 0,
+    model_id TEXT,
+    detail TEXT,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS evidence (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    version_id TEXT,
+    run_id TEXT,
+    project_file_id TEXT,
+    path TEXT,
+    symbol TEXT,
+    line_start INTEGER,
+    line_end INTEGER,
+    observation TEXT,
+    evidence_type TEXT,
+    confidence TEXT,
+    created_at REAL NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE SET NULL,
+    FOREIGN KEY (run_id) REFERENCES analysis_runs(id) ON DELETE SET NULL,
+    FOREIGN KEY (project_file_id) REFERENCES project_files(id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS knowledge_claims (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    version_id TEXT,
+    run_id TEXT,
+    statement TEXT NOT NULL,
+    category TEXT,
+    confidence TEXT,
+    status TEXT NOT NULL DEFAULT 'inferred',
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE SET NULL,
+    FOREIGN KEY (run_id) REFERENCES analysis_runs(id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS knowledge_claim_evidence (
+    claim_id TEXT NOT NULL,
+    evidence_id TEXT NOT NULL,
+    PRIMARY KEY (claim_id, evidence_id),
+    FOREIGN KEY (claim_id) REFERENCES knowledge_claims(id) ON DELETE CASCADE,
+    FOREIGN KEY (evidence_id) REFERENCES evidence(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS debug_sessions (
+    id TEXT PRIMARY KEY,
+    project_id TEXT,
+    version_id TEXT,
+    user_id TEXT,
+    error_text TEXT,
+    stack_trace TEXT,
+    source_context TEXT,
+    affected_files TEXT,
+    affected_functions TEXT,
+    root_cause TEXT,
+    suggested_fix TEXT,
+    generated_diff TEXT,
+    validation TEXT,
+    test_result TEXT,
+    build_result TEXT,
+    confidence TEXT,
+    started_at REAL NOT NULL,
+    completed_at REAL,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE SET NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_project_versions_proj ON project_versions(project_id);
+CREATE INDEX IF NOT EXISTS idx_analysis_runs_proj ON analysis_runs(project_id);
+CREATE INDEX IF NOT EXISTS idx_analysis_runs_ver ON analysis_runs(version_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_proj ON evidence(project_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_run ON evidence(run_id);
+CREATE INDEX IF NOT EXISTS idx_claims_proj ON knowledge_claims(project_id);
+CREATE INDEX IF NOT EXISTS idx_claims_run ON knowledge_claims(run_id);
+CREATE INDEX IF NOT EXISTS idx_debug_user ON debug_sessions(user_id);
 """
 
 # Columns added after the first release. Applied only when missing so existing
@@ -149,6 +255,8 @@ _MIGRATIONS: list[tuple[str, str, str]] = [
     ("model_configs", "last_error", "TEXT"),
     ("users", "last_login_at", "REAL"),
     ("users", "active_model_id", "TEXT"),
+    ("project_files", "hash", "TEXT"),
+    ("project_files", "version_id", "TEXT"),
 ]
 
 

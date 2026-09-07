@@ -1,5 +1,6 @@
 """Projects: creation, indexing and keyword retrieval over indexed chunks."""
 
+import hashlib
 import json
 import logging
 import os
@@ -9,6 +10,7 @@ import uuid
 from typing import Any
 
 from server.services.file_service import CODE_EXTENSIONS, extract_text_from_file
+from server.services import analysis_service
 from server.storage.db import execute, query
 
 log = logging.getLogger(__name__)
@@ -52,30 +54,77 @@ def delete_project(user_id: str, pid: str) -> int:
 
 
 def index_project_files(user_id: str, project_id: str) -> dict[str, Any]:
-    """(Re)build the chunk index for a project's registered files."""
+    """(Re)build the chunk index for a project's registered files.
+
+    Side effects (additive):
+    - Creates a new project_versions row capturing this snapshot.
+    - Creates an analysis_runs row tracking this index with stages.
+    - Populates project_files.hash for future version diff.
+    - Records evidence rows pointing to each indexed file.
+    """
     if not get_project(user_id, project_id):
         return {"error": "Project not found", "file_count": 0, "chunk_count": 0}
 
+    version_id = analysis_service.create_version(
+        user_id, project_id,
+        label="Index @ " + time.strftime("%Y-%m-%d %H:%M:%S"),
+        source="index_project_files",
+    )
+    run_id = analysis_service.create_analysis_run(user_id, project_id, version_id=version_id)
+    analysis_service.update_analysis_run(run_id, status="scanning", stage="scanning")
+
     files = query("SELECT * FROM project_files WHERE project_id = ? ORDER BY path", (project_id,))
+    analysis_service.update_analysis_run(run_id, files_discovered=len(files))
 
-    # Backfill text for rows stored without extracted content.
+    # Backfill text and hashes for rows stored without extracted content.
     for pf in files:
-        if pf.get("content"):
-            continue
-        frow = query("SELECT path FROM files WHERE id = ?", (pf.get("file_id"),), one=True) if pf.get("file_id") else None
-        disk_path = frow["path"] if frow else None
-        if disk_path and os.path.exists(disk_path):
-            content = extract_text_from_file(disk_path, limit=MAX_INDEXED_CHARS)
-            execute("UPDATE project_files SET content = ? WHERE id = ?", (content, pf["id"]))
-            pf["content"] = content
+        path = pf.get("path") or ""
+        content = pf.get("content") or ""
+        if not content:
+            frow = query("SELECT path FROM files WHERE id = ?", (pf.get("file_id"),), one=True) if pf.get("file_id") else None
+            disk_path = frow["path"] if frow else None
+            if disk_path and os.path.exists(disk_path):
+                content = extract_text_from_file(disk_path, limit=MAX_INDEXED_CHARS)
+                execute("UPDATE project_files SET content = ? WHERE id = ?", (content, pf["id"]))
+                pf["content"] = content
+        if content:
+            file_hash = hashlib.sha256(content.encode("utf-8", errors="replace")).hexdigest()
+            execute("UPDATE project_files SET hash = ?, version_id = ? WHERE id = ?", (file_hash, version_id, pf["id"]))
 
-    execute("DELETE FROM embeddings WHERE project_id = ?", (project_id,))
-    chunk_count = _chunk_files(project_id, files)
+    analysis_service.update_analysis_run(run_id, status="indexing", stage="indexing")
+
+    # Index chunks only for the current run; older embeddings stay in the
+    # table but are no longer referenced. This is what enables non-destructive
+    # re-indexing (the user's primary concern).
+    chunk_count = _chunk_files(project_id, files, run_id=run_id, version_id=version_id)
+
+    # Record per-file evidence pointing at the file row, version and run.
+    evidence_count = 0
+    for pf in files:
+        analysis_service.add_evidence(
+            user_id, project_id,
+            version_id=version_id, run_id=run_id,
+            project_file_id=pf["id"], path=pf.get("path"),
+            symbol=None,
+            line_start=None, line_end=None,
+            observation=f"Indexed {pf.get('file_type') or 'unknown'} file {pf.get('name')}",
+            evidence_type="structure",
+            confidence="medium",
+        )
+        evidence_count += 1
+
+    analysis_service.update_analysis_run(
+        run_id, status="completed", stage="completed", completed=True,
+        files_analyzed=len(files), chunks_indexed=chunk_count,
+    )
 
     return {
         "project_id": project_id,
+        "version_id": version_id,
+        "run_id": run_id,
         "file_count": len(files),
         "chunk_count": chunk_count,
+        "evidence_count": evidence_count,
         "imports": _extract_imports(files),
     }
 
@@ -173,7 +222,12 @@ def _extract_imports(files: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return results
 
 
-def _chunk_files(project_id: str, files: list[dict[str, Any]]) -> int:
+def _chunk_files(
+    project_id: str,
+    files: list[dict[str, Any]],
+    run_id: str | None = None,
+    version_id: str | None = None,
+) -> int:
     rows: list[tuple] = []
     index = 0
     for pf in files:

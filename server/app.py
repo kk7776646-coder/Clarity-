@@ -31,6 +31,7 @@ from server.services.codebase_service import (
     list_projects,
     retrieve_relevant_chunks,
 )
+from server.services import analysis_service
 from server.services.file_service import (
     MAX_FILE_SIZE,
     FileError,
@@ -993,6 +994,237 @@ def serve_static(filename):
     if not target or not os.path.isfile(target):
         return jsonify({"error": "Not found"}), 404
     return send_from_directory(_project_root, filename)
+
+
+# ---------------------------------------------------------------------------
+# Whole-project analysis: versions, runs, evidence, claims, debug sessions.
+# All routes are additive; no existing route is modified.
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/projects/<pid>/versions", methods=["GET"])
+@login_required
+def list_project_versions(pid):
+    user = current_user()
+    if not get_project(user["id"], pid):
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    rows = analysis_service.list_versions(user["id"], pid)
+    return jsonify({"versions": rows})
+
+
+@app.route("/api/projects/<pid>/versions", methods=["POST"])
+@login_required
+def create_project_version(pid):
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    vid = analysis_service.create_version(
+        user["id"], pid,
+        label=data.get("label"),
+        source=data.get("source"),
+        note=data.get("note"),
+    )
+    if not vid:
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    return jsonify({"id": vid, "project_id": pid}), 201
+
+
+@app.route("/api/projects/<pid>/runs", methods=["GET"])
+@login_required
+def list_project_runs(pid):
+    user = current_user()
+    if not get_project(user["id"], pid):
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    rows = analysis_service.list_runs(user["id"], pid)
+    return jsonify({"runs": rows})
+
+
+@app.route("/api/projects/<pid>/runs", methods=["POST"])
+@login_required
+def create_project_run(pid):
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    rid = analysis_service.create_analysis_run(
+        user["id"], pid,
+        version_id=data.get("version_id"),
+        model_id=data.get("model_id"),
+    )
+    if not rid:
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    analysis_service.update_analysis_run(rid, status="scanning", stage="scanning")
+    return jsonify({"id": rid, "project_id": pid}), 201
+
+
+@app.route("/api/runs/<run_id>", methods=["GET"])
+@login_required
+def get_run(run_id):
+    user = current_user()
+    row = query(
+        "SELECT r.* FROM analysis_runs r"
+        " JOIN projects p ON p.id = r.project_id"
+        " WHERE r.id = ? AND p.user_id = ?",
+        (run_id, user["id"]),
+        one=True,
+    )
+    if not row:
+        return jsonify({"error": "Run not found", "type": "not_found"}), 404
+    return jsonify(row)
+
+
+@app.route("/api/runs/<run_id>", methods=["PATCH"])
+@login_required
+def patch_run(run_id):
+    user = current_user()
+    row = query(
+        "SELECT r.id FROM analysis_runs r"
+        " JOIN projects p ON p.id = r.project_id"
+        " WHERE r.id = ? AND p.user_id = ?",
+        (run_id, user["id"]),
+        one=True,
+    )
+    if not row:
+        return jsonify({"error": "Run not found", "type": "not_found"}), 404
+    data = request.get_json(silent=True) or {}
+    analysis_service.update_analysis_run(
+        run_id,
+        status=data.get("status"),
+        stage=data.get("stage"),
+        completed=bool(data.get("completed")),
+        files_discovered=data.get("files_discovered"),
+        files_analyzed=data.get("files_analyzed"),
+        chunks_indexed=data.get("chunks_indexed"),
+        error_count=data.get("error_count"),
+        warning_count=data.get("warning_count"),
+        detail=data.get("detail"),
+    )
+    return jsonify({"id": run_id, "ok": True})
+
+
+@app.route("/api/projects/<pid>/evidence", methods=["GET"])
+@login_required
+def list_project_evidence(pid):
+    user = current_user()
+    if not get_project(user["id"], pid):
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    rows = analysis_service.list_evidence(user["id"], pid)
+    return jsonify({"evidence": rows})
+
+
+@app.route("/api/projects/<pid>/evidence", methods=["POST"])
+@login_required
+def add_project_evidence(pid):
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    eid = analysis_service.add_evidence(
+        user["id"], pid,
+        version_id=data.get("version_id"),
+        run_id=data.get("run_id"),
+        project_file_id=data.get("project_file_id"),
+        path=data.get("path"),
+        symbol=data.get("symbol"),
+        line_start=data.get("line_start"),
+        line_end=data.get("line_end"),
+        observation=data.get("observation"),
+        evidence_type=data.get("evidence_type", "observation"),
+        confidence=data.get("confidence", "medium"),
+    )
+    if not eid:
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    return jsonify({"id": eid, "project_id": pid}), 201
+
+
+@app.route("/api/projects/<pid>/claims", methods=["GET"])
+@login_required
+def list_project_claims(pid):
+    user = current_user()
+    if not get_project(user["id"], pid):
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    rows = analysis_service.list_claims(user["id"], pid)
+    return jsonify({"claims": rows})
+
+
+@app.route("/api/projects/<pid>/claims", methods=["POST"])
+@login_required
+def add_project_claim(pid):
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    statement = (data.get("statement") or "").strip()
+    if not statement:
+        return jsonify({"error": "Statement is required", "type": "invalid_request"}), 400
+    cid = analysis_service.add_claim(
+        user["id"], pid,
+        statement=statement,
+        category=data.get("category"),
+        confidence=data.get("confidence", "medium"),
+        status=data.get("status", "inferred"),
+        version_id=data.get("version_id"),
+        run_id=data.get("run_id"),
+        evidence_ids=data.get("evidence_ids") or [],
+    )
+    if not cid:
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    return jsonify({"id": cid, "project_id": pid}), 201
+
+
+@app.route("/api/claims/<claim_id>", methods=["GET"])
+@login_required
+def get_claim(claim_id):
+    user = current_user()
+    row = query(
+        "SELECT c.* FROM knowledge_claims c"
+        " JOIN projects p ON p.id = c.project_id"
+        " WHERE c.id = ? AND p.user_id = ?",
+        (claim_id, user["id"]),
+        one=True,
+    )
+    if not row:
+        return jsonify({"error": "Claim not found", "type": "not_found"}), 404
+    evidence = query(
+        "SELECT e.* FROM evidence e"
+        " JOIN knowledge_claim_evidence ce ON ce.evidence_id = e.id"
+        " WHERE ce.claim_id = ?",
+        (claim_id,),
+    )
+    row["evidence"] = evidence
+    return jsonify(row)
+
+
+@app.route("/api/debug-sessions", methods=["POST"])
+@login_required
+def create_debug_session_route():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    sid = analysis_service.create_debug_session(
+        user["id"],
+        project_id=data.get("project_id"),
+        version_id=data.get("version_id"),
+        error_text=data.get("error_text"),
+        stack_trace=data.get("stack_trace"),
+    )
+    return jsonify({"id": sid}), 201
+
+
+@app.route("/api/debug-sessions/<session_id>", methods=["PATCH"])
+@login_required
+def patch_debug_session(session_id):
+    user = current_user()
+    row = query(
+        "SELECT id FROM debug_sessions WHERE id = ? AND user_id = ?",
+        (session_id, user["id"]),
+        one=True,
+    )
+    if not row:
+        return jsonify({"error": "Session not found", "type": "not_found"}), 404
+    data = request.get_json(silent=True) or {}
+    analysis_service.update_debug_session(session_id, **data)
+    return jsonify({"id": session_id, "ok": True})
+
+
+@app.route("/api/debug-sessions", methods=["GET"])
+@login_required
+def list_debug_sessions_route():
+    user = current_user()
+    rows = analysis_service.list_debug_sessions(user["id"])
+    return jsonify({"sessions": rows})
 
 
 if __name__ == "__main__":
