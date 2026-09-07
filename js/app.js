@@ -95,23 +95,25 @@ window.Clarity.app = {
         }
       });
     }
-    if (sidebarCollapse) {
+if (sidebarCollapse) {
+      const syncCollapseAffordance = () => {
+        const isRail = sidebar && sidebar.classList.contains("is-rail");
+        const label = isRail ? "Expand sidebar" : "Collapse sidebar";
+        sidebarCollapse.setAttribute("data-tooltip", label);
+        sidebarCollapse.setAttribute("aria-label", label);
+        sidebarCollapse.setAttribute("title", label);
+        sidebarCollapse.setAttribute("aria-expanded", isRail ? "false" : "true");
+      };
       sidebarCollapse.addEventListener("click", () => {
         if (!sidebar) return;
-        const willBeRail = !sidebar.classList.contains("is-rail");
         sidebar.classList.toggle("is-rail");
         if (sidebar.classList.contains("is-rail")) {
           sidebar.classList.add("is-open");
-          sidebarCollapse.setAttribute("data-tooltip", "Expand sidebar");
-          sidebarCollapse.setAttribute("aria-label", "Expand sidebar");
-          sidebarCollapse.setAttribute("title", "Expand sidebar");
-        } else {
-          sidebarCollapse.setAttribute("data-tooltip", "Collapse sidebar");
-          sidebarCollapse.setAttribute("aria-label", "Collapse sidebar");
-          sidebarCollapse.setAttribute("title", "Collapse sidebar");
         }
+        syncCollapseAffordance();
         if (window.Clarity.uiTooltip) window.Clarity.uiTooltip.refresh();
       });
+      syncCollapseAffordance();
     }
     if (scrim) {
       scrim.addEventListener("click", () => {
@@ -128,13 +130,32 @@ window.Clarity.app = {
 
     const topbarBurger = document.getElementById("topbarBurger");
     if (topbarBurger) {
+      const syncBurgerAffordance = () => {
+        const isMobile = window.innerWidth < 1024;
+        const isOpen = sidebar && sidebar.classList.contains("is-open");
+        const label = isOpen ? "Close navigation" : "Open navigation";
+        topbarBurger.setAttribute("aria-label", label);
+        topbarBurger.setAttribute("title", label);
+        topbarBurger.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        topbarBurger.setAttribute("data-tooltip", label);
+        topbarBurger.hidden = !isMobile;
+      };
       topbarBurger.addEventListener("click", () => {
         if (!sidebar) return;
-        // Always open full sidebar on mobile when burger is clicked.
-        sidebar.classList.remove("is-rail");
-        sidebar.classList.add("is-open");
-        if (scrim) scrim.hidden = false;
+        const isMobile = window.innerWidth < 1024;
+        if (!isMobile) return;
+        const isCurrentlyOpen = sidebar.classList.contains("is-open");
+        if (isCurrentlyOpen) {
+          setSidebarOpen(false);
+        } else {
+          sidebar.classList.remove("is-rail");
+          setSidebarOpen(true);
+        }
+        syncBurgerAffordance();
       });
+      window.addEventListener("resize", syncBurgerAffordance);
+      syncBurgerAffordance();
+      if (window.Clarity.uiTooltip) window.Clarity.uiTooltip.bind(topbarBurger);
     }
 
     const newChatBtn = document.getElementById("newChatBtn");

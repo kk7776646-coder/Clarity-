@@ -79,6 +79,20 @@
 
 .sidebar__collapse {
   margin-left: auto;
+  transition: transform var(--t-base) var(--ease);
+}
+
+.sidebar.is-rail .sidebar__head {
+  justify-content: center;
+  gap: 6px;
+}
+
+.sidebar.is-rail .sidebar__collapse {
+  margin-left: 0;
+}
+
+.sidebar.is-rail .sidebar__collapse .sidebar__collapse-icon {
+  transform: rotate(180deg);
 }
 
 .sidebar__scroll {
@@ -132,8 +146,7 @@
 .sidebar.is-rail .nav__badge,
 .sidebar.is-rail .nav-section,
 .sidebar.is-rail .profile__meta,
-.sidebar.is-rail .profile__chev,
-.sidebar.is-rail .sidebar__collapse {
+.sidebar.is-rail .profile__chev {
   display: none;
 }
 
