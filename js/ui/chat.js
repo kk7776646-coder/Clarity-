@@ -455,8 +455,7 @@ if (isStreaming) {
 
   async sendMessage(content, attachments) {
     if (this._isStreaming) return;
-    const cid = this._activeConversation;
-    if (!cid) {
+    if (!this._activeConversation) {
       try {
         const convData = await window.Clarity.api.post("/api/conversations", {
           title: content.trim(),
@@ -474,6 +473,11 @@ if (isStreaming) {
         window.Clarity.toast.show("Failed to create conversation: " + (err.message || "unknown"), "danger");
         return;
       }
+    }
+    const cid = this._activeConversation;
+    if (!cid) {
+      window.Clarity.toast.show("Could not start conversation: no conversation id.", "danger");
+      return;
     }
 
     const hasImages = attachments && attachments.some(a => a.type === "image");
