@@ -1,5 +1,8 @@
 // Initialize existing Clarity vanilla JS application
-// This script loads all modules and starts the app
+// This script loads all modules. Application bootstrap (init) is performed
+// by js/app.js itself, so do NOT register a second DOMContentLoaded listener
+// here — two listeners caused init() to run twice and every UI handler to
+// be attached twice, cancelling each other out.
 
 import "../js/lib/utils.js";
 import "../js/lib/icons.js";
@@ -35,17 +38,4 @@ import "../css/base.css";
 import "../css/layout.css";
 import "../css/components.css";
 import "../css/pages.css";
-
-// Start the application after DOM is loaded
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => {
-    if (window.Clarity && window.Clarity.app && typeof window.Clarity.app.init === "function") {
-      window.Clarity.app.init();
-    }
-  });
-} else {
-  if (window.Clarity && window.Clarity.app && typeof window.Clarity.app.init === "function") {
-    window.Clarity.app.init();
-  }
-}
 
