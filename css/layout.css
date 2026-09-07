@@ -158,12 +158,8 @@
 .sidebar.is-rail .nav-section,
 .sidebar.is-rail .profile__meta,
 .sidebar.is-rail .profile__chev,
-.sidebar.is-rail .sidebar__scroll,
-.sidebar.is-rail .sidebar__foot,
-.sidebar.is-rail .sidebar__collapse,
-.sidebar.is-rail .sidebar-search,
-.sidebar.is-rail .sidebar__nav-section {
-  display: none !important;
+.sidebar.is-rail .sidebar__collapse {
+  display: none;
 }
 
 .sidebar.is-rail .nav__item.is-active::before {
@@ -203,6 +199,38 @@
 .sidebar.is-rail .brand:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.sidebar.is-rail .nav__item,
+.sidebar.is-rail .profile__btn {
+  justify-content: center;
+  padding: 0;
+}
+
+.sidebar.is-rail .nav__item {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  margin: 0 auto;
+}
+
+.sidebar.is-rail .chat-sidebar__new {
+  display: flex;
+  justify-content: center;
+  padding: var(--s-2) 0;
+}
+
+.sidebar.is-rail .chat-sidebar__new .btn--primary {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 10px;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(95, 90, 246, 0.2);
+}
+
+.sidebar.is-rail .chat-sidebar__new .btn--primary span {
+  display: none;
 }
 
 .sidebar.is-rail .brand__mark {
@@ -258,6 +286,12 @@
 .crumbs__root {
   font-weight: 600;
   white-space: nowrap;
+}
+
+/* Topbar Clarity brand: hide when the desktop sidebar is expanded to avoid
+ * duplicate branding; show it again when the sidebar collapses. */
+.app:has(.sidebar:not(.is-rail)) .crumbs__root {
+  display: none;
 }
 
 .crumbs__sep {
