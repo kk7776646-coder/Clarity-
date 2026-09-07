@@ -5,6 +5,7 @@ tokens live in the database and are handed to the browser in an HttpOnly
 cookie, so no credential material is ever readable from JavaScript.
 """
 
+import logging
 import os
 import re
 import secrets
@@ -14,7 +15,9 @@ from typing import Any
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from server.storage.db import execute, query
+from server.storage.db import _get_db_path, execute, query
+
+log = logging.getLogger("server.auth")
 
 SESSION_COOKIE = "clarity_session"
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", 60 * 60 * 24 * 30))
@@ -103,6 +106,9 @@ def create_session(user_id: str) -> tuple[str, float]:
         "INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
         (token, user_id, now, expires),
     )
+    # Safe diagnostic: never logs the token, only whether a row was inserted
+    # and which database path backs it.
+    log.info("session_created db_path=%s user_present=1", _get_db_path())
     return token, expires
 
 
@@ -111,11 +117,18 @@ def resolve_session(token: str | None) -> dict[str, Any] | None:
         return None
     row = query("SELECT * FROM sessions WHERE token = ?", (token,), one=True)
     if not row:
+        # Safe diagnostic: db path + whether the row was found (no token value).
+        log.info("session_lookup db_path=%s row_found=0", _get_db_path())
         return None
     if float(row["expires_at"]) < time.time():
         execute("DELETE FROM sessions WHERE token = ?", (token,))
+        log.info("session_lookup db_path=%s row_found=1 expired=1", _get_db_path())
         return None
-    return get_user(row["user_id"])
+    user = get_user(row["user_id"])
+    if not user:
+        log.info("session_lookup db_path=%s row_found=1 user_present=0", _get_db_path())
+        return None
+    return user
 
 
 def destroy_session(token: str | None) -> None:

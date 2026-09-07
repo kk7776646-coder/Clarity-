@@ -7,6 +7,12 @@ def _get_db_path() -> str:
     env_path = os.environ.get("DATABASE_PATH", "").strip()
     if env_path:
         return os.path.abspath(env_path)
+    # Render (and most PaaS) provide a persistent disk at /var/data. The source
+    # tree is ephemeral and is wiped on every deploy/restart, so writing the
+    # SQLite file under server/data would lose every session on each redeploy.
+    render_path = "/var/data/nexus.db"
+    if os.path.isdir("/var/data"):
+        return render_path
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "nexus.db")
 
 _LOCK = threading.Lock()
@@ -148,7 +154,15 @@ _MIGRATIONS: list[tuple[str, str, str]] = [
 
 def _ensure_dirs() -> None:
     db_path = _get_db_path()
-    os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
+    parent = os.path.dirname(os.path.abspath(db_path))
+    if parent and not os.path.isdir(parent):
+        try:
+            os.makedirs(parent, exist_ok=True)
+        except OSError:
+            # On Render, /var/data is provided as a pre-mounted persistent disk.
+            # If for some reason it is not present, fall through and let sqlite
+            # raise its own error rather than masking the misconfiguration.
+            pass
 
 
 def _get_conn() -> sqlite3.Connection:
