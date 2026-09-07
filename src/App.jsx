@@ -20,7 +20,7 @@ export default function App() {
               "img",
               {
                 className: "brand__mark-img brand__mark-img--light",
-                src: "/assets/clarity-icon-DeMDDmpx.png",
+                src: "/clarity-icon.png",
                 alt: "",
               }
             ),
@@ -28,7 +28,7 @@ export default function App() {
               "img",
               {
                 className: "brand__mark-img brand__mark-img--dark",
-                src: "/assets/clarity-icon-white-Bm0itYmq.png",
+                src: "/clarity-icon-white.png",
                 alt: "",
               }
             )
