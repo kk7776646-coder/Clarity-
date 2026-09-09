@@ -137,9 +137,15 @@ async function uploadProjectZip(file) {
       window.Clarity.toast.show("Upload failed: " + (r?.error || "unknown"), "danger");
       return;
     }
-    const name = file.name.replace(/\.zip$/i, "");
-    const proj = await window.Clarity.api.post("/api/projects", { name, description: "Uploaded from " + file.name });
-    const projectId = proj.id;
+    // Backend already creates a project when processing ZIP upload
+    const projectId = r.project_id;
+    if (!projectId) {
+      // Fallback: create project if somehow no project_id returned
+      const name = file.name.replace(/\.zip$/i, "");
+      const proj = await window.Clarity.api.post("/api/projects", { name, description: "Uploaded from " + file.name });
+      window.location.hash = "#/project/" + proj.id;
+      return;
+    }
     if (r.extracted && r.extracted.length > 0) {
       window.Clarity.toast.show("Indexing " + r.extracted.length + " files...", "info");
       try {

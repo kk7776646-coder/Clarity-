@@ -4,6 +4,8 @@ Single Flask app: authentication, model registry, chat streaming, files,
 projects and the static SPA. Provider API keys never leave this process.
 """
 
+import mimetypes
+mimetypes.add_type("text/javascript", ".jsx")
 import asyncio
 import json
 import logging
@@ -19,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from server.config import ModelConfig
 from server.models.base import AdapterError
-from server.services import auth_service, chat_service
+from server.services import auth_service, chat_service, analysis_service, knowledge_service, rag_service, debug_service, architecture_service, intelligence_service, patch_service
 from server.services.auth_service import AuthError, SESSION_COOKIE
 from server.services.codebase_service import (
     create_project,
@@ -50,13 +52,36 @@ init()
 auth_service.purge_expired_sessions()
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_frontend_dirs = ("css", "js", "assets")
+_frontend_dirs = ("css", "js", "assets", "src")
+
+# Frontend origin for CORS (Cloudflare Workers in production, localhost in dev)
+_FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "http://localhost:5173")
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE + 1024
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET", "dev-secret-change-me")
-# The SPA is served from this same origin, so no cross-origin allowance is
-# needed and none is granted: session cookies stay first-party.
+
+# CORS support for cross-origin frontend (Cloudflare Workers -> Render)
+# Only allow the configured frontend origin with credentials
+def _add_cors_headers(response: Response) -> Response:
+    origin = request.headers.get("Origin")
+    print(f"CORS check: origin={origin}, _FRONTEND_ORIGIN={_FRONTEND_ORIGIN}, match={origin == _FRONTEND_ORIGIN}", flush=True)
+    if origin and origin == _FRONTEND_ORIGIN:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        print(f"CORS headers added for origin={origin}", flush=True)
+    return response
+
+app.after_request(_add_cors_headers)
+
+# Handle OPTIONS preflight requests
+@app.before_request
+def _handle_options():
+    if request.method == "OPTIONS":
+        response = Response()
+        return _add_cors_headers(response)
 
 
 # ---------------------------------------------------------------------------
@@ -67,13 +92,18 @@ def _cookie_secure() -> bool:
     return os.environ.get("SESSION_COOKIE_SECURE", "0") == "1"
 
 
+def _cookie_samesite() -> str:
+    # Cross-origin requires SameSite=None (with Secure), same-origin can use Lax
+    return "None" if os.environ.get("SESSION_COOKIE_SAMESITE_NONE", "0") == "1" else "Lax"
+
+
 def _set_session_cookie(response: Response, token: str, expires: float) -> Response:
     from server.services.auth_service import SESSION_TTL_SECONDS
     response.set_cookie(
         SESSION_COOKIE,
         token,
         httponly=True,
-        samesite="Lax",
+        samesite=_cookie_samesite(),
         secure=_cookie_secure(),
         max_age=SESSION_TTL_SECONDS,
         path="/",
@@ -975,25 +1005,28 @@ def project_file_content(pid):
 
 
 # ---------------------------------------------------------------------------
-# Static SPA (same origin as the API, so provider keys stay server-side)
+# Static SPA (built Vite frontend served from dist/client/ for production)
 # ---------------------------------------------------------------------------
+_frontend_root = os.path.join(_project_root, "dist", "client")
 
 @app.route("/", methods=["GET"])
 def serve_index():
-    return send_from_directory(_project_root, "index.html")
+    return send_from_directory(_frontend_root, "index.html")
+
+
+@app.route("/projects/<pid>/architecture", methods=["GET"])
+def serve_architecture_page(pid):
+    return send_from_directory(_frontend_root, "index.html")
 
 
 @app.route("/<path:filename>", methods=["GET"])
 def serve_static(filename):
     if filename.startswith("api/"):
         return jsonify({"error": "Not found"}), 404
-    top = filename.split("/", 1)[0]
-    if top not in _frontend_dirs and filename != "index.html":
-        return jsonify({"error": "Not found"}), 404
-    target = safe_join(_project_root, filename)
+    target = safe_join(_frontend_root, filename)
     if not target or not os.path.isfile(target):
         return jsonify({"error": "Not found"}), 404
-    return send_from_directory(_project_root, filename)
+    return send_from_directory(_frontend_root, filename)
 
 
 # ---------------------------------------------------------------------------
@@ -1188,6 +1221,46 @@ def get_claim(claim_id):
     return jsonify(row)
 
 
+@app.route("/api/projects/<pid>/debug", methods=["POST"])
+@login_required
+def trigger_project_debug(pid):
+    user = current_user()
+    if not get_project(user["id"], pid):
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    data = request.get_json(silent=True) or {}
+    error_text_raw = data.get("error_text", data.get("message", data.get("query", "")))
+    # Try to parse Python traceback from error_text or traceback field
+    traceback_text = data.get("traceback", error_text_raw)
+    parsed = debug_service.parse_python_traceback(traceback_text if isinstance(traceback_text, str) else str(traceback_text))
+    result = debug_service.build_debug_result(
+        user["id"], pid,
+        error_text=error_text_raw if isinstance(error_text_raw, str) else str(error_text_raw),
+        parsed_error=parsed,
+    )
+    return jsonify(result)
+
+
+@app.route("/api/projects/<pid>/intelligence", methods=["GET"])
+@login_required
+def get_project_intelligence(pid):
+    user = current_user()
+    if not get_project(user["id"], pid):
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    version_param = request.args.get("version_id")
+    result = intelligence_service.build_project_intelligence(user["id"], pid, version_id=version_param)
+    return jsonify(result)
+
+@app.route("/api/projects/<pid>/intelligence/build", methods=["POST"])
+@login_required
+def trigger_intelligence_build(pid):
+    user = current_user()
+    if not get_project(user["id"], pid):
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    version_param = (request.get_json(silent=True) or {}).get("version_id")
+    result = intelligence_service.build_project_intelligence(user["id"], pid, version_id=version_param)
+    return jsonify(result)
+
+
 @app.route("/api/debug-sessions", methods=["POST"])
 @login_required
 def create_debug_session_route():
@@ -1225,6 +1298,183 @@ def list_debug_sessions_route():
     user = current_user()
     rows = analysis_service.list_debug_sessions(user["id"])
     return jsonify({"sessions": rows})
+
+
+# ---------------------------------------------------------------------------
+# Project analysis engine (additive; uses existing upload/index + new persistence)
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/projects/<pid>/analysis", methods=["GET"])
+@login_required
+def get_project_analysis(pid):
+    user = current_user()
+    if not get_project(user["id"], pid):
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    versions = analysis_service.list_versions(user["id"], pid)
+    runs = analysis_service.list_runs(user["id"], pid)
+    evidence_rows = analysis_service.list_evidence(user["id"], pid)
+    claims = analysis_service.list_claims(user["id"], pid)
+    relationships = analysis_service.list_relationships(user["id"], pid)
+    return jsonify({
+        "project_id": pid,
+        "analysis_summary": {
+            "versions": len(versions),
+            "analysis_runs": len(runs),
+            "evidence_count": len(evidence_rows),
+            "claims": len(claims),
+            "relationships": len(relationships),
+        },
+        "versions": versions,
+        "runs": runs,
+        "evidence": evidence_rows,
+        "claims": claims,
+        "relationships": relationships,
+    })
+
+
+@app.route("/api/projects/<pid>/analysis", methods=["POST"])
+@login_required
+def trigger_project_analysis(pid):
+    user = current_user()
+    if not get_project(user["id"], pid):
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    # Invoke index pipeline first (creates version/run/populates project_files)
+    index_result = index_project_files(user["id"], pid)
+    # Then invoke the real deep analysis backed by current version/run.
+    result = analysis_service.analyze_project_deep(user["id"], pid)
+    return jsonify({"ok": True, "project_id": pid, "analysis_result": result, "index_result": index_result})
+
+
+@app.route("/api/projects/<pid>/knowledge/build", methods=["POST"])
+@login_required
+def trigger_knowledge_build(pid):
+    user = current_user()
+    if not get_project(user["id"], pid):
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    version_id = request.json.get("version_id") if request.json else None
+    result = knowledge_service.build_project_knowledge(user["id"], pid, version_id)
+    return jsonify(result)
+
+@app.route("/api/projects/<pid>/knowledge", methods=["GET"])
+@login_required
+def get_knowledge(pid):
+    user = current_user()
+    if not get_project(user["id"], pid):
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    version_id = request.args.get("version_id")
+    chunks = knowledge_service.get_project_knowledge(user["id"], pid, version_id)
+    state = knowledge_service.get_project_knowledge_state(user["id"], pid)
+    return jsonify({"ok": True, "project_id": pid, "state": state, "chunks": chunks})
+
+@app.route("/api/projects/<pid>/knowledge/search", methods=["POST"])
+@login_required
+def search_knowledge(pid):
+    user = current_user()
+    if not get_project(user["id"], pid):
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    body = request.get_json(silent=True) or {}
+    result = knowledge_service.search_project_knowledge(
+        user["id"], pid,
+        query_text=body.get("query", ""),
+        version_id=body.get("version_id"),
+        top_k=body.get("top_k", 8),
+    )
+    return jsonify({"ok": True, "project_id": pid, "results": result})
+
+
+@app.route("/api/projects/<pid>/rag", methods=["POST"])
+@login_required
+def trigger_rag(pid):
+    user = current_user()
+    if not get_project(user["id"], pid):
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    body = request.get_json(silent=True) or {}
+    result = rag_service.build_rag_context(
+        user["id"], pid,
+        query_text=body.get("query", ""),
+        version_id=body.get("version_id"),
+        top_k=body.get("top_k", 8),
+    )
+    return jsonify(result)
+
+
+@app.route("/api/projects/<pid>/patches", methods=["GET"])
+@login_required
+def list_project_patches(pid):
+    user = current_user()
+    if not get_project(user["id"], pid):
+        return jsonify({"error": "Project not found"}), 404
+    version_param = request.args.get("version_id")
+    patches = patch_service.get_project_patches(user["id"], pid, version_id=version_param)
+    return jsonify({"ok": True, "project_id": pid, "patches": patches})
+
+@app.route("/api/projects/<pid>/patches", methods=["POST"])
+@login_required
+def create_project_patch(pid):
+    user = current_user()
+    if not get_project(user["id"], pid):
+        return jsonify({"error": "Project not found"}), 404
+    data = request.get_json(silent=True) or {}
+    patch_id = patch_service.create_patch(
+        user["id"], pid,
+        version_id=data.get("version_id"),
+        title=data.get("title", "Patch"),
+        request=data.get("request", ""),
+        reason=data.get("reason", ""),
+        root_cause=data.get("root_cause", ""),
+        files_changed=data.get("files_changed", []),
+        diff_text=data.get("diff_text", ""),
+        evidence_refs=data.get("evidence_refs", []),
+        risk_level=data.get("risk_level", "LOW"),
+    )
+    return jsonify({"ok": True, "patch_id": patch_id, "status": "PROPOSED"})
+
+@app.route("/api/patches/<patch_id>/approve", methods=["POST"])
+@login_required
+def approve_project_patch(patch_id):
+    user = current_user()
+    patch = patch_service.get_patch(user["id"], patch_id)
+    if not patch:
+        return jsonify({"error": "Patch not found"}), 404
+    result = patch_service.approve_patch(user["id"], patch_id)
+    if not result:
+        return jsonify({"ok": False, "error": "Could not approve patch. Verify status is PROPOSED/FAILED."}), 400
+    return jsonify({"ok": True, "patch_id": patch_id, "status": "APPROVED"})
+
+@app.route("/api/patches/<patch_id>/apply", methods=["POST"])
+@login_required
+def apply_project_patch(patch_id):
+    user = current_user()
+    result = patch_service.apply_patch(user["id"], patch_id)
+    if not result.get("ok"):
+        return jsonify(result)
+    return jsonify({"ok": True, "patch_id": patch_id, "status": "APPLIED", "message": result.get("message", "Patch applied.")})
+
+@app.route("/api/patches/<patch_id>/verify", methods=["POST"])
+@login_required
+def verify_project_patch(patch_id):
+    user = current_user()
+    result = patch_service.verify_patch(user["id"], patch_id)
+    return jsonify({"ok": result.get("ok", False), "patch_id": patch_id, "status": result.get("status"), "message": result.get("message", "Verification complete.")})
+
+@app.route("/api/patches/<patch_id>/rollback", methods=["POST"])
+@login_required
+def rollback_project_patch(patch_id):
+    user = current_user()
+    result = patch_service.rollback_patch(user["id"], patch_id)
+    return jsonify({"ok": result.get("ok", False), "patch_id": patch_id, "status": "ROLLED_BACK", "message": result.get("message", "Patch rolled back.")})
+
+
+@app.route("/api/projects/<pid>/architecture", methods=["GET"])
+@login_required
+def get_project_architecture(pid):
+    user = current_user()
+    if not get_project(user["id"], pid):
+        return jsonify({"error": "Project not found", "type": "not_found"}), 404
+    version_id = request.args.get("version_id")
+    result = architecture_service.build_project_architecture(user["id"], pid, version_id)
+    return jsonify(result)
 
 
 if __name__ == "__main__":

@@ -32,9 +32,9 @@ window.Clarity.auth = {
     });
   },
 
-  async refresh() {
+async refresh() {
     try {
-      const resp = await fetch("/api/auth/me", { credentials: "same-origin" });
+      const resp = await fetch("/api/auth/me", { credentials: "include" });
       const json = await resp.json().catch(() => ({}));
       this._user = json.user || null;
     } catch (e) {
@@ -47,7 +47,7 @@ window.Clarity.auth = {
   async signup(email, password, name) {
     const r = await fetch("/api/auth/signup", {
       method: "POST",
-      credentials: "same-origin",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, name }),
     });
@@ -61,7 +61,7 @@ window.Clarity.auth = {
   async login(email, password) {
     const r = await fetch("/api/auth/login", {
       method: "POST",
-      credentials: "same-origin",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
@@ -74,7 +74,7 @@ window.Clarity.auth = {
 
   async logout() {
     try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     } catch (e) {}
     this._user = null;
     this._emit();

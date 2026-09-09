@@ -179,7 +179,7 @@ window.Clarity.uiChat = {
         '<rect x="28" y="36" width="8" height="1.6" rx="0.8" fill="#8b5cf6" opacity="0.55"/>',
       '</svg>',
       '</div>',
-      '<h1 class="chat-empty__title">What are you working on?</h1>
+      '<h1 class="chat-empty__title">What are you working on?</h1>',
       '<p class="chat-empty__sub">Powered by <strong>' + window.Clarity.utils.escapeHtml(modelName) + '</strong>.</p>',
 
       '</div>',
@@ -595,6 +595,7 @@ if (isStreaming) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
         signal: this._abortController.signal,
+        credentials: "include",
       });
 
       if (!response.ok) {
@@ -1032,6 +1033,7 @@ if (isStreaming) {
           project_id: this._currentProject,
         }),
         signal: this._abortController.signal,
+        credentials: "include",
       });
 
       if (!response.ok) {
@@ -1269,6 +1271,7 @@ if (isStreaming) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: newValue, model_id: this._resolveModelId(), file_ids, project_id: projectId }),
         signal: this._abortController.signal,
+        credentials: "include",
       });
       if (!response.ok) {
         let detail = response.statusText;

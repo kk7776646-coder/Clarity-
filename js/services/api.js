@@ -16,8 +16,8 @@ window.Clarity.api = {
     return this.base + path;
   },
 
-  async request(path, options) {
-    const opts = Object.assign({ credentials: "same-origin" }, options || {});
+async request(path, options) {
+    const opts = Object.assign({ credentials: "include" }, options || {});
     const method = (opts.method || "GET").toUpperCase();
     const hasBody = method === "POST" || method === "PUT" || method === "PATCH";
     if (hasBody) {
@@ -69,12 +69,12 @@ window.Clarity.api = {
     return this.request(path, { method: "DELETE" });
   },
 
-  /** Multipart upload; the browser sets the boundary itself. */
+/** Multipart upload; the browser sets the boundary itself. */
   async upload(path, formData) {
     const resp = await fetch(this._url(path), {
       method: "POST",
       body: formData,
-      credentials: "same-origin",
+      credentials: "include",
     });
     const text = await resp.text();
     let data = null;
@@ -101,7 +101,7 @@ window.Clarity.api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body || {}),
-      credentials: "same-origin",
+      credentials: "include",
       signal,
     });
 

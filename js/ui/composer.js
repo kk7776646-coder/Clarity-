@@ -146,13 +146,14 @@ container.innerHTML = [
 
     window.Clarity.toast.show(`Uploading ${validFiles.length} file(s)...`, "info");
 
-    try {
+try {
       const formData = new FormData();
       validFiles.forEach(f => formData.append("files", f, f.name));
 
       const resp = await fetch(window.Clarity.api.base + "/api/files/upload", {
         method: "POST",
         body: formData,
+        credentials: "include",
       });
       const data = await resp.json();
 
@@ -162,13 +163,14 @@ container.innerHTML = [
           const projResp = await fetch(window.Clarity.api.base + "/api/projects", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify({ name: projectName, description: "Auto-created from upload" }),
           });
           const projData = await projResp.json();
           const projectId = projData.id;
 
           if (result.extracted && result.extracted.length > 0) {
-            await fetch(window.Clarity.api.base + `/api/projects/${projectId}/index`, { method: "POST" });
+            await fetch(window.Clarity.api.base + `/api/projects/${projectId}/index`, { method: "POST", credentials: "include" });
           }
 
           this._attachedFiles.push({

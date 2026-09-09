@@ -237,6 +237,89 @@ CREATE INDEX IF NOT EXISTS idx_evidence_run ON evidence(run_id);
 CREATE INDEX IF NOT EXISTS idx_claims_proj ON knowledge_claims(project_id);
 CREATE INDEX IF NOT EXISTS idx_claims_run ON knowledge_claims(run_id);
 CREATE INDEX IF NOT EXISTS idx_debug_user ON debug_sessions(user_id);
+
+CREATE TABLE IF NOT EXISTS code_relationships (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    version_id TEXT,
+    from_file_path TEXT,
+    from_symbol TEXT,
+    relationship_type TEXT,
+    to_file_path TEXT,
+    to_symbol TEXT,
+    evidence_ref TEXT,
+    confidence TEXT DEFAULT 'medium',
+    created_at REAL NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_relationships_project ON code_relationships(project_id);
+CREATE INDEX IF NOT EXISTS idx_relationships_version ON code_relationships(version_id);
+CREATE TABLE IF NOT EXISTS patches (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    version_id TEXT,
+    title TEXT NOT NULL,
+    request TEXT,
+    reason TEXT,
+    root_cause TEXT,
+    files_changed_json TEXT,
+    diff_text TEXT,
+    evidence_refs_json TEXT,
+    risk_level TEXT DEFAULT 'LOW',
+    status TEXT NOT NULL DEFAULT 'PROPOSED',
+    created_at REAL NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_patches_project ON patches(project_id);
+CREATE INDEX IF NOT EXISTS idx_patches_version ON patches(version_id);
+CREATE INDEX IF NOT EXISTS idx_patches_user ON patches(user_id);
+CREATE INDEX IF NOT EXISTS idx_patches_status ON patches(status);
+CREATE TABLE IF NOT EXISTS project_chunks (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    version_id TEXT,
+    run_id TEXT,
+    chunk_index INTEGER NOT NULL DEFAULT 0,
+    file_path TEXT NOT NULL,
+    file_id TEXT,
+    symbol_name TEXT,
+    symbol_type TEXT,
+    chunk_type TEXT NOT NULL DEFAULT 'file',
+    language TEXT,
+    line_start INTEGER,
+    line_end INTEGER,
+    content TEXT NOT NULL,
+    content_hash TEXT,
+    embedding_id TEXT,
+    created_at REAL NOT NULL DEFAULT (unixepoch()),
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE SET NULL,
+    FOREIGN KEY (run_id) REFERENCES analysis_runs(id) ON DELETE SET NULL,
+    FOREIGN KEY (file_id) REFERENCES project_files(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_project_chunks_proj ON project_chunks(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_chunks_ver ON project_chunks(version_id);
+CREATE INDEX IF NOT EXISTS idx_project_chunks_run ON project_chunks(run_id);
+CREATE TABLE IF NOT EXISTS project_architecture (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    version_id TEXT,
+    user_id TEXT,
+    nodes_json TEXT,
+    edges_json TEXT,
+    modules_json TEXT,
+    metrics_json TEXT,
+    risks_json TEXT,
+    created_at REAL NOT NULL DEFAULT (unixepoch()),
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE SET NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_project_arch_proj ON project_architecture(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_arch_ver ON project_architecture(version_id);
 """
 
 # Columns added after the first release. Applied only when missing so existing
@@ -257,6 +340,7 @@ _MIGRATIONS: list[tuple[str, str, str]] = [
     ("users", "active_model_id", "TEXT"),
     ("project_files", "hash", "TEXT"),
     ("project_files", "version_id", "TEXT"),
+    ("code_relationships", "version_id", "TEXT"),
 ]
 
 

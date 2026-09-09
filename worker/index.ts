@@ -1,24 +1,41 @@
 export interface Env {
   OPENROUTER_API_KEY: string;
   BACKEND_URL: string;
+  FRONTEND_ORIGIN: string;
+}
+
+function corsHeaders(origin: string) {
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Cookie",
+    "Access-Control-Allow-Credentials": "true",
+    "Vary": "Origin",
+  };
 }
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    const requestOrigin = request.headers.get("Origin") || "";
+    const allowedOrigin = env.FRONTEND_ORIGIN;
+
+    // Only allow the configured frontend origin
+    const isAllowedOrigin = requestOrigin === allowedOrigin;
 
     if (request.method === "OPTIONS") {
+      if (!isAllowedOrigin) {
+        return new Response(null, { status: 403, statusText: "Forbidden origin" });
+      }
       return new Response(null, {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-        },
+        headers: corsHeaders(allowedOrigin),
       });
     }
 
     if (url.pathname === "/api/health") {
-      return Response.json({ status: "ok", model: "minimax/minimax-m3:free" });
+      return Response.json({ status: "ok", model: "minimax/minimax-m3:free" }, {
+        headers: isAllowedOrigin ? corsHeaders(allowedOrigin) : {},
+      });
     }
 
     if (url.pathname === "/api/chat" && request.method === "POST") {
@@ -30,7 +47,7 @@ export default {
         if (!env.OPENROUTER_API_KEY) {
           return Response.json(
             { error: "Server not configured: OPENROUTER_API_KEY missing" },
-            { status: 500 }
+            { status: 500, headers: isAllowedOrigin ? corsHeaders(allowedOrigin) : {} }
           );
         }
 
@@ -56,7 +73,7 @@ export default {
           const errText = await openRouterResponse.text();
           return Response.json(
             { error: "OpenRouter error", detail: errText },
-            { status: openRouterResponse.status }
+            { status: openRouterResponse.status, headers: isAllowedOrigin ? corsHeaders(allowedOrigin) : {} }
           );
         }
 
@@ -66,14 +83,15 @@ export default {
             headers: {
               "Content-Type": "text/event-stream",
               "Cache-Control": "no-cache",
+              ...(isAllowedOrigin ? corsHeaders(allowedOrigin) : {}),
             },
           });
         }
 
         const result = await openRouterResponse.json();
-        return Response.json(result);
+        return Response.json(result, { headers: isAllowedOrigin ? corsHeaders(allowedOrigin) : {} });
       } catch (e: any) {
-        return Response.json({ error: e.message || "Unknown error" }, { status: 500 });
+        return Response.json({ error: e.message || "Unknown error" }, { status: 500, headers: isAllowedOrigin ? corsHeaders(allowedOrigin) : {} });
       }
     }
 
@@ -96,13 +114,17 @@ export default {
           headers: proxyHeaders,
           body: ["GET", "HEAD", "OPTIONS"].includes(request.method) ? null : request.body,
         });
+        const responseHeaders = new Headers(proxyResponse.headers);
+        if (isAllowedOrigin) {
+          Object.entries(corsHeaders(allowedOrigin)).forEach(([k, v]) => responseHeaders.set(k, v));
+        }
         return new Response(proxyResponse.body, {
           status: proxyResponse.status,
           statusText: proxyResponse.statusText,
-          headers: proxyResponse.headers,
+          headers: responseHeaders,
         });
       } catch (e: any) {
-        return Response.json({ error: "Backend unreachable: " + (e.message || ""), type: "backend_unavailable" }, { status: 503 });
+        return Response.json({ error: "Backend unreachable: " + (e.message || ""), type: "backend_unavailable" }, { status: 503, headers: isAllowedOrigin ? corsHeaders(allowedOrigin) : {} });
       }
     }
 
