@@ -233,12 +233,93 @@ if (sidebarCollapse) {
     });
   },
 
+  hideAllPageMounts() {
+    // Hide dedicated mount containers; main will be shown/hidden per route
+    ["arch-mount", "intelligence-mount", "patch-mount", "project-workspace-mount"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.hidden = true;
+    });
+  },
+
   async navigate(route) {
+    console.log("[NAV] navigate called with:", route);
+    // Direct architecture page URL support for browser verification
+    const pathStr = String(route || "");
+    const urlPath = window.location.pathname || "";
+    if (urlPath.startsWith("/projects/") && urlPath.endsWith("/architecture")) {
+      const mount = document.getElementById("arch-mount");
+      if (mount) {
+        mount.hidden = false;
+        if (window.Clarity && window.Clarity.architecture) window.Clarity.architecture.render();
+      }
+      return;
+    }
+
     const path = String(route || "#/chat");
     if (path === "#/explore") {
       window.location.hash = "#/knowledge";
       return;
     }
+
+    // Always hide previous page containers before showing the current one
+    console.log("[NAV] hiding all mounts");
+    this.hideAllPageMounts();
+    console.log("[NAV] hidden. Showing route:", path);
+
+    // Project-scoped sub-routes
+    const projArchitectureMatch = path.match(/#\/project\/([^\/]+)\/architecture/);
+    const projIntelligenceMatch = path.match(/#\/project\/([^\/]+)\/intelligence/);
+    const projPatchMatch = path.match(/#\/project\/([^\/]+)\/patch/);
+    const projCollectionMatch = path.match(/#\/project\/([^\/]+)\/collection/);
+    const projAnalysisMatch = path.match(/#\/project\/([^\/]+)\/analysis/);
+    const projDebugMatch = path.match(/#\/project\/([^\/]+)\/debug/);
+    const projVersionsMatch = path.match(/#\/project\/([^\/]+)\/versions/);
+
+    if (projArchitectureMatch) {
+      const mount = document.getElementById("arch-mount");
+      if (mount) {
+        mount.hidden = false;
+        mount.setAttribute("data-project-id", projArchitectureMatch[1]);
+        if (window.Clarity.architecture) window.Clarity.architecture.render("arch-mount");
+      }
+      // Hide workspace when viewing sub-section
+      const workspaceMount = document.getElementById("project-workspace-mount");
+      if (workspaceMount) workspaceMount.hidden = true;
+      return;
+    }
+    if (projIntelligenceMatch) {
+      const mount = document.getElementById("intelligence-mount");
+      if (mount) {
+        mount.hidden = false;
+        mount.setAttribute("data-project-id", projIntelligenceMatch[1]);
+        if (window.Clarity.intelligence) window.Clarity.intelligence.render("intelligence-mount", projIntelligenceMatch[1]);
+      }
+      const workspaceMount = document.getElementById("project-workspace-mount");
+      if (workspaceMount) workspaceMount.hidden = true;
+      return;
+    }
+    if (projPatchMatch) {
+      const mount = document.getElementById("patch-mount");
+      if (mount) {
+        mount.hidden = false;
+        mount.setAttribute("data-project-id", projPatchMatch[1]);
+        if (window.Clarity.patchAgent) window.Clarity.patchAgent.render("patch-mount", projPatchMatch[1]);
+      }
+      const workspaceMount = document.getElementById("project-workspace-mount");
+      if (workspaceMount) workspaceMount.hidden = true;
+      return;
+    }
+    if (projCollectionMatch || projAnalysisMatch || projDebugMatch || projVersionsMatch) {
+      const projId = (projCollectionMatch || projAnalysisMatch || projDebugMatch || projVersionsMatch)[1];
+      // These are handled by the workspace component which shows sections
+      const workspaceMount = document.getElementById("project-workspace-mount");
+      if (workspaceMount) {
+        workspaceMount.hidden = false;
+        if (window.Clarity.projectWorkspace) window.Clarity.projectWorkspace.render("project-workspace-mount", path);
+      }
+      return;
+    }
+
     const main = document.getElementById("main");
     if (!main) return;
 
@@ -252,7 +333,7 @@ if (sidebarCollapse) {
       return;
     }
 
-    const page = (
+const page = (
       path === "#/" || path === "#/chat" ? "chat" :
       path === "#/home" ? "home" :
       path === "#/knowledge" ? "knowledge" :
@@ -261,17 +342,64 @@ if (sidebarCollapse) {
       path === "#/settings" ? "settings" :
       path === "#/model" ? "model" :
       path === "#/project" || path.startsWith("#/project/") ? "project" :
+      path === "#/architecture" ? "architecture" :
+      path === "#/intelligence" ? "intelligence" :
+      path === "#/patch" ? "patch" :
       "chat"
     );
 
     if (page === "chat") {
+      console.log("[NAV] rendering chat");
+      const main = document.getElementById("main");
+      if (main) main.hidden = false;
       const cid = window.Clarity.store.get("active_conversation");
       if (cid) {
         await window.Clarity.uiChat.loadConversation(cid);
       } else {
         window.Clarity.uiChat.renderChat();
       }
+    } else if (page === "architecture") {
+      console.log("[NAV] showing architecture mount");
+      const main = document.getElementById("main");
+      if (main) main.hidden = true;
+      const mount = document.getElementById("arch-mount");
+      if (mount) {
+        mount.hidden = false;
+        if (window.Clarity.architecture) window.Clarity.architecture.render();
+      }
+    } else if (page === "intelligence") {
+      console.log("[NAV] showing intelligence mount");
+      const main = document.getElementById("main");
+      if (main) main.hidden = true;
+      const mount = document.getElementById("intelligence-mount");
+      if (mount) {
+        mount.hidden = false;
+        if (window.Clarity.intelligence) window.Clarity.intelligence.render();
+      }
+    } else if (page === "patch") {
+      console.log("[NAV] showing patch mount");
+      const main = document.getElementById("main");
+      if (main) main.hidden = true;
+      const mount = document.getElementById("patch-mount");
+      if (mount) {
+        mount.hidden = false;
+        if (window.Clarity.patchAgent) window.Clarity.patchAgent.render();
+      }
+    } else if (page === "project") {
+      console.log("[NAV] showing project workspace mount for route:", path);
+      const main = document.getElementById("main");
+      if (main) main.hidden = true;
+      const workspaceMount = document.getElementById("project-workspace-mount");
+      if (workspaceMount) {
+        workspaceMount.hidden = false;
+        if (window.Clarity.projectWorkspace) window.Clarity.projectWorkspace.render("project-workspace-mount", path);
+      }
     } else {
+      console.log("[NAV] showing other normal page:", page, "route:", path);
+      const main = document.getElementById("main");
+      if (main) main.hidden = false;
+      const workspaceMount = document.getElementById("project-workspace-mount");
+      if (workspaceMount) workspaceMount.hidden = true;
       const handler = window.Clarity.pages && window.Clarity.pages[page];
       if (typeof handler === "function") await handler(path);
     }

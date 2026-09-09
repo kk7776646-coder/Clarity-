@@ -131,7 +131,7 @@ async function uploadKbFiles(files) {
   try {
     const fd = new FormData();
     valid.forEach(f => fd.append('files', f, f.name));
-    const resp = await fetch(window.Clarity.api.base + '/api/files/upload', { method: 'POST', body: fd });
+    const resp = await fetch(window.Clarity.api.base + '/api/files/upload', { method: 'POST', body: fd, credentials: 'include' });
     const data = await resp.json();
     let okCount = 0, failCount = 0;
     for (const r of (data.files || [])) {

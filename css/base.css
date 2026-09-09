@@ -187,21 +187,11 @@ table {
   scrollbar-color: var(--line-strong) transparent;
 }
 
-.scroll-slim::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
+.scroll-slim::-webkit-scrollbar { display: none; width: 0; height: 0; background: transparent; }
 
-.scroll-slim::-webkit-scrollbar-thumb {
-  background-color: var(--line-strong);
-  border: 3px solid transparent;
-  background-clip: content-box;
-  border-radius: var(--r-pill);
-}
+.scroll-slim::-webkit-scrollbar-thumb { display: none; background: transparent; }
 
-.scroll-slim::-webkit-scrollbar-track {
-  background: transparent;
-}
+.scroll-slim::-webkit-scrollbar-track { display: none; background: transparent; }
 
 .no-scrollbar {
   scrollbar-width: none;
@@ -209,6 +199,38 @@ table {
 
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* Hide scrollbar everywhere, keep scrolling fully functional */
+html, body, .conversation, .preview-body, .sidebar__scroll, .page,
+.scroll-slim, .scrollbar-modern, .message__content, pre, .code-block,
+.chat-shell, .chat-panel, .shell, .main, .dropzone,
+.any-scrollable {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+.conversation::-webkit-scrollbar,
+.preview-body::-webkit-scrollbar,
+.sidebar__scroll::-webkit-scrollbar,
+.page::-webkit-scrollbar,
+.scroll-slim::-webkit-scrollbar,
+.scrollbar-modern::-webkit-scrollbar,
+.chat-shell::-webkit-scrollbar,
+.chat-panel::-webkit-scrollbar,
+.shell::-webkit-scrollbar,
+.main::-webkit-scrollbar,
+.dropzone::-webkit-scrollbar,
+.any-scrollable::-webkit-scrollbar,
+.message__content::-webkit-scrollbar,
+pre::-webkit-scrollbar,
+.code-block::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+  background: transparent;
 }
 
 /* Modern thin scrollbar used in sidebar and other narrow panels.
@@ -224,31 +246,16 @@ table {
   scrollbar-color: var(--line-strong) transparent;
 }
 
-.scrollbar-modern::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
+.scrollbar-modern::-webkit-scrollbar { display: none; width: 0; height: 0; background: transparent; }
 
-.scrollbar-modern::-webkit-scrollbar-track {
-  background: transparent;
-}
+.scrollbar-modern::-webkit-scrollbar-track { display: none; background: transparent; }
 
-.scrollbar-modern::-webkit-scrollbar-thumb {
-  background-color: transparent;
-  border-radius: var(--r-pill);
-  border: 2px solid transparent;
-  background-clip: content-box;
-  transition: background-color var(--t-fast) var(--ease);
-}
+.scrollbar-modern::-webkit-scrollbar-thumb { display: none; background: transparent; border: none; }
 
 .scrollbar-modern:hover::-webkit-scrollbar-thumb,
-.scrollbar-modern:focus-within::-webkit-scrollbar-thumb {
-  background-color: var(--line-strong);
-}
+.scrollbar-modern:focus-within::-webkit-scrollbar-thumb { display: none; background: transparent; }
 
-.scrollbar-modern::-webkit-scrollbar-thumb:hover {
-  background-color: var(--ink-faint);
-}
+.scrollbar-modern::-webkit-scrollbar-thumb:hover { display: none; background: transparent; }
 
 /* Animations -------------------------------------------------- */
 

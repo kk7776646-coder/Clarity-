@@ -2,6 +2,7 @@
 <html lang="en" data-theme="light" data-density="comfortable">
   <head>
     <meta charset="utf-8" />
+    <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -142,6 +143,10 @@
 
     <div class="toasts" id="toasts" role="region" aria-label="Notifications"></div>
     <div class="modal-root" id="modalRoot"></div>
+    <div id="arch-mount" hidden></div>
+    <div id="intelligence-mount" hidden></div>
+    <div id="patch-mount" hidden></div>
+    <div id="project-workspace-mount" hidden></div>
 
     <!-- Vite bundled entry (modules only; js/app.js owns the DOMContentLoaded bootstrap) -->
     <script type="module" src="/src/main.jsx"></script>

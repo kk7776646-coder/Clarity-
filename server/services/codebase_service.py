@@ -60,7 +60,10 @@ def index_project_files(user_id: str, project_id: str) -> dict[str, Any]:
     - Creates a new project_versions row capturing this snapshot.
     - Creates an analysis_runs row tracking this index with stages.
     - Populates project_files.hash for future version diff.
-    - Records evidence rows pointing to each indexed file.
+    - Records evidence rows pointing at the file row, version and run.
+    - Records internal import relationships in analysis_service (additive
+      to this module via dependency tracking; relationship tracking is
+      handled separately via the analysis_service dependency module).
     """
     if not get_project(user_id, project_id):
         return {"error": "Project not found", "file_count": 0, "chunk_count": 0}

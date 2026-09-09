@@ -30,6 +30,10 @@ import "../js/pages/history.js";
 import "../js/pages/settings.js";
 import "../js/pages/model.js";
 import "../js/pages/project.js";
+import "./architecture-mount.jsx";
+import "./intelligence-mount.jsx";
+import "./patch-mount.jsx";
+import "./project-workspace-mount.jsx";
 import "../js/app.js";
 
 // Initialize CSS

@@ -317,13 +317,39 @@ def _retrieve_context(
             })
 
     if project_id and get_project(user_id, project_id):
-        # Retrieval, not a whole-project dump: only the chunks that match.
+        # Retrieval using existing codebase chunks (lexical over embeddings)
         for chunk in retrieve_relevant_chunks(project_id, user_message, limit=RAG_CHUNK_LIMIT):
             refs.append({
                 "type": "file_reference",
                 "name": chunk.get("file_path", "project_file"),
                 "content": chunk.get("content", ""),
             })
+        # Enhanced retrieval using Knowledge Builder results (version-aware)
+        try:
+            from server.services import knowledge_service
+            kb_chunks = knowledge_service.search_project_knowledge(
+                user_id, project_id, user_message, version_id=None, top_k=RAG_CHUNK_LIMIT
+            )
+            for ch in kb_chunks:
+                # Only skip exact same file+symbol+chunk duplicates; preserve enhanced metadata chunks
+                is_duplicate = any(
+                    ref.get("name") == ch.get("file_path") and ref.get("chunk_id") == ch.get("chunk_id")
+                    for ref in refs
+                )
+                if not is_duplicate:
+                    refs.append({
+                        "type": "file_reference",
+                        "name": ch.get("file_path", "project_file"),
+                        "content": ch.get("content_preview", ch.get("content", "")),
+                        "chunk_type": ch.get("chunk_type"),
+                        "chunk_id": ch.get("chunk_id"),
+                        "symbol_name": ch.get("symbol_name"),
+                        "evidence_ref": ch.get("evidence_ref"),
+                        "version_id": ch.get("version_id"),
+                    })
+        except Exception:
+            # If knowledge service is unavailable, fall back gracefully to lexical only.
+            pass
 
     return refs
 
