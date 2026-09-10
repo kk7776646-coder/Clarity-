@@ -10,20 +10,20 @@
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
   /* Sizes */
-  --fs-h1: 32px;
-  --fs-h2: 18px;
-  --fs-h3: 16px;
-  --fs-body: 14.5px;
-  --fs-small: 13px;
-  --fs-xs: 12.5px;
-  --lh-base: 1.55;
+  --fs-h1: 28px;
+  --fs-h2: 16px;
+  --fs-h3: 14px;
+  --fs-body: 14px;
+  --fs-small: 12.5px;
+  --fs-xs: 11.5px;
+  --lh-base: 1.5;
 
   /* Radii */
-  --r-sm: 8px;
-  --r-md: 10px;
-  --r-lg: 12px;
-  --r-card: 16px;
-  --r-panel: 18px;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+  --r-card: 10px;
+  --r-panel: 12px;
   --r-pill: 999px;
 
   /* Spacing scale */

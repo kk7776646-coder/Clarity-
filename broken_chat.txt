@@ -1,0 +1,240 @@
+  app.post("/api/conversations/:cid/chat", async (req, res) => {
+    const cid = req.params.cid;
+    let conv = conversations.get(cid);
+    const user = resolveUser(req) || initialUser;
+
+    if (!conv) {
+      // Auto-create conversation if not exists
+      conv = {
+        id: cid,
+        user_id: user.id,
+        title: "New Chat",
+        model_id: user.active_model_id || "clarity-gemini",
+        created_at: Date.now(),
+        updated_at: Date.now(),
+      };
+      conversations.set(cid, conv);
+    }
+
+    const { message, file_ids, project_id, model_id } = req.body || {};
+    let textMsg = "";
+    if (typeof message === "string") {
+      textMsg = message.trim();
+    } else if (Array.isArray(message)) {
+      textMsg = message.map((m) => m.text || m.content || JSON.stringify(m)).join("\n").trim();
+    } else if (message && typeof message === "object") {
+      textMsg = String(message.text || message.content || JSON.stringify(message)).trim();
+    } else {
+      textMsg = String(message || "").trim();
+    }
+    if (!textMsg) {
+      return res.status(400).json({ error: "Message is required", type: "invalid_request" });
+    }
+
+    const activeModelId = model_id || conv.model_id || user.active_model_id || "clarity-gemini";
+    conv.model_id = activeModelId;
+    conv.updated_at = Date.now();
+
+    // If this is the first user message, update title based on text
+    const existingMsgs = Array.from(messages.values()).filter((m) => m.conversation_id === cid);
+    if (existingMsgs.length <= 1) {
+      conv.title = textMsg.length > 36 ? textMsg.substring(0, 36) + "…" : textMsg;
+    }
+
+    // Save user message
+    const userMsgId = `msg_${Date.now()}_u`;
+    messages.set(userMsgId, {
+      id: userMsgId,
+      conversation_id: cid,
+      role: "user",
+      content: textMsg,
+      model_id: activeModelId,
+      created_at: Date.now(),
+    });
+
+    // Prepare SSE stream
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+
+    const sendSSE = (payload: any) => {
+      res.write(`data: ${JSON.stringify(payload)}
+
+`);
+    };
+
+    // Gather knowledge context from attached files or shared files
+    let knowledgeContext = "";
+    if (Array.isArray(file_ids) && file_ids.length > 0) {
+      for (const fid of file_ids) {
+        const fileObj = files.get(fid);
+        if (fileObj && fileObj.content) {
+          knowledgeContext += `
+
+[File: ${fileObj.filename}]
+${fileObj.content.substring(0, 5000)}`;
+        }
+      }
+    }
+
+    if (project_id && projectAnalyses.has(project_id)) {
+      const pa = projectAnalyses.get(project_id)!;
+      knowledgeContext += `
+
+[Active Project: ${pa.projectName} (${pa.projectType})]
+` +
+        `Primary Language: ${pa.primaryLanguage}
+` +
+        `Summary: ${pa.summary}
+` +
+        `Architecture: ${pa.architecture.summary}
+` +
+        `Endpoints: ${pa.apiIntelligence.endpoints.map((e) => `${e.method} ${e.path} (${e.file})`).slice(0, 8).join(", ")}
+` +
+        `Database: ${pa.databaseIntelligence.description}`;
+    }
+
+    // Also check shared knowledge files
+    const sharedFiles = Array.from(files.values()).filter((f) => !f.conversation_id);
+    if (sharedFiles.length > 0 && !knowledgeContext) {
+      // Add brief summary of knowledge base
+      knowledgeContext = `
+
+[Indexed Knowledge Documents in Workspace: ${sharedFiles.map((f) => f.filename).join(", ")}]`;
+    }
+
+    const promptWithContext = knowledgeContext
+      ? `You have access to the following knowledge context:${knowledgeContext}
+
+User Question: ${textMsg}`
+      : textMsg;
+
+    let assistantText = "";
+    const assistantMsgId = `msg_${Date.now()}_a`;
+
+    try {
+      const model = models.get(activeModelId) || models.get("clarity-gemini");
+      if (!model) {
+        throw new Error("Configured model not found.");
+      }
+
+      if (model.provider === "gemini") {
+        const apiKey = model.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+        if (!apiKey) {
+          throw new Error("GEMINI_API_KEY is not configured for this model.");
+        }
+        const gemini = new GoogleGenAI({ apiKey });
+        
+        const history = existingMsgs.slice(-10).map((m) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }],
+        }));
+
+        const responseStream = await gemini.models.generateContentStream({
+          model: model.modelName || "gemini-2.5-flash",
+          contents: [
+            ...history,
+            {
+              role: "user",
+              parts: [{ text: promptWithContext }],
+            },
+          ],
+          config: {
+            systemInstruction: "You are Clarity, an intelligent AI assistant grounded in the user's personal and organizational knowledge. You provide crisp, well-structured, clear, and actionable answers with code blocks and formatting where appropriate.",
+          },
+        });
+
+        for await (const chunk of responseStream) {
+          const chunkText = chunk.text || "";
+          if (chunkText) {
+            assistantText += chunkText;
+            sendSSE({ content: chunkText });
+          }
+        }
+      } else {
+        // Custom OpenAI-compatible endpoints
+        if (!model.baseUrl) {
+          throw new Error("Base URL is required for custom models.");
+        }
+        
+        const headers = { "Content-Type": "application/json", "Authorization": "" };
+        if (model.apiKey) headers["Authorization"] = `Bearer ${model.apiKey}`;
+        else delete headers["Authorization"];
+
+        const messagesPayload = existingMsgs.slice(-10).map((m) => ({
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: m.content
+        }));
+        
+        messagesPayload.push({ role: "user", content: promptWithContext });
+        
+        const payload = {
+          model: model.modelName,
+          messages: [
+            { role: "system", content: "You are Clarity, an intelligent AI assistant grounded in the user's personal and organizational knowledge." },
+            ...messagesPayload
+          ],
+          stream: true,
+          temperature: model.defaultTemperature,
+          top_p: model.defaultTopP
+        };
+
+        const resFetch = await fetch(model.baseUrl + "/chat/completions", {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload)
+        });
+
+        if (!resFetch.ok) {
+          const errBody = await resFetch.text();
+          throw new Error(`Provider HTTP ${resFetch.status}: ${errBody}`);
+        }
+
+        if (resFetch.body) {
+          const reader = resFetch.body.getReader();
+          const decoder = new TextDecoder("utf-8");
+          let buffer = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const streamLines = buffer.split("\n");
+            buffer = streamLines.pop() || "";
+            for (const line of streamLines) {
+              if (line.startsWith("data: ")) {
+                const dataStr = line.slice(6).trim();
+                if (dataStr === "[DONE]") continue;
+                if (dataStr) {
+                  try {
+                    const data = JSON.parse(dataStr);
+                    const content = data.choices?.[0]?.delta?.content;
+                    if (content) {
+                      assistantText += content;
+                      sendSSE({ content });
+                    }
+                  } catch (e) {}
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error("Chat streaming error:", err);
+      sendSSE({ error: err.message || "An error occurred during response generation." });
+    }
+        error: {
+          message: err.message || "Failed to generate AI response",
+          type: "chat_error",
+        },
+      });
+      res.end();
+    }
+  });
+
+  // Regenerate endpoint
+  app.post("/api/conversations/:cid/regenerate", async (req, res) => {
+    const cid = req.params.cid;
+    const conv = conversations.get(cid);
+    if (!conv) return res.status(404).json({ error: "Conversation not found", type: "not_found" });

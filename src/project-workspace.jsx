@@ -90,11 +90,38 @@ export default function ProjectWorkspace({ route }) {
         )
       : React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 12 } },
           projects.map((p) => React.createElement("a", { key: p.id, href: "#/project/" + p.id, className: "project-card", style: { textDecoration: "none", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: 16, minWidth: 240, flex: "1 1 0", display: "block" } },
-            React.createElement("h3", { style: { fontSize: 16, fontWeight: 700, color: "var(--ink)", marginBottom: 4 } }, p.name || p.id),
-            React.createElement("div", { style: { fontSize: 12, color: "var(--ink-faint)", marginBottom: 8 } }, `Project: ${p.id}`),
-            React.createElement("div", { style: { display: "flex", gap: 8, fontSize: 12, color: "var(--primary)", fontWeight: 600 } },
-              React.createElement("span", {}, "Open"),
-              React.createElement("span", {}, health ? `Health: ${health?.technical_health_score || 0}` : "Not analyzed")
+            React.createElement("h3", { style: { fontSize: 16, fontWeight: 700, color: "var(--ink)", marginBottom: 4, display: "flex", justifyContent: "space-between", alignItems: "center" } }, 
+              React.createElement("span", {}, p.name || p.id),
+              p.github ? React.createElement("span", { style: { fontSize: 11, background: "#24292e", color: "#fff", padding: "2px 6px", borderRadius: 4, fontWeight: 600 } }, `${p.github.owner}/${p.github.repo}`) : null
+            ),
+            React.createElement("div", { style: { fontSize: 12, color: "var(--ink-faint)", marginBottom: 8 } }, p.github ? `GitHub: ${p.github.branch}` : `Project: ${p.id}`),
+            React.createElement("div", { style: { display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" } },
+              React.createElement("div", { style: { display: "flex", gap: 8, fontSize: 12, color: "var(--primary)", fontWeight: 600 } },
+                React.createElement("span", {}, "Open"),
+                React.createElement("span", {}, health ? `Health: ${health?.technical_health_score || 0}` : "Not analyzed")
+              ),
+              React.createElement("button", { 
+                className: "btn btn--sm", 
+                style: { background: "var(--danger, #dc2626)", color: "white", border: "none", padding: "4px 8px", fontSize: 11, cursor: "pointer", borderRadius: 4 },
+                onClick: (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (confirm(`Are you sure you want to permanently delete project "${p.name || p.id}"?`)) {
+                    fetch("/api/projects/" + p.id, { method: "DELETE", credentials: "include" })
+                      .then(r => {
+                        if (!r.ok) throw new Error("Delete failed with status " + r.status);
+                        return r.json();
+                      })
+                      .then(() => {
+                        setProjects(prev => prev.filter(proj => proj.id !== p.id));
+                      })
+                      .catch(err => {
+                        console.error("Failed to delete project", err);
+                        alert("Could not delete project: " + (err.message || "Unknown error"));
+                      });
+                  }
+                }
+              }, "Delete")
             )
           ))
         );

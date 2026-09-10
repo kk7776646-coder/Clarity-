@@ -41,6 +41,7 @@ window.Clarity.uiChat = {
   async startNewConversation() {
     this._activeConversation = null;
     this._firstMessagePending = false;
+    this._userScrolledUp = false;
     window.Clarity.store.remove("active_conversation");
     this._attachedFiles = [];
     this._currentProject = null;
@@ -83,12 +84,21 @@ window.Clarity.uiChat = {
       const html = this._renderChatHtml(list);
       main.innerHTML = html;
 
+      const convEl = document.getElementById("conversationList");
+      if (convEl) {
+        this._bindScrollListener(convEl);
+      }
+
       this._bindSuggestionChips();
       this._bindMessageControls();
       this._updateNewChatButton();
       this._updateComposer();
       this._isStreaming = false;
       this._syncComposerStreaming();
+      if (list.length > 0) {
+        this._userScrolledUp = false;
+        this._scrollToBottom(true);
+      }
     } catch (err) {
       console.error("renderChat error:", err);
       const main = document.getElementById("main");
@@ -117,19 +127,19 @@ window.Clarity.uiChat = {
     const isEmpty = !messages || messages.length === 0;
     const parts = ['<div class="chat-shell">'];
     parts.push('<section class="chat-panel">');
+    parts.push('<div class="conversation' + (isEmpty ? ' conversation--empty' : '') + '" id="conversationList">');
     if (isEmpty) {
       parts.push(this._renderEmptyState());
     } else {
-      parts.push('<div class="conversation" id="conversationList">');
       for (const msg of messages) {
         parts.push(this._renderMessage(msg));
       }
-      parts.push("</div>");
     }
+    parts.push('</div>');
     parts.push('<div class="composer-outer"><div class="composer" id="chatComposer"></div></div>');
-    parts.push("</section>");
+    parts.push('</section>');
     parts.push('<aside class="preview-panel" id="filePreviewPanel" hidden></aside>');
-    parts.push("</div>");
+    parts.push('</div>');
     return parts.join("");
   },
 
@@ -138,54 +148,17 @@ window.Clarity.uiChat = {
     return [
       '<div class="chat-empty">',
       '<div class="chat-empty__inner">',
-'<div class="chat-empty__logo">',
-      '<svg class="chat-empty__robot" viewBox="0 0 64 64" width="56" height="56" aria-hidden="true">',
-        '<defs>',
-          '<radialGradient id="rm_body" cx="50%" cy="38%" r="60%">',
-            '<stop offset="0%" stop-color="#ffffff"/>',
-            '<stop offset="55%" stop-color="#f4f5f7"/>',
-            '<stop offset="100%" stop-color="#cfd2d8"/>',
-          '</radialGradient>',
-          '<linearGradient id="rm_face" x1="0%" y1="0%" x2="0%" y2="100%">',
-            '<stop offset="0%" stop-color="#1a1a22"/>',
-            '<stop offset="100%" stop-color="#000000"/>',
-          '</linearGradient>',
-          '<linearGradient id="rm_rim" x1="0%" y1="0%" x2="100%" y2="100%">',
-            '<stop offset="0%" stop-color="#8b5cf6"/>',
-            '<stop offset="50%" stop-color="#3b82f6"/>',
-            '<stop offset="100%" stop-color="#06b6d4"/>',
-          '</linearGradient>',
-          '<radialGradient id="rm_eye" cx="50%" cy="50%" r="60%">',
-            '<stop offset="0%" stop-color="#ffffff"/>',
-            '<stop offset="60%" stop-color="#e6f4ff"/>',
-            '<stop offset="100%" stop-color="#a8d6ff"/>',
-          '</radialGradient>',
-          '<radialGradient id="rm_glow" cx="50%" cy="50%" r="50%">',
-            '<stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.55"/>',
-            '<stop offset="60%" stop-color="#06b6d4" stop-opacity="0.2"/>',
-            '<stop offset="100%" stop-color="#06b6d4" stop-opacity="0"/>',
-          '</radialGradient>',
-        '</defs>',
-        '<ellipse cx="32" cy="33" rx="28" ry="27" fill="url(#rm_glow)"/>',
-        '<circle cx="32" cy="32" r="24" fill="url(#rm_rim)" opacity="0.9"/>',
-        '<circle cx="32" cy="32" r="22" fill="url(#rm_body)"/>',
-        '<rect x="14" y="20" width="36" height="24" rx="12" fill="url(#rm_face)"/>',
-        '<rect x="14" y="20" width="36" height="24" rx="12" fill="none" stroke="url(#rm_rim)" stroke-width="0.8" opacity="0.6"/>',
-        '<ellipse cx="22" cy="25" rx="5" ry="2" fill="#ffffff" opacity="0.08"/>',
-        '<circle cx="25" cy="31" r="2.4" fill="url(#rm_eye)"/>',
-        '<circle cx="39" cy="31" r="2.4" fill="url(#rm_eye)"/>',
-        '<circle cx="25" cy="30.4" r="0.8" fill="#ffffff"/>',
-        '<circle cx="39" cy="30.4" r="0.8" fill="#ffffff"/>',
-        '<rect x="28" y="36" width="8" height="1.6" rx="0.8" fill="#8b5cf6" opacity="0.55"/>',
+      '<div class="chat-empty__logo">',
+      '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">',
+      '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>',
+      '<polyline points="3.27 6.96 12 12.01 20.73 6.96"/>',
+      '<line x1="12" y1="22.08" x2="12" y2="12"/>',
       '</svg>',
       '</div>',
       '<h1 class="chat-empty__title">What are you working on?</h1>',
       '<p class="chat-empty__sub">Powered by <strong>' + window.Clarity.utils.escapeHtml(modelName) + '</strong>.</p>',
-
       '</div>',
-      '</div>',
-      '</div>',
-      '<div id="conversationList" style="display:none"></div>'
+      '</div>'
     ].join("");
   },
 
@@ -220,6 +193,43 @@ window.Clarity.uiChat = {
         }).join("") + "</div>"
       : "";
 
+    const artifactsCount = msg.artifacts ? msg.artifacts.length : 0;
+    let artifactsHtml = "";
+    if (artifactsCount > 0) {
+      const artIds = msg.artifacts.map(a => a.id).filter(Boolean).join(",");
+      const hasCode = msg.artifacts.some(a => a.category === "code" || (!a.bufferBase64 && a.content));
+      const batchHeader = `
+        <div class="artifacts-batch-header" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--surface-subtle, #f8fafc); border: 1px solid var(--line); border-radius: 10px; margin: 12px 0 8px; flex-wrap: wrap; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-weight: 600; font-size: 13px; color: var(--ink); display: flex; align-items: center; gap: 6px;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+              Generated Files (${artifactsCount})
+            </span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <button type="button" class="btn btn--sm btn--outline download-all-artifacts-btn" data-art-ids="${artIds}" style="font-size: 12px; display: inline-flex; align-items: center; gap: 5px;">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download All (.zip)
+            </button>
+            ${hasCode ? `
+              <button type="button" class="btn btn--sm btn--ghost apply-all-artifacts-btn" data-art-ids="${artIds}" style="font-size: 12px; display: inline-flex; align-items: center; gap: 5px; color: var(--accent);">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                Apply All to Workspace
+              </button>
+            ` : ""}
+          </div>
+        </div>
+      `;
+
+      artifactsHtml = '<div class="message__artifacts">' +
+        batchHeader +
+        msg.artifacts.map(art => {
+          return window.Clarity.artifact && window.Clarity.artifact.renderCard
+            ? window.Clarity.artifact.renderCard(art)
+            : "";
+        }).join("") + '</div>';
+    }
+
     const controls = role === "assistant" ? this._renderAssistantControls(msg, isStreaming, isError) : this._renderUserControls(msg);
     const statusDot = isStreaming ? '<div class="message__status status--streaming"></div>' : "";
 
@@ -230,6 +240,7 @@ window.Clarity.uiChat = {
             <div class="message__bubble">
               ${contentHtml}
               ${attachmentsHtml}
+              ${artifactsHtml}
             </div>
             ${controls}
           </div>
@@ -244,6 +255,7 @@ window.Clarity.uiChat = {
             ${statusDot}
             ${contentHtml}
             ${attachmentsHtml}
+            ${artifactsHtml}
           </div>
           ${controls}
         </div>
@@ -529,25 +541,17 @@ if (isStreaming) {
     this._isStreaming = true;
     this._syncComposerStreaming();
     let convEl = document.getElementById("conversationList");
-    const main = document.getElementById("main");
-    if (main) {
-      const empty = main.querySelector(".chat-empty");
-      if (empty) empty.remove();
-    }
     if (!convEl) {
-      if (main) {
-        const hidden = main.querySelector("#conversationList");
-        if (hidden) {
-          hidden.style.display = "";
-          hidden.classList.add("conversation");
-          convEl = hidden;
-        }
-      }
-      if (!convEl) return;
-    } else {
-      convEl.style.display = "";
-      convEl.classList.add("conversation");
+      this.renderChat([]);
+      convEl = document.getElementById("conversationList");
     }
+    if (convEl) {
+      convEl.classList.remove("conversation--empty");
+      const empty = convEl.querySelector(".chat-empty");
+      if (empty) empty.remove();
+      this._bindScrollListener(convEl);
+    }
+    if (!convEl) return;
 
     const userAttachments = attachments.map(att => ({
       type: att.type === "image" ? "image" : "file",
@@ -574,7 +578,8 @@ if (isStreaming) {
 
     convEl.innerHTML += this._renderMessage(userMsg) + this._renderMessage(botMsg);
     this._bindMessageControls();
-    this._scrollToBottom();
+    this._userScrolledUp = false;
+    this._scrollToBottom(true);
 
     const file_ids = attachments
       .filter(a => a.file_id)
@@ -665,6 +670,7 @@ if (isStreaming) {
                 return;
               } else if (event.done) {
                 if (event.attachments) botAttachments = event.attachments;
+                if (event.artifacts) botMsg.artifacts = event.artifacts;
                 botMsg.content = botContent;
                 botMsg.streaming = false;
                 botMsg.attachments = botAttachments;
@@ -686,6 +692,13 @@ if (isStreaming) {
                 }
                 this._refreshSidebarAfterMessage();
                 return;
+              } else if (event.artifacts) {
+                botMsg.artifacts = event.artifacts;
+                const msgEl = document.querySelector(`[data-msg-id="${botMsg.id}"]`);
+                if (msgEl) {
+                  msgEl.innerHTML = this._renderMessage(botMsg);
+                  this._bindMessageControls();
+                }
               } else if (event.content) {
                 botContent += event.content;
                 this._updateBotMessage(botMsg.id, botContent, true);
@@ -735,6 +748,7 @@ if (isStreaming) {
               return;
             } else if (event.done) {
               if (event.attachments) botAttachments = event.attachments;
+              if (event.artifacts) botMsg.artifacts = event.artifacts;
               botMsg.content = botContent;
               botMsg.streaming = false;
               botMsg.attachments = botAttachments;
@@ -756,6 +770,13 @@ if (isStreaming) {
               }
               this._refreshSidebarAfterMessage();
               return;
+            } else if (event.artifacts) {
+              botMsg.artifacts = event.artifacts;
+              const msgEl = document.querySelector(`[data-msg-id="${botMsg.id}"]`);
+              if (msgEl) {
+                msgEl.innerHTML = this._renderMessage(botMsg);
+                this._bindMessageControls();
+              }
             } else if (event.content) {
               botContent += event.content;
               this._updateBotMessage(botMsg.id, botContent, true);
@@ -908,12 +929,7 @@ if (isStreaming) {
     retry.className = "btn btn--outline btn--sm";
     retry.textContent = "Retry";
     retry.addEventListener("click", () => this._retry(msgId));
-    const change = document.createElement("button");
-    change.className = "btn btn--ghost btn--sm";
-    change.textContent = "Change model";
-    change.addEventListener("click", () => { window.location.hash = "#/model"; });
     bar.appendChild(retry);
-    bar.appendChild(change);
   },
 
   _stopStreaming() {
@@ -1001,7 +1017,8 @@ if (isStreaming) {
     };
     convEl.innerHTML += this._renderMessage(botMsg);
     this._bindMessageControls();
-    this._scrollToBottom();
+    this._userScrolledUp = false;
+    this._scrollToBottom(true);
 
     const userMsgs = msgs.filter(m => m.role === "user");
     const lastUser = userMsgs[userMsgs.length - 1];
@@ -1513,6 +1530,109 @@ if (isStreaming) {
       btn.addEventListener("click", btn._handler);
     });
 
+    if (window.Clarity.artifact && window.Clarity.artifact.bindEvents) {
+      window.Clarity.artifact.bindEvents(convEl);
+    }
+
+    // Batch download all artifacts ZIP
+    convEl.querySelectorAll(".download-all-artifacts-btn").forEach(btn => {
+      btn.removeEventListener("click", btn._batchDlHandler);
+      btn._batchDlHandler = async (e) => {
+        e.preventDefault();
+        const idsStr = btn.getAttribute("data-art-ids") || "";
+        const artifactIds = idsStr.split(",").filter(Boolean);
+        if (!artifactIds.length) return;
+
+        btn.disabled = true;
+        const origText = btn.innerHTML;
+        btn.innerHTML = "<span>Creating ZIP...</span>";
+
+        try {
+          const resp = await fetch("/api/artifacts/download-zip", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ artifactIds }),
+          });
+
+          if (!resp.ok) {
+            throw new Error(`Server returned HTTP ${resp.status}`);
+          }
+
+          const blob = await resp.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `artifacts-${Date.now()}.zip`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+
+          window.Clarity.toast.show(`Downloaded ${artifactIds.length} files as ZIP archive`, "success");
+        } catch (err) {
+          console.error("ZIP download failed:", err);
+          window.Clarity.toast.show("ZIP download failed: " + err.message, "danger");
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = origText;
+        }
+      };
+      btn.addEventListener("click", btn._batchDlHandler);
+    });
+
+    // Batch apply all code artifacts to workspace
+    convEl.querySelectorAll(".apply-all-artifacts-btn").forEach(btn => {
+      btn.removeEventListener("click", btn._batchApplyHandler);
+      btn._batchApplyHandler = async (e) => {
+        e.preventDefault();
+        const idsStr = btn.getAttribute("data-art-ids") || "";
+        const artifactIds = idsStr.split(",").filter(Boolean);
+        if (!artifactIds.length) return;
+
+        btn.disabled = true;
+        const origText = btn.innerHTML;
+        btn.innerHTML = "<span>Applying all...</span>";
+
+        let appliedCount = 0;
+        let errors = 0;
+
+        for (const id of artifactIds) {
+          try {
+            await window.Clarity.api.post(`/api/artifacts/${id}/apply`, {});
+            appliedCount++;
+            // Update individual card if present
+            const card = document.getElementById(`art_${id}`);
+            if (card) {
+              const applyBtn = card.querySelector(".art-apply-btn");
+              if (applyBtn) {
+                applyBtn.textContent = "✓ Applied";
+                applyBtn.classList.add("btn--outline");
+              }
+              const badgeContainer = card.querySelector(".tag--xs:last-child")?.parentElement;
+              if (badgeContainer && !card.querySelector(".tag--applied")) {
+                const appliedTag = document.createElement("span");
+                appliedTag.className = "tag tag--xs tag--applied";
+                appliedTag.style.cssText = "background:#e0e7ff; color:#4338ca; font-weight:600;";
+                appliedTag.textContent = "⚡ In Workspace";
+                badgeContainer.appendChild(appliedTag);
+              }
+            }
+          } catch (err) {
+            errors++;
+          }
+        }
+
+        btn.innerHTML = `✓ ${appliedCount} Applied`;
+        btn.classList.add("btn--outline");
+        if (appliedCount > 0) {
+          window.Clarity.toast.show(`Applied ${appliedCount} files to project workspace!`, "success");
+        } else if (errors > 0) {
+          window.Clarity.toast.show("Failed to apply files to workspace", "danger");
+        }
+      };
+      btn.addEventListener("click", btn._batchApplyHandler);
+    });
+
     let activeMessage = null;
 
     convEl.querySelectorAll(".message").forEach(msgEl => {
@@ -1559,9 +1679,23 @@ if (isStreaming) {
     }
   },
 
-  _scrollToBottom() {
+  _userScrolledUp: false,
+
+  _bindScrollListener(convEl) {
+    if (!convEl || convEl._scrollBound) return;
+    convEl._scrollBound = true;
+    convEl.addEventListener("scroll", () => {
+      const distanceFromBottom = convEl.scrollHeight - convEl.scrollTop - convEl.clientHeight;
+      this._userScrolledUp = distanceFromBottom > 80;
+    }, { passive: true });
+  },
+
+  _scrollToBottom(force = false) {
     const convEl = document.querySelector(".conversation");
     if (convEl) {
+      if (!force && this._userScrolledUp) {
+        return;
+      }
       convEl.scrollTop = convEl.scrollHeight;
     }
   },

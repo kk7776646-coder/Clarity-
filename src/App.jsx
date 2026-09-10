@@ -178,32 +178,6 @@ export default function App() {
             React.createElement(
               "button",
               {
-                className: "btn btn--outline btn--sm",
-                id: "newChatBtn",
-                type: "button",
-                title: "Start a new chat",
-              },
-              React.createElement(
-                "svg",
-                {
-                  viewBox: "0 0 24 24",
-                  width: "14",
-                  height: "14",
-                  fill: "none",
-                  stroke: "currentColor",
-                  strokeWidth: "2",
-                  strokeLinecap: "round",
-                  strokeLinejoin: "round",
-                  "aria-hidden": true,
-                },
-                React.createElement("line", { x1: "12", y1: "5", x2: "12", y2: "19" }),
-                React.createElement("line", { x1: "5", y1: "12", x2: "19", y2: "12" })
-              ),
-              React.createElement("span", { className: "btn__text" }, "New Chat")
-            ),
-            React.createElement(
-              "button",
-              {
                 className: "btn btn--ghost btn--icon-sm topbar__theme-toggle",
                 id: "themeToggleBtn",
                 type: "button",
@@ -246,7 +220,7 @@ export default function App() {
               React.createElement(
                 "span",
                 { className: "avatar avatar--sm user-chip__avatar", id: "userMenuAvatar", "aria-hidden": true },
-                React.createElement("img", { id: "userMenuAvatarImg", src: "", alt: "", style: { display: "none" }, onError: "this.parentElement.classList.add('avatar--fallback'); this.parentElement.querySelector('.avatar__initials').style.display='flex';" }),
+                React.createElement("img", { id: "userMenuAvatarImg", src: "", alt: "", style: { display: "none" }, onError: (e) => { e.currentTarget.parentElement.classList.add('avatar--fallback'); const initials = e.currentTarget.parentElement.querySelector('.avatar__initials'); if(initials) initials.style.display = 'flex'; } }),
                 React.createElement("span", { className: "avatar__initials", id: "userMenuInitial" })
               ),
               React.createElement(
@@ -277,7 +251,7 @@ export default function App() {
                     React.createElement(
                       "span",
                       { className: "avatar avatar--md user-menu__avatar", id: "userMenuAvatarDropdown", "aria-hidden": true },
-                      React.createElement("img", { id: "userMenuAvatarImgDropdown", src: "", alt: "", style: { display: "none" }, onError: "this.parentElement.classList.add('avatar--fallback'); this.parentElement.querySelector('.avatar__initials').style.display='flex';" }),
+                      React.createElement("img", { id: "userMenuAvatarImgDropdown", src: "", alt: "", style: { display: "none" }, onError: (e) => { e.currentTarget.parentElement.classList.add('avatar--fallback'); const initials = e.currentTarget.parentElement.querySelector('.avatar__initials'); if(initials) initials.style.display = 'flex'; } }),
                       React.createElement("span", { className: "avatar__initials", id: "userMenuInitialDropdown" })
                     ),
                     React.createElement(

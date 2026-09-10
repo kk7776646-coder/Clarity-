@@ -9,7 +9,6 @@ window.Clarity.data = {
     { id: 'chat', label: 'Chat', href: '#/chat', icon: 'chat' },
     { id: 'home', label: 'Home', href: '#/home', icon: 'house' },
     { id: 'project', label: 'Projects', href: '#/project', icon: 'folder' },
-    { id: 'collections', label: 'Collections', href: '#/collections', icon: 'library' },
     { id: 'history', label: 'History', href: '#/history', icon: 'clock' }
   ],
   secondaryNav: [

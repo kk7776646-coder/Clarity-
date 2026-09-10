@@ -3,21 +3,41 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "deploy": "npm run postbuild && wrangler deploy --bundle",
-    "postbuild": "node -e \"const fs=require('fs'); ['dist/clarity_worker/wrangler.json','dist/clarity/wrangler.json'].forEach(p=>{ if(fs.existsSync(p)){ let c=JSON.parse(fs.readFileSync(p,'utf8')); delete c.no_bundle; fs.writeFileSync(p, JSON.stringify(c)); console.log('Fixed no_bundle in', p); } })\""
+    "dev": "tsx server.ts",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "start": "node dist/server.cjs"
   },
   "dependencies": {
+    "@google/genai": "^2.21.0",
+    "@types/cytoscape": "^3.31.0",
+    "@types/cytoscape-dagre": "^2.3.4",
+    "@types/prismjs": "^1.26.6",
+    "adm-zip": "^0.6.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "cytoscape": "^3.34.3",
+    "cytoscape-dagre": "^4.0.1",
+    "docx": "^9.7.1",
+    "exceljs": "^4.4.0",
+    "express": "^5.2.1",
+    "multer": "^2.3.0",
+    "pdf-lib": "^1.17.1",
+    "pptxgenjs": "^4.0.1",
+    "prismjs": "^1.30.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.0.0",
-    "@cloudflare/workers-types": "^5.20260903.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@types/adm-zip": "^0.5.8",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.2.0",
+    "@types/node": "^26.5.0",
     "@vitejs/plugin-react": "^4.4.0",
-    "vite": "^6.0.0",
-    "wrangler": "^4.0.0"
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.13",
+    "vite": "^6.0.0"
   }
 }
