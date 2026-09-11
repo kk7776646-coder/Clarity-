@@ -65,24 +65,33 @@ export default function ProjectWorkspace({ route }) {
           React.createElement("div", { style: { marginTop: 24, display: "flex", gap: 12, justifyContent: "center" } },
             React.createElement("button", { className: "btn btn--primary", onClick: () => { const name = prompt("Project name:", "My Project"); if (name) fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ name }) }).then(r => r.json()).then(d => window.location.hash = "#/project/" + d.id); } }, "New Project"),
             React.createElement("label", { className: "btn btn--outline", style: { cursor: "pointer" } }, "Upload ZIP",
-              React.createElement("input", { type: "file", hidden: true, accept: ".zip", onChange: (e) => {
+              React.createElement("input", { type: "file", hidden: true, accept: ".zip", onChange: async (e) => {
                 const f = e.target.files?.[0];
                 if (f) {
                   const fd = new FormData();
-                  fd.append("files", f, f.name);
-                  fetch("/api/files/upload", { method: "POST", body: fd, credentials: "include" }).then(r => r.json()).then(r2 => {
-                    const fileProjId = r2.files?.[0]?.project_id || null;
-                    if (fileProjId) {
-                      // Backend already created the project when processing the ZIP
-                      window.location.hash = "#/project/" + fileProjId;
+                  fd.append("file", f, f.name);
+                  fd.append("name", f.name.replace(/\.zip$/i, ""));
+                  try {
+                    let resData;
+                    if (window.Clarity?.api?.upload) {
+                      resData = await window.Clarity.api.upload("/api/projects/upload-zip", fd);
                     } else {
-                      // Fallback: create a project if somehow no project_id returned
-                      const projName = f.name.replace(/\.zip$/i, "");
-                      fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ name: projName }) }).then(r3 => r3.json()).then(projData => {
-                        window.location.hash = "#/project/" + projData.id;
-                      });
+                      const res = await fetch("/api/projects/upload-zip", { method: "POST", body: fd, credentials: "include" });
+                      const text = await res.text();
+                      try { resData = JSON.parse(text); } catch { resData = { error: text }; }
+                      if (!res.ok) throw new Error((resData && resData.error) || "ZIP upload failed");
                     }
-                  });
+                    if (resData && resData.project && resData.project.id) {
+                      window.location.hash = "#/project/" + resData.project.id;
+                    }
+                  } catch (err) {
+                    console.error("ZIP upload error:", err);
+                    if (window.Clarity?.toast?.show) {
+                      window.Clarity.toast.show("ZIP upload failed: " + (err.message || "Unknown error"), "danger");
+                    } else {
+                      alert("ZIP upload failed: " + (err.message || "Unknown error"));
+                    }
+                  }
                 }
               } })
             )

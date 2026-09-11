@@ -264,15 +264,28 @@ export function initDatabaseSchema() {
     db.exec(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
-        email TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
         name TEXT NOT NULL,
         password TEXT,
         active_model_id TEXT,
         created_at INTEGER NOT NULL
       );
+      CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
     `);
 
-    // 15. Models
+    // 15. Sessions
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        token TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+    `);
+
+    // 16. Models
     db.exec(`
       CREATE TABLE IF NOT EXISTS models (
         id TEXT PRIMARY KEY,
@@ -503,6 +516,57 @@ export function deleteProject(projectId: string): boolean {
 // ---------------------------------------------------------------------------
 // Project Files Service
 // ---------------------------------------------------------------------------
+export function createFilesBatch(filesList: Array<{
+  id: string;
+  project_id: string;
+  path: string;
+  name: string;
+  extension?: string;
+  language?: string;
+  size?: number;
+  hash?: string;
+  version?: number;
+  content?: string;
+  is_binary?: boolean | number;
+}>): void {
+  if (!filesList || filesList.length === 0) return;
+  const now = Date.now();
+  runTransaction(() => {
+    const stmt = db.prepare(`
+      INSERT INTO project_files (id, project_id, path, name, extension, language, size, hash, version, content, is_binary, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        path = excluded.path,
+        name = excluded.name,
+        extension = excluded.extension,
+        language = excluded.language,
+        size = excluded.size,
+        hash = excluded.hash,
+        version = project_files.version + 1,
+        content = excluded.content,
+        is_binary = excluded.is_binary,
+        updated_at = excluded.updated_at
+    `);
+    for (const file of filesList) {
+      stmt.run(
+        file.id,
+        file.project_id,
+        file.path,
+        file.name,
+        file.extension || path.extname(file.name),
+        file.language || "text",
+        file.size || 0,
+        file.hash || "",
+        file.version || 1,
+        file.content || "",
+        file.is_binary ? 1 : 0,
+        now,
+        now
+      );
+    }
+  });
+}
+
 export function createFile(file: {
   id: string;
   project_id: string;
@@ -744,6 +808,55 @@ export function deleteArtifact(id: string): boolean {
 // ---------------------------------------------------------------------------
 // Knowledge Chunks Service
 // ---------------------------------------------------------------------------
+export function createKnowledgeChunksBatch(chunksList: Array<{
+  id: string;
+  project_id: string;
+  file_id: string;
+  chunk_id: string;
+  content: string;
+  chunk_type?: string;
+  symbol?: string;
+  start_line?: number;
+  end_line?: number;
+  hash?: string;
+  version?: number;
+}>): void {
+  if (!chunksList || chunksList.length === 0) return;
+  const now = Date.now();
+  runTransaction(() => {
+    const stmt = db.prepare(`
+      INSERT INTO knowledge_chunks (id, project_id, file_id, chunk_id, content, chunk_type, symbol, start_line, end_line, hash, version, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        content = excluded.content,
+        chunk_type = excluded.chunk_type,
+        symbol = excluded.symbol,
+        start_line = excluded.start_line,
+        end_line = excluded.end_line,
+        hash = excluded.hash,
+        version = knowledge_chunks.version + 1,
+        updated_at = excluded.updated_at
+    `);
+    for (const chunk of chunksList) {
+      stmt.run(
+        chunk.id,
+        chunk.project_id,
+        chunk.file_id,
+        chunk.chunk_id,
+        chunk.content,
+        chunk.chunk_type || "text",
+        chunk.symbol || "",
+        chunk.start_line || 1,
+        chunk.end_line || 1,
+        chunk.hash || "",
+        chunk.version || 1,
+        now,
+        now
+      );
+    }
+  });
+}
+
 export function createKnowledgeChunk(chunk: {
   id: string;
   project_id: string;
@@ -1220,3 +1333,83 @@ export function dbSaveModel(model: any) {
 export function dbDeleteModel(id: string) {
   db.prepare("DELETE FROM models WHERE id = ?").run(id);
 }
+
+// ---------------------------------------------------------------------------
+// Users and Sessions Service
+// ---------------------------------------------------------------------------
+export interface DbUser {
+  id: string;
+  email: string;
+  name: string;
+  password?: string;
+  active_model_id?: string | null;
+  created_at: number;
+}
+
+export function dbSaveUser(user: {
+  id: string;
+  email: string;
+  name: string;
+  password?: string;
+  active_model_id?: string | null;
+  created_at?: number;
+}) {
+  const now = Date.now();
+  const stmt = db.prepare(`
+    INSERT INTO users (id, email, name, password, active_model_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      email = excluded.email,
+      name = excluded.name,
+      password = COALESCE(excluded.password, users.password),
+      active_model_id = excluded.active_model_id
+  `);
+  stmt.run(
+    user.id,
+    user.email.toLowerCase().trim(),
+    user.name.trim(),
+    user.password || null,
+    user.active_model_id || null,
+    user.created_at || now
+  );
+}
+
+export function dbGetUser(id: string): DbUser | null {
+  const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as any;
+  return row || null;
+}
+
+export function dbGetUserByEmail(email: string): DbUser | null {
+  const row = db.prepare("SELECT * FROM users WHERE LOWER(email) = ?").get(email.toLowerCase().trim()) as any;
+  return row || null;
+}
+
+export function dbListUsers(): DbUser[] {
+  return (db.prepare("SELECT * FROM users ORDER BY created_at ASC").all() as any[]) as DbUser[];
+}
+
+export function dbSaveSession(token: string, userId: string, expiresAt: number) {
+  const now = Date.now();
+  const stmt = db.prepare(`
+    INSERT INTO sessions (token, user_id, created_at, expires_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(token) DO UPDATE SET
+      user_id = excluded.user_id,
+      expires_at = excluded.expires_at
+  `);
+  stmt.run(token, userId, now, expiresAt);
+}
+
+export function dbGetSession(token: string): { token: string; user_id: string; created_at: number; expires_at: number } | null {
+  const row = db.prepare("SELECT * FROM sessions WHERE token = ? AND expires_at > ?").get(token, Date.now()) as any;
+  return row || null;
+}
+
+export function dbDeleteSession(token: string) {
+  db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
+}
+
+export function dbDeleteExpiredSessions() {
+  db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(Date.now());
+}
+

@@ -42,6 +42,7 @@ export interface CopilotRequest {
   analysis: ProjectAnalysis;
   files: ExtractedFile[];
   geminiClient: GoogleGenAI | null;
+  modelName?: string;
   onStreamContent?: (content: string) => void;
   onStreamEvent?: (event: any) => void;
 }
@@ -176,8 +177,9 @@ Follow these strict rules:
 `;
 
   try {
+    const targetModel = req.modelName || "gemini-2.5-flash";
     const responseStream = await geminiClient.models.generateContentStream({
-      model: "gemini-3.6-flash", // or whatever model is appropriate
+      model: targetModel,
       contents: [
         {
           role: "user",

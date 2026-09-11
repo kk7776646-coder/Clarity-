@@ -2,6 +2,7 @@
 import { ExtractedFile, ProjectAnalysis } from "./project-analyzer";
 import {
   createKnowledgeChunk,
+  createKnowledgeChunksBatch,
   listKnowledgeChunks,
   deleteKnowledgeForProject,
   getProject,
@@ -289,27 +290,43 @@ export function indexProject(projectId: string, projName: string, files: Extract
     indexingState: 'Indexed'
   };
 
-  // Persist all generated chunks to SQLite
+  // Persist all generated chunks to SQLite in a single transaction
+  const allChunksToPersist: Array<{
+    id: string;
+    project_id: string;
+    file_id: string;
+    chunk_id: string;
+    content: string;
+    chunk_type?: string;
+    symbol?: string;
+    start_line?: number;
+    end_line?: number;
+    hash?: string;
+    version?: number;
+  }> = [];
+
   for (const [filePath, fk] of fileMap.entries()) {
     for (const chunk of fk.chunks) {
-      try {
-        createKnowledgeChunk({
-          id: chunk.id,
-          project_id: projectId,
-          file_id: filePath,
-          chunk_id: chunk.id,
-          content: chunk.content,
-          chunk_type: chunk.chunkType,
-          symbol: chunk.symbol,
-          start_line: chunk.startLine,
-          end_line: chunk.endLine,
-          hash: chunk.hash,
-          version: 1,
-        });
-      } catch (err) {
-        console.warn(`Failed to persist chunk ${chunk.id} to SQLite:`, err);
-      }
+      allChunksToPersist.push({
+        id: chunk.id,
+        project_id: projectId,
+        file_id: filePath,
+        chunk_id: chunk.id,
+        content: chunk.content,
+        chunk_type: chunk.chunkType,
+        symbol: chunk.symbol,
+        start_line: chunk.startLine,
+        end_line: chunk.endLine,
+        hash: chunk.hash,
+        version: 1,
+      });
     }
+  }
+
+  try {
+    createKnowledgeChunksBatch(allChunksToPersist);
+  } catch (err) {
+    console.warn("Failed to batch persist chunks to SQLite:", err);
   }
 
   knowledgeStore.set(projectId, pk);

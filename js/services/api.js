@@ -12,8 +12,11 @@ window.Clarity.api = {
   base: "",
 
   _url(path) {
+    if (!path) return "/";
     if (path.startsWith("http://") || path.startsWith("https://")) return path;
-    return this.base + path;
+    const base = (typeof this.base === "string" ? this.base : "") || (typeof window.Clarity?.api?.base === "string" ? window.Clarity.api.base : "");
+    const cleanPath = path.startsWith("/") ? path : "/" + path;
+    return (base ? base.replace(/\/+$/, "") : "") + cleanPath;
   },
 
 async request(path, options) {

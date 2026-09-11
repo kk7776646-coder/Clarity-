@@ -886,18 +886,21 @@ if (isStreaming) {
 
   _friendlyError(type, raw) {
     const message = String(raw || "");
-    if (type === "auth_error") {
-      return { title: "Authentication failed", detail: "The API key is invalid or missing. Update it in Models." };
+    if (type === "auth_error" || /invalid.*api key|api_key_invalid|permission_denied/i.test(message)) {
+      return { title: "Authentication failed", detail: "The API key is invalid or missing. Update it in Models settings." };
     }
     if (type === "model_not_found" || /model .* not configured/i.test(message)) {
       return { title: "Model not available", detail: "The selected model is not configured. Open Models to choose or add one." };
+    }
+    if (/503|unavailable|high demand|spikes in demand|overloaded|capacity/i.test(message)) {
+      return { title: "Model Provider High Demand", detail: message || "The AI model is temporarily experiencing high traffic spikes. Please click Retry in a few seconds." };
     }
     if (type === "http_error" || /HTTP 4\d\d|HTTP 5\d\d/.test(message)) {
       if (/400/.test(message)) return { title: "Request rejected", detail: "The model rejected the request. Check the model configuration or input." };
       if (/401|403/.test(message)) return { title: "Authentication failed", detail: "The API key is missing or invalid. Update it in Models." };
       if (/404/.test(message)) return { title: "Endpoint not found", detail: "The model URL or model ID is invalid. Check Models." };
       if (/429/.test(message)) return { title: "Rate limited", detail: "Too many requests. Wait a moment and try again." };
-      if (/5\d\d/.test(message)) return { title: "Server error", detail: "The model provider returned an error. Try again shortly." };
+      if (/5\d\d/.test(message)) return { title: "Server error", detail: "The model provider returned a temporary error. Try again shortly." };
     }
     if (/image|vision|does not support.*image/i.test(message)) {
       return { title: "Model does not support images", detail: "This model cannot process images. Select a Vision-capable model (e.g. GPT-4o) to use image attachments." };

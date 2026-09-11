@@ -1,6 +1,6 @@
 
 function formatApiError(err: any): string {
-  let msg = formatApiError(err) || "An unknown error occurred";
+  let msg = (err && (err.message || (typeof err === "string" ? err : JSON.stringify(err)))) || "An unknown error occurred";
   try {
     if (msg.includes('{"error"')) {
       const startIdx = msg.indexOf('{');
@@ -192,8 +192,9 @@ const TEXT_EXTENSIONS = new Set([
 ]);
 
 const IGNORED_PATH_SEGMENTS = new Set([
-  "node_modules", ".git", ".svn", ".hg", "__pycache__", ".venv", "venv", "env",
-  ".idea", ".vscode", "dist", "build", "target", ".next", ".nuxt", "coverage", ".pytest_cache"
+  "node_modules", ".git", ".github", ".svn", ".hg", "__pycache__", ".venv", "venv", "env",
+  ".idea", ".vscode", "dist", "build", "target", ".next", ".nuxt", "coverage", ".pytest_cache",
+  ".turbo", ".cache", ".output", ".gradle", "bin", "obj", "vendor", "bower_components", "pods", "deriveddata", ".yarn", ".pnpm-store"
 ]);
 
 /**
@@ -217,6 +218,14 @@ export function extractZipSecurely(buffer: Buffer): { files: ExtractedFile[]; er
       if (norm.startsWith("__MACOSX/") || norm.includes("/.DS_Store") || norm.endsWith("Thumbs.db")) {
         continue; // Skip macOS / Windows junk
       }
+
+      // Skip ignored directories immediately at root/subpath level without decompressing
+      const segments = norm.split("/").filter(Boolean);
+      const isIgnored = segments.some((s) => IGNORED_PATH_SEGMENTS.has(s.toLowerCase()));
+      if (isIgnored) {
+        continue;
+      }
+
       rawFiles.push({
         entryName: norm,
         isDirectory: entry.isDirectory,
@@ -450,12 +459,19 @@ export function analyzeProject(projectName: string, projectId: string, files: Ex
   if (dockerfile) buildToolsSet.add("Docker Container");
   if (dockerCompose) buildToolsSet.add("Docker Compose (Multi-Service)");
 
+  // Precompile dependency matchers for fast search
+  const depMatchers = dependenciesList.map((dep) => ({
+    dep,
+    regex: new RegExp(`['"]${escapeRegex(dep.name)}['"]`, "i"),
+  }));
+
   // Scan file contents for imports and check where dependencies are used
   for (const f of files) {
     if (f.isBinary || !f.content) continue;
-    for (const dep of dependenciesList) {
-      const depRegex = new RegExp(`['"]${escapeRegex(dep.name)}['"]`, "i");
-      if (depRegex.test(f.content)) {
+    // Scan up to first 256KB for dependencies
+    const headContent = f.content.length > 256 * 1024 ? f.content.slice(0, 256 * 1024) : f.content;
+    for (const { dep, regex } of depMatchers) {
+      if (regex.test(headContent)) {
         if (!dep.filesUsing.includes(f.path)) {
           dep.filesUsing.push(f.path);
         }
@@ -573,11 +589,13 @@ export function analyzeProject(projectName: string, projectId: string, files: Ex
   }
 
   // Cross-reference callers of endpoints
+  const codeTextFiles = files.filter((f) => !f.isBinary && f.content && f.content.length > 0);
   for (const ep of endpoints) {
     ep.callers = [];
-    for (const f of files) {
-      if (f.path === ep.file || f.isBinary) continue;
-      if (f.content && f.content.includes(ep.path)) {
+    if (!ep.path || ep.path.length < 2) continue;
+    for (const f of codeTextFiles) {
+      if (f.path === ep.file) continue;
+      if (f.content.includes(ep.path)) {
         ep.callers.push(f.path);
       }
     }

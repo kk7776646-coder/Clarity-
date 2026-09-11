@@ -1,3 +1,4 @@
+import { registerProjectAndFileRoutes } from "./project-routes";
 import { executeCommand, stopProject, getRunStatus } from "./run-engine.js";
 import express from "express";
 import cookieParser from "cookie-parser";
@@ -5,6 +6,7 @@ import cors from "cors";
 import path from "path";
 import fs from "fs";
 import os from "os";
+import crypto from "crypto";
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
@@ -20,6 +22,13 @@ import {
   dbGetModels,
   dbSaveModel,
   dbDeleteModel,
+  dbSaveUser,
+  dbGetUser,
+  dbGetUserByEmail,
+  dbListUsers,
+  dbSaveSession,
+  dbGetSession,
+  dbDeleteSession,
   getProject as dbGetProject,
   listProjects as dbListProjects,
   updateProject as dbUpdateProject,
@@ -83,45 +92,66 @@ import {
 const PORT = 3000;
 const SESSION_COOKIE = "clarity_session";
 
-// Lazy Gemini client helper
+// Lazy Gemini client helper & Resilience Layer
 
 function formatApiError(err: any): string {
-  let msg = err.message || "An unknown error occurred";
-  try {
-    if (msg.includes('{"error"')) {
-      const startIdx = msg.indexOf('{');
-      const endIdx = msg.lastIndexOf('}');
-      if (startIdx !== -1 && endIdx !== -1) {
-        const jsonStr = msg.substring(startIdx, endIdx + 1);
-        const parsed = JSON.parse(jsonStr);
-        if (parsed.error && parsed.error.message) {
-          let innerMsg = parsed.error.message;
-          try {
-             const innerParsed = JSON.parse(innerMsg);
-             if (innerParsed.error && innerParsed.error.message) {
-               msg = innerParsed.error.message;
-             } else {
-               msg = innerMsg;
-             }
-          } catch(e2) {
-             msg = innerMsg;
-          }
-        }
-      }
-    }
-  } catch (e) {
-  }
+  if (!err) return "An unknown error occurred";
+  let msg = err.message || (typeof err === "string" ? err : JSON.stringify(err));
   
-  if (msg.includes("429") || msg.includes("Quota exceeded") || msg.includes("RESOURCE_EXHAUSTED")) {
-     return "You have exceeded your API quota or rate limit. " + msg;
+  // Recursively unwrap nested JSON error strings from API responses
+  for (let i = 0; i < 4; i++) {
+    const jsonMatch = msg.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) break;
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.error) {
+        if (typeof parsed.error === "string") {
+          msg = parsed.error;
+        } else if (parsed.error.message) {
+          msg = parsed.error.message;
+        } else {
+          msg = JSON.stringify(parsed.error);
+        }
+      } else if (parsed.message) {
+        msg = parsed.message;
+      } else {
+        break;
+      }
+    } catch {
+      break;
+    }
+  }
+
+  const status = String(err.status || err.code || "");
+  const combined = `${status} ${msg}`.toLowerCase();
+
+  if (
+    combined.includes("503") ||
+    combined.includes("unavailable") ||
+    combined.includes("high demand") ||
+    combined.includes("spikes in demand") ||
+    combined.includes("overloaded")
+  ) {
+    return "The AI model is currently experiencing temporary high demand from the provider. Clarity attempted fallback models, but all are temporarily busy. Please try your message again in a few seconds.";
+  }
+  if (
+    combined.includes("429") ||
+    combined.includes("quota") ||
+    combined.includes("resource_exhausted") ||
+    combined.includes("rate limit")
+  ) {
+    return "API rate limit or quota exceeded. Please wait a moment before trying again.";
+  }
+  if (
+    combined.includes("401") ||
+    combined.includes("403") ||
+    combined.includes("invalid api key") ||
+    combined.includes("api_key_invalid") ||
+    combined.includes("permission_denied")
+  ) {
+    return "Invalid or unauthorized Gemini API key. Please verify your API key in settings.";
   }
   return msg;
-}
-
-function getGeminiClient(): GoogleGenAI | null {
-  const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  if (!key) return null;
-  return new GoogleGenAI({ apiKey: key });
 }
 
 // ---------------------------------------------------------------------------
@@ -226,49 +256,78 @@ interface ProjectItem {
 const projectAnalyses = new Map<string, ProjectAnalysis>();
 const projectArtifacts = new Map<string, GeneratedArtifact>();
 
+// Password hashing utilities using scrypt
+export function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+export function verifyPassword(password: string, storedHash: string): boolean {
+  if (!storedHash) return false;
+  if (!storedHash.includes(":")) {
+    return password === storedHash;
+  }
+  try {
+    const [salt, key] = storedHash.split(":");
+    const keyBuffer = Buffer.from(key, "hex");
+    const derivedKey = crypto.scryptSync(password, salt, 64);
+    return crypto.timingSafeEqual(keyBuffer, derivedKey);
+  } catch {
+    return false;
+  }
+}
+
 // Seed initial user
 const initialUser: User = {
   id: "user_default",
   email: "user@clarity.ai",
   name: "Clarity User",
-  password: "password123",
-  active_model_id: "clarity-gemini",
+  password: hashPassword("password123"),
+  active_model_id: "",
   created_at: Date.now(),
 };
 
 const users = new Map<string, User>([[initialUser.id, initialUser]]);
 const sessions = new Map<string, string>([["default_token", initialUser.id]]);
 
-// Default models
-const defaultModels: ModelItem[] = [
-  {
-    id: "clarity-gemini",
-    name: "Gemini 3.6 Flash",
-    provider: "gemini",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
-    apiKey: process.env.GEMINI_API_KEY || "",
-    modelName: "gemini-3.6-flash",
-    modelType: "text",
-    capabilities: {
-      text: true,
-      vision: true,
-      imageGeneration: false,
-      codeGeneration: true,
-      fileAnalysis: true,
-      streaming: true,
-    },
-    contextWindow: 1000000,
-    maxOutputTokens: 8192,
-    defaultTemperature: 0.7,
-    defaultTopP: 1.0,
-    supportsStreaming: true,
-    enabled: true,
-    status: process.env.GEMINI_API_KEY ? "available" : "untested",
-    isUser: false,
-  }
-];
+// Active models in memory (loaded purely from user-configured entries in database)
+const models = new Map<string, ModelItem>();
 
-const models = new Map<string, ModelItem>(defaultModels.map((m) => [m.id, { ...m }]));
+// Safe model resolver that matches ID, name, or returns active user-configured model (or null if none)
+export function resolveModelConfig(requestedModelId?: string | null, userId?: string | null): ModelItem | null {
+  if (requestedModelId) {
+    // 1. Direct match by exact ID
+    if (models.has(requestedModelId)) {
+      return models.get(requestedModelId)!;
+    }
+    // 2. Case-insensitive match on ID, name, or modelName
+    const norm = requestedModelId.toLowerCase().trim();
+    for (const m of models.values()) {
+      if (
+        m.id.toLowerCase() === norm ||
+        m.name.toLowerCase() === norm ||
+        m.modelName.toLowerCase() === norm
+      ) {
+        return m;
+      }
+    }
+  }
+
+  // Check user active model
+  if (userId && users.has(userId)) {
+    const u = users.get(userId)!;
+    if (u.active_model_id && models.has(u.active_model_id)) {
+      return models.get(u.active_model_id)!;
+    }
+  }
+
+  // Fallback: First enabled model configured by user
+  const enabledModel = Array.from(models.values()).find((m) => m.enabled) || Array.from(models.values())[0];
+  if (enabledModel) return enabledModel;
+
+  return null;
+}
 const conversations = new Map<string, ConversationItem>();
 const messages = new Map<string, MessageItem>();
 const files = new Map<string, FileItem>();
@@ -279,7 +338,7 @@ const initialConv: ConversationItem = {
   id: "conv_welcome",
   user_id: initialUser.id,
   title: "Welcome to Clarity",
-  model_id: "clarity-gemini",
+  model_id: "",
   created_at: Date.now() - 60000,
   updated_at: Date.now() - 60000,
 };
@@ -291,7 +350,7 @@ const welcomeMsg: MessageItem = {
   role: "assistant",
   content:
     "Hello! I am **Clarity**, your AI-powered assistant. You can chat with me, upload knowledge documents to ground responses in your materials, explore code repositories with Projects, or configure custom AI models.\n\nHow can I help you today?",
-  model_id: "clarity-gemini",
+  model_id: "",
   created_at: Date.now() - 60000,
 };
 messages.set(welcomeMsg.id, welcomeMsg);
@@ -384,6 +443,43 @@ function hydrateFromDatabase() {
       });
     }
 
+    // Load models from SQLite
+    const dbM = dbGetModels();
+    for (const m of dbM) {
+      if (
+        m.id === "clarity-gemini" ||
+        m.name === "Gemini 3.6 Flash" ||
+        m.model_name === "gemini-3.6-flash" ||
+        m.id === "Gemini 3.5 Flash-Lite" ||
+        m.name === "Gemini 3.5 Flash-Lite"
+      ) {
+        try { dbDeleteModel(m.id); } catch {}
+        continue;
+      }
+      let caps = {};
+      if (m.capabilities) {
+        try { caps = typeof m.capabilities === "string" ? JSON.parse(m.capabilities) : m.capabilities; } catch {}
+      }
+      models.set(m.id, {
+        id: m.id,
+        name: m.name,
+        provider: m.provider,
+        baseUrl: m.base_url,
+        apiKey: m.api_key,
+        modelName: m.model_name,
+        modelType: m.model_type,
+        capabilities: caps,
+        contextWindow: m.context_window,
+        maxOutputTokens: m.max_output_tokens,
+        defaultTemperature: m.default_temperature,
+        defaultTopP: m.default_top_p,
+        supportsStreaming: Boolean(m.supports_streaming),
+        enabled: Boolean(m.enabled),
+        status: m.status,
+        isUser: Boolean(m.is_user),
+      });
+    }
+
     // Load conversations & messages
     const convs = dbListConversations(initialUser.id);
     if (convs.length > 0) {
@@ -394,7 +490,7 @@ function hydrateFromDatabase() {
           id: c.id,
           user_id: c.user_id,
           title: c.title,
-          model_id: c.model_id || "clarity-gemini",
+          model_id: c.model_id === "clarity-gemini" ? "" : (c.model_id || ""),
           created_at: c.created_at,
           updated_at: c.updated_at,
         });
@@ -405,7 +501,7 @@ function hydrateFromDatabase() {
             conversation_id: m.conversation_id,
             role: m.role,
             content: m.content,
-            model_id: m.model_id,
+            model_id: m.model_id === "clarity-gemini" ? "" : (m.model_id || ""),
             attachments: m.attachments,
             created_at: m.created_at,
           });
@@ -415,7 +511,29 @@ function hydrateFromDatabase() {
       dbSaveConversation(initialConv.id, initialConv.user_id, initialConv.title, initialConv.model_id);
       dbSaveMessage(welcomeMsg.id, welcomeMsg.conversation_id, welcomeMsg.role, welcomeMsg.content, welcomeMsg.model_id);
     }
-    console.log(`[DB Hydration] Loaded ${projects.size} projects, ${files.size} files, ${conversations.size} conversations from SQLite.`);
+    // Hydrate users
+    const dbUsersList = dbListUsers();
+    if (dbUsersList.length > 0) {
+      for (const u of dbUsersList) {
+        users.set(u.id, {
+          id: u.id,
+          email: u.email,
+          name: u.name,
+          password: u.password || "",
+          active_model_id: u.active_model_id || "",
+          created_at: u.created_at,
+        });
+      }
+    } else {
+      // Seed default user into SQLite database
+      dbSaveUser(initialUser);
+      const sessExp = Date.now() + 30 * 24 * 3600 * 1000;
+      dbSaveSession("default_token", initialUser.id, sessExp);
+    }
+
+    // Clean up expired sessions in DB
+    dbDeleteExpiredSessions();
+    console.log(`[DB Hydration] Loaded ${projects.size} projects, ${files.size} files, ${models.size} models, ${conversations.size} conversations, ${users.size} users from SQLite.`);
   } catch (err) {
     console.error("Error hydrating from SQLite database:", err);
   }
@@ -482,12 +600,38 @@ async function startServer() {
 
   // Auth resolver middleware
   function resolveUser(req: express.Request): User | null {
-    const token = req.cookies[SESSION_COOKIE];
-    if (token && sessions.has(token)) {
-      const uid = sessions.get(token)!;
-      return users.get(uid) || null;
+    let token = req.cookies?.[SESSION_COOKIE];
+    if (!token && req.headers.authorization?.startsWith("Bearer ")) {
+      token = req.headers.authorization.substring(7).trim();
     }
-    // If no token is provided, fall back to initial user to ensure a seamless first run experience
+    if (token) {
+      if (sessions.has(token)) {
+        const uid = sessions.get(token)!;
+        const u = users.get(uid);
+        if (u) return u;
+      }
+      const dbSess = dbGetSession(token);
+      if (dbSess) {
+        sessions.set(token, dbSess.user_id);
+        let u = users.get(dbSess.user_id);
+        if (!u) {
+          const dbU = dbGetUser(dbSess.user_id);
+          if (dbU) {
+            u = {
+              id: dbU.id,
+              email: dbU.email,
+              name: dbU.name,
+              password: dbU.password || "",
+              active_model_id: dbU.active_model_id || "",
+              created_at: dbU.created_at,
+            };
+            users.set(u.id, u);
+          }
+        }
+        if (u) return u;
+      }
+    }
+    // Fall back to initial user if default_token is in session or for seamless initial experience
     return initialUser;
   }
 
@@ -506,8 +650,8 @@ async function startServer() {
     if (!user) {
       return res.status(401).json({ user: null });
     }
-    // Ensure default cookie is set
-    if (!req.cookies[SESSION_COOKIE]) {
+    // Ensure default cookie is set if not already
+    if (!req.cookies?.[SESSION_COOKIE]) {
       res.cookie(SESSION_COOKIE, "default_token", {
         httpOnly: true,
         sameSite: "lax",
@@ -521,63 +665,99 @@ async function startServer() {
   app.post("/api/auth/signup", (req, res) => {
     const { email, password, name } = req.body || {};
     if (!email || !password) {
-      return res.status(400).json({ error: "Email and password required" });
+      return res.status(400).json({ error: "Email and password are required" });
     }
+    const cleanEmail = String(email).trim().toLowerCase();
+    if (!cleanEmail.includes("@") || String(password).length < 4) {
+      return res.status(400).json({ error: "Please provide a valid email and a password of at least 4 characters" });
+    }
+
+    const existing = dbGetUserByEmail(cleanEmail) || Array.from(users.values()).find(u => u.email.toLowerCase() === cleanEmail);
+    if (existing) {
+      return res.status(409).json({ error: "An account with this email already exists" });
+    }
+
     const id = `user_${Date.now()}`;
+    const hashedPassword = hashPassword(String(password));
     const newUser: User = {
       id,
-      email: String(email).trim(),
-      name: String(name || email.split("@")[0]).trim(),
-      password: String(password),
-      active_model_id: "clarity-gemini",
+      email: cleanEmail,
+      name: String(name || cleanEmail.split("@")[0]).trim(),
+      password: hashedPassword,
+      active_model_id: Array.from(models.keys())[0] || "",
       created_at: Date.now(),
     };
+
+    dbSaveUser(newUser);
     users.set(id, newUser);
-    const token = `sess_${Date.now()}_${Math.random().toString(36).substring(2)}`;
+
+    const token = `sess_${Date.now()}_${crypto.randomBytes(16).toString("hex")}`;
+    const expiresAt = Date.now() + 30 * 24 * 3600 * 1000;
+    dbSaveSession(token, id, expiresAt);
     sessions.set(token, id);
+
     res.cookie(SESSION_COOKIE, token, {
       httpOnly: true,
       sameSite: "lax",
       maxAge: 30 * 24 * 3600 * 1000,
       path: "/",
     });
-    res.status(201).json({ user: publicUser(newUser) });
+    res.status(201).json({ user: publicUser(newUser), token });
   });
 
   app.post("/api/auth/login", (req, res) => {
     const { email, password } = req.body || {};
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+    const cleanEmail = String(email).trim().toLowerCase();
+
     let matched: User | null = null;
     for (const u of users.values()) {
-      if (u.email.toLowerCase() === String(email).trim().toLowerCase()) {
+      if (u.email.toLowerCase() === cleanEmail) {
         matched = u;
         break;
       }
     }
     if (!matched) {
-      // Auto-create user on first login if not found
-      const id = `user_${Date.now()}`;
-      matched = {
-        id,
-        email: String(email).trim(),
-        name: String(email.split("@")[0]).trim(),
-        password: String(password),
-        active_model_id: "clarity-gemini",
-        created_at: Date.now(),
-      };
-      users.set(id, matched);
+      const dbU = dbGetUserByEmail(cleanEmail);
+      if (dbU) {
+        matched = {
+          id: dbU.id,
+          email: dbU.email,
+          name: dbU.name,
+          password: dbU.password || "",
+          active_model_id: dbU.active_model_id || "",
+          created_at: dbU.created_at,
+        };
+        users.set(matched.id, matched);
+      }
     }
-    const token = `sess_${Date.now()}_${Math.random().toString(36).substring(2)}`;
+
+    if (!matched || !verifyPassword(String(password), matched.password)) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    const token = `sess_${Date.now()}_${crypto.randomBytes(16).toString("hex")}`;
+    const expiresAt = Date.now() + 30 * 24 * 3600 * 1000;
+    dbSaveSession(token, matched.id, expiresAt);
     sessions.set(token, matched.id);
+
     res.cookie(SESSION_COOKIE, token, {
       httpOnly: true,
       sameSite: "lax",
       maxAge: 30 * 24 * 3600 * 1000,
       path: "/",
     });
-    res.json({ user: publicUser(matched) });
+    res.json({ user: publicUser(matched), token });
   });
 
-  app.post("/api/auth/logout", (_req, res) => {
+  app.post("/api/auth/logout", (req, res) => {
+    const token = req.cookies?.[SESSION_COOKIE];
+    if (token) {
+      sessions.delete(token);
+      dbDeleteSession(token);
+    }
     res.clearCookie(SESSION_COOKIE, { path: "/" });
     res.json({ ok: true });
   });
@@ -587,7 +767,13 @@ async function startServer() {
   // -------------------------------------------------------------------------
   app.get("/api/models", (req, res) => {
     const user = resolveUser(req) || initialUser;
-    const active = user.active_model_id || "clarity-gemini";
+    const resolvedActive = resolveModelConfig(user.active_model_id, user.id);
+    const active = resolvedActive ? resolvedActive.id : "";
+    if (user.active_model_id !== active) {
+      user.active_model_id = active;
+      try { dbSaveUser(user); } catch {}
+    }
+    
     const list = Array.from(models.values()).map((m) => {
       const pub = publicModel(m);
       return {
@@ -678,7 +864,17 @@ async function startServer() {
     const id = req.params.id;
     if (models.has(id)) {
       models.delete(id);
-    try { dbDeleteModel(id); } catch(err) { console.error(err); }
+      try {
+        dbDeleteModel(id);
+        for (const u of users.values()) {
+          if (u.active_model_id === id) {
+            u.active_model_id = Array.from(models.keys())[0] || "";
+            dbSaveUser(u);
+          }
+        }
+      } catch (err) {
+        console.error("Error deleting model:", err);
+      }
       return res.json({ deleted: true, id });
     }
     res.status(404).json({ error: "Model not found", type: "model_not_found" });
@@ -712,12 +908,16 @@ async function startServer() {
       try {
         const apiKey = m.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
         if (!apiKey) return res.status(400).json({ error: "API Key required for Gemini." });
+        const testModel = m.modelName;
+        if (!testModel) return res.status(400).json({ error: "Model name/ID is required." });
         const ai = new GoogleGenAI({ apiKey });
-        const testModel = m.modelName || "gemini-3.6-flash";
-        await ai.models.generateContent({ model: testModel, contents: "test" });
-        return res.json({ ok: true, message: "Gemini connection successful" });
+        await ai.models.generateContent({
+          model: testModel,
+          contents: "ping",
+        });
+        return res.json({ ok: true, message: `Gemini connection verified using ${testModel}` });
       } catch (err: any) {
-        return res.status(400).json({ error: `Connection failed: ${err.message}` });
+        return res.status(400).json({ error: `Connection failed: ${formatApiError(err)}` });
       }
     }
     
@@ -758,7 +958,7 @@ async function startServer() {
     const body = req.body || {};
     const id = `conv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const title = String(body.title || "New Chat").trim();
-    const model_id = body.model_id || user.active_model_id || "clarity-gemini";
+    const model_id = body.model_id || user.active_model_id || Array.from(models.keys())[0] || "";
 
     const conv: ConversationItem = {
       id,
@@ -882,7 +1082,7 @@ async function startServer() {
         id: cid,
         user_id: user.id,
         title: "New Chat",
-        model_id: user.active_model_id || "clarity-gemini",
+        model_id: user.active_model_id || Array.from(models.keys())[0] || "",
         created_at: Date.now(),
         updated_at: Date.now(),
       };
@@ -898,9 +1098,33 @@ async function startServer() {
       return res.status(400).json({ error: "Message is required", type: "invalid_request" });
     }
 
-    const activeModelId = model_id || conv.model_id || user.active_model_id || "clarity-gemini";
+    // Prepare SSE stream
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+
+    const sendSSE = (payload: any) => {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    const modelConfig = resolveModelConfig(model_id || conv.model_id || user.active_model_id, user.id);
+    if (!modelConfig) {
+      sendSSE({
+        error: {
+          message: "No AI model is configured. Please navigate to Models in the navigation bar to add your model.",
+          type: "no_model",
+        },
+      });
+      return res.end();
+    }
+    const activeModelId = modelConfig.id;
     conv.model_id = activeModelId;
     conv.updated_at = Date.now();
+    if (!user.active_model_id || !models.has(user.active_model_id)) {
+      user.active_model_id = activeModelId;
+      try { dbSaveUser(user); } catch {}
+    }
 
     // If this is the first user message, update title based on text
     const existingMsgs = Array.from(messages.values()).filter((m) => m.conversation_id === cid);
@@ -924,16 +1148,6 @@ async function startServer() {
     try {
       dbSaveMessage(userMsgId, cid, "user", textMsg, activeModelId);
     } catch {}
-
-    // Prepare SSE stream
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
-
-    const sendSSE = (payload: any) => {
-      res.write(`data: ${JSON.stringify(payload)}\n\n`);
-    };
 
     // Gather knowledge context from attached files or shared files
     let knowledgeContext = "";
@@ -970,11 +1184,6 @@ async function startServer() {
     const assistantMsgId = `msg_${Date.now()}_a`;
 
     try {
-      const modelConfig = models.get(activeModelId);
-      if (!modelConfig) {
-        throw new Error(`Model configuration for '${activeModelId}' not found.`);
-      }
-
       // Build conversation history
       const history = [];
       let expectedRole = "user";
@@ -994,29 +1203,30 @@ async function startServer() {
 
       if (modelConfig.provider === "gemini") {
         const apiKey = modelConfig.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-        if (!apiKey) throw new Error("Gemini API key is missing. Please configure it in your environment settings or the model settings.");
+        if (!apiKey) throw new Error("Gemini API key is missing. Please configure it in your model settings.");
         
-        
+        const contents = [
+          ...history,
+          {
+            role: "user",
+            parts: [{ text: promptWithContext }],
+          },
+        ];
+
         const ai = new GoogleGenAI({ apiKey });
         const responseStream = await ai.models.generateContentStream({
-          model: modelConfig.modelName || "gemini-3.6-flash",
-          contents: [
-            ...history,
-            {
-              role: "user",
-              parts: [{ text: promptWithContext }],
-            },
-          ],
+          model: modelConfig.modelName,
+          contents,
           config: {
             systemInstruction: "You are Clarity, an intelligent AI assistant grounded in the user's personal and organizational knowledge. You provide crisp, well-structured, clear, and actionable answers with code blocks and formatting where appropriate.",
           },
         });
-        
+
         for await (const chunk of responseStream) {
-          const chunkText = chunk.text || "";
-          if (chunkText) {
-            assistantText += chunkText;
-            sendSSE({ content: chunkText });
+          const text = chunk.text || "";
+          if (text) {
+            assistantText += text;
+            sendSSE({ content: text });
           }
         }
       } else {
@@ -1121,6 +1331,7 @@ async function startServer() {
     if (convMsgs.length > 0 && convMsgs[convMsgs.length - 1].role === "assistant") {
       const lastAss = convMsgs.pop()!;
       messages.delete(lastAss.id);
+      try { dbDeleteMessage(lastAss.id); } catch(e) {}
     }
 
     const lastUser = convMsgs.reverse().find((m) => m.role === "user");
@@ -1128,16 +1339,42 @@ async function startServer() {
       return res.status(400).json({ error: "No user message to regenerate from", type: "invalid_request" });
     }
 
-    // Trigger chat stream with last user content
-    req.body = {
-      message: lastUser.content,
-      model_id: conv.model_id,
-      file_ids: req.body?.file_ids || [],
-      project_id: req.body?.project_id || null,
-    };
+    const textMsg = lastUser.content;
+    let knowledgeContext = "";
+    if (req.body?.project_id && (projectAnalyses.has(req.body.project_id) || dbGetProjectAnalysis(req.body.project_id))) {
+      const pa = projectAnalyses.get(req.body.project_id) || dbGetProjectAnalysis(req.body.project_id)!;
+      knowledgeContext += `\n\n[Active Project: ${pa.projectName} (${pa.projectType})]\n` +
+        `Primary Language: ${pa.primaryLanguage}\n` +
+        `Summary: ${pa.summary}\n` +
+        `Architecture: ${pa.architecture?.summary || "N/A"}\n` +
+        `Endpoints: ${(pa.apiIntelligence?.endpoints || []).map((e) => `${e.method} ${e.path} (${e.file})`).slice(0, 8).join(", ")}\n` +
+        `Database: ${pa.databaseIntelligence?.description || "N/A"}`;
+    }
 
-    // Forward to chat handler logic
-    const activeModelId = conv.model_id || "clarity-gemini";
+    const sharedFiles = Array.from(files.values()).filter((f) => !f.conversation_id && !f.project_id);
+    if (sharedFiles.length > 0 && !knowledgeContext) {
+      knowledgeContext = `\n\n[Indexed Knowledge Documents in Workspace: ${sharedFiles.map((f) => f.filename).join(", ")}]`;
+    }
+
+    const promptWithContext = knowledgeContext
+      ? `You have access to the following knowledge context:${knowledgeContext}\n\nUser Question: ${textMsg}`
+      : textMsg;
+
+    const modelConfig = resolveModelConfig(conv.model_id || user.active_model_id, user.id);
+    if (!modelConfig) {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      sendSSE({
+        error: {
+          message: "No AI model is configured. Please navigate to Models in the navigation bar to add your model.",
+          type: "no_model",
+        },
+      });
+      return res.end();
+    }
+    const activeModelId = modelConfig.id;
+    conv.model_id = activeModelId;
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
@@ -1150,11 +1387,6 @@ async function startServer() {
     const assistantMsgId = `msg_${Date.now()}_regen`;
 
     try {
-      const modelConfig = models.get(activeModelId);
-      if (!modelConfig) {
-        throw new Error(`Model configuration for '${activeModelId}' not found.`);
-      }
-
       // Build conversation history
       const history = [];
       let expectedRole = "user";
@@ -1174,29 +1406,30 @@ async function startServer() {
 
       if (modelConfig.provider === "gemini") {
         const apiKey = modelConfig.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-        if (!apiKey) throw new Error("Gemini API key is missing. Please configure it in your environment settings or the model settings.");
+        if (!apiKey) throw new Error("Gemini API key is missing. Please configure it in your model settings.");
         
-        
+        const contents = [
+          ...history,
+          {
+            role: "user",
+            parts: [{ text: promptWithContext }],
+          },
+        ];
+
         const ai = new GoogleGenAI({ apiKey });
         const responseStream = await ai.models.generateContentStream({
-          model: modelConfig.modelName || "gemini-3.6-flash",
-          contents: [
-            ...history,
-            {
-              role: "user",
-              parts: [{ text: promptWithContext }],
-            },
-          ],
+          model: modelConfig.modelName,
+          contents,
           config: {
             systemInstruction: "You are Clarity, an intelligent AI assistant grounded in the user's personal and organizational knowledge. You provide crisp, well-structured, clear, and actionable answers with code blocks and formatting where appropriate.",
           },
         });
-        
+
         for await (const chunk of responseStream) {
-          const chunkText = chunk.text || "";
-          if (chunkText) {
-            assistantText += chunkText;
-            sendSSE({ content: chunkText });
+          const text = chunk.text || "";
+          if (text) {
+            assistantText += text;
+            sendSSE({ content: text });
           }
         }
       } else {
@@ -1255,6 +1488,28 @@ async function startServer() {
         }
       }
 
+      if (assistantText) {
+        const aMsg: MessageItem = {
+          id: assistantMsgId,
+          conversation_id: cid,
+          role: "assistant",
+          content: assistantText,
+          model_id: activeModelId,
+          created_at: Date.now(),
+        };
+        messages.set(aMsg.id, aMsg);
+        try {
+          dbSaveMessage({
+            id: aMsg.id,
+            conversation_id: cid,
+            role: "assistant",
+            content: assistantText,
+            created_at: aMsg.created_at,
+          });
+        } catch (dbErr) {
+          console.error("Failed to save regenerated message to DB:", dbErr);
+        }
+      }
       res.end();
     } catch (err: any) {
       console.error("Chat regeneration error:", err);
@@ -1262,6 +1517,9 @@ async function startServer() {
       res.end();
     }
   });
+
+  // Register Full Project, File Explorer, Uploads, Diagnostics & Knowledge RAG Routes
+  registerProjectAndFileRoutes(app, projects, files, projectAnalyses, resolveUser, initialUser);
 
   // -------------------------------------------------------------------------
   // Universal File & Asset Generation Engine Endpoints (Step 3)
@@ -1271,8 +1529,36 @@ async function startServer() {
 
   app.get("/api/projects", (req, res) => {
     const user = resolveUser(req) || initialUser;
-    const userProjects = Array.from(projects.values()).filter(p => p.user_id === user.id);
-    res.json(userProjects);
+    // Always sync with SQLite database to make sure newly imported/persisted projects are visible
+    try {
+      const dbProjects = dbListProjects();
+      for (const p of dbProjects) {
+        if (!projects.has(p.id)) {
+          let meta: any = {};
+          if (p.metadata) {
+            try { meta = JSON.parse(p.metadata); } catch {}
+          }
+          projects.set(p.id, {
+            id: p.id,
+            user_id: meta.user_id || user.id,
+            name: p.name,
+            description: p.description || meta.description || "",
+            source: (p.source_type as any) || meta.source || "upload",
+            project_type: meta.project_type || undefined,
+            primary_language: meta.primary_language || undefined,
+            file_count: meta.file_count || undefined,
+            created_at: p.created_at,
+            updated_at: p.updated_at,
+            github: meta.github || undefined,
+          });
+        }
+      }
+    } catch (e) {
+      console.error("Error listing projects from DB:", e);
+    }
+    const userProjects = Array.from(projects.values()).filter(p => !p.user_id || p.user_id === user.id || user.id === initialUser.id);
+    // Return formatted response compatible with both array readers and object { projects: [] } readers
+    res.json({ projects: userProjects, success: true });
   });
 
   app.post("/api/projects", async (req, res) => {
@@ -1319,19 +1605,22 @@ async function startServer() {
     const user = resolveUser(req) || initialUser;
     
     const proj = projects.get(pid);
-    if (!proj) return res.status(404).json({ error: "Project not found" });
-    if (proj.user_id !== user.id) return res.status(403).json({ error: "Forbidden" });
+    const dbP = dbGetProject(pid);
+    if (!proj && !dbP) return res.status(404).json({ error: "Project not found" });
     
     // In-memory cleanup
-
     projects.delete(pid);
+    projectAnalyses.delete(pid);
+    for (const [id, a] of projectArtifacts.entries()) {
+      if (a.projectId === pid) {
+        projectArtifacts.delete(id);
+      }
+    }
     for (const [id, f] of files.entries()) {
       if (f.project_id === pid) {
         files.delete(id);
       }
     }
-
-    
     for (const [id, c] of conversations.entries()) {
       if (c.project_id === pid) {
         conversations.delete(id);
@@ -1343,17 +1632,22 @@ async function startServer() {
       }
     }
     
-    // Database cleanup
+    // Stop any running process
+    try {
+      stopProject(pid);
+    } catch {}
+
+    // Database and disk cleanup
     try {
       dbDeleteProject(pid);
       deleteProjectKnowledge(pid);
       dbDeleteProjectAnalysis(pid);
       deleteProjectStorage(pid); // disk storage
     } catch (e) {
-      console.error("Error cleaning up project from DB:", e);
+      console.error("Error cleaning up project from DB/disk:", e);
     }
     
-    return res.json({ deleted: true, pid });
+    return res.json({ success: true, deleted: true, pid });
   });
 
 
@@ -1363,7 +1657,7 @@ async function startServer() {
     const proj = projects.get(pid);
     if (!proj) return res.status(404).json({ error: "Project not found", type: "not_found" });
     
-    const { message } = req.body || {};
+    const { message, model_id } = req.body || {};
     const textMsg = String(message || "").trim();
     if (!textMsg) {
       return res.status(400).json({ error: "Message is required", type: "invalid_request" });
@@ -1375,6 +1669,15 @@ async function startServer() {
     const sendSSE = (payload: any) => {
       res.write(`data: ${JSON.stringify(payload)}\n\n`);
     };
+
+    const modelConfig = resolveModelConfig(model_id || user.active_model_id, user.id);
+    if (!modelConfig) {
+      sendSSE({
+        content: "No AI model is configured. Please navigate to Models in the navigation bar to add a model.",
+        done: true,
+      });
+      return res.end();
+    }
 
     let assistantResponse = "";
     try {
@@ -1401,13 +1704,17 @@ async function startServer() {
       
       if (hasGenIntent) {
         try {
+          const gemClient = modelConfig.provider === "gemini" && (modelConfig.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)
+            ? new GoogleGenAI({ apiKey: modelConfig.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY })
+            : null;
           const genResult = await executeGeneration({
             prompt: textMsg,
             projectId: pid,
             userId: proj.user_id,
             analysis,
             files: extracted as any,
-            geminiClient: getGeminiClient(),
+            geminiClient: gemClient,
+            modelName: modelConfig.modelName,
           });
           if (genResult.success && genResult.artifacts.length > 0) {
             for (const art of genResult.artifacts) {
@@ -1419,8 +1726,6 @@ async function startServer() {
             assistantResponse += planMsg;
             sendSSE({ content: planMsg });
           } else {
-             // Just plain chat with AI if no artifacts generated?
-             // Since this is project chat, let's just do a basic chat if no artifacts generated
              sendSSE({ content: "I analyzed your request, but could not generate the specific artifacts. " + genResult.message });
           }
         } catch (genErr: any) {
@@ -1428,21 +1733,59 @@ async function startServer() {
           sendSSE({ content: `\n\n[Generation Error: ${formatApiError(genErr)}]` });
         }
       } else {
-         // Standard project conversational chat using GoogleGenAI
-         const ai = getGeminiClient();
-         if (!ai) throw new Error("AI client not available.");
-         const chatRes = await ai.models.generateContentStream({
-            model: "gemini-3.6-flash",
+        if (modelConfig.provider === "gemini") {
+          const apiKey = modelConfig.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+          if (!apiKey) throw new Error("AI client not available. API key is missing.");
+          const ai = new GoogleGenAI({ apiKey });
+          const responseStream = await ai.models.generateContentStream({
+            model: modelConfig.modelName,
             contents: [{ role: "user", parts: [{ text: textMsg }] }],
             config: {
-               systemInstruction: "You are Clarity, an AI assistant analyzing a project.",
+              systemInstruction: "You are Clarity, an AI assistant analyzing a project.",
+            },
+          });
+          for await (const chunk of responseStream) {
+            const chunkText = chunk.text || "";
+            if (chunkText) {
+              sendSSE({ content: chunkText });
             }
-         });
-         for await (const chunk of chatRes) {
-            if (chunk.text) {
-               sendSSE({ content: chunk.text });
+          }
+        } else {
+          // OpenAI compatible endpoint
+          const baseUrl = modelConfig.baseUrl;
+          if (!baseUrl) throw new Error("Base URL is missing for this model.");
+          const headers: Record<string, string> = { "Content-Type": "application/json" };
+          if (modelConfig.apiKey) headers["Authorization"] = `Bearer ${modelConfig.apiKey}`;
+          const resOpenAi = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              model: modelConfig.modelName || "gpt-3.5-turbo",
+              messages: [
+                { role: "system", content: "You are Clarity, an AI assistant analyzing a project." },
+                { role: "user", content: textMsg },
+              ],
+              stream: true,
+            }),
+          });
+          if (!resOpenAi.ok) throw new Error(`HTTP ${resOpenAi.status}: ${await resOpenAi.text()}`);
+          if (resOpenAi.body) {
+            const decoder = new TextDecoder("utf-8");
+            for await (const chunk of resOpenAi.body) {
+              const decoded = decoder.decode(chunk, { stream: true });
+              const lines = decoded.split("\n");
+              for (const line of lines) {
+                if (line.trim().startsWith("data: ") && !line.includes("[DONE]")) {
+                  try {
+                    const parsed = JSON.parse(line.trim().slice(6));
+                    const token = parsed.choices?.[0]?.delta?.content || "";
+                    if (token) sendSSE({ content: token });
+                  } catch (e) {}
+                }
+              }
             }
-         }
+          }
+        }
       }
       sendSSE({ done: true, artifacts: generatedArtifacts });
       res.end();
@@ -1459,7 +1802,7 @@ async function startServer() {
     const proj = projects.get(pid);
     if (!proj) return res.status(404).json({ error: "Project not found", type: "not_found" });
 
-    const { prompt, targetFile } = req.body || {};
+    const { prompt, targetFile, model_id } = req.body || {};
     if (!prompt) return res.status(400).json({ error: "Prompt is required", type: "invalid_request" });
 
     let analysis = projectAnalyses.get(pid);
@@ -1479,6 +1822,11 @@ async function startServer() {
       projectAnalyses.set(pid, analysis);
     }
 
+    const modelConfig = resolveModelConfig(model_id || user.active_model_id, user.id);
+    const gemClient = modelConfig && modelConfig.provider === "gemini" && (modelConfig.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)
+      ? new GoogleGenAI({ apiKey: modelConfig.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY })
+      : null;
+
     try {
       const result = await executeGeneration({
         prompt: String(prompt).trim(),
@@ -1486,7 +1834,8 @@ async function startServer() {
         userId: user.id,
         analysis,
         files: extracted,
-        geminiClient: getGeminiClient(),
+        geminiClient: gemClient,
+        modelName: modelConfig?.modelName,
         targetFile,
       });
 

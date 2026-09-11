@@ -106,6 +106,30 @@ export function resolveProjectFilePath(projectId: string, relativePath: string):
   return fullPath;
 }
 
+export function writeProjectFilesBatchToDisk(
+  projectId: string,
+  filesList: Array<{ relativePath: string; content: string | Buffer }>
+): void {
+  const createdDirs = new Set<string>();
+  const projDir = resolveProjectFolder(projectId);
+  if (!fs.existsSync(projDir)) {
+    fs.mkdirSync(projDir, { recursive: true });
+    createdDirs.add(projDir);
+  }
+
+  for (const item of filesList) {
+    const fullPath = resolveProjectFilePath(projectId, item.relativePath);
+    const parentDir = path.dirname(fullPath);
+    if (!createdDirs.has(parentDir)) {
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
+      createdDirs.add(parentDir);
+    }
+    fs.writeFileSync(fullPath, item.content);
+  }
+}
+
 /**
  * Writes a file directly to physical disk inside the project's directory.
  * Automatically creates all parent directories.
@@ -246,7 +270,7 @@ export function renameProjectFileOnDisk(
  */
 export function createProjectFolderOnDisk(projectId: string, folderRelativePath: string): string {
   const sanitized = sanitizeProjectPath(folderRelativePath);
-  if (!sanitized) throw new Error("Invalid folder path");
+  if (!sanitized || sanitized === "." || sanitized === "/") return getProjectStorageDir(projectId, true);
   const fullPath = resolveProjectFilePath(projectId, sanitized);
   if (!fs.existsSync(fullPath)) {
     fs.mkdirSync(fullPath, { recursive: true });

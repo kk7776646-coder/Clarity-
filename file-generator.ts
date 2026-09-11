@@ -1087,6 +1087,7 @@ export interface GenerationParams {
   analysis: ProjectAnalysis;
   files: ExtractedFile[];
   geminiClient?: GoogleGenAI | null;
+  modelName?: string;
   targetFile?: string;
 }
 
@@ -1523,7 +1524,7 @@ async function executeCodeModification(params: GenerationParams): Promise<Genera
   if (geminiClient) {
     try {
       const resp = await geminiClient.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: params.modelName || "gemini-2.5-flash",
         contents: [
           {
             role: "user",

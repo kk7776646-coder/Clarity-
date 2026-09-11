@@ -31,7 +31,6 @@ function formatApiError(err: any): string {
 }
 import { transformSync } from "esbuild";
 import path from "path";
-import { GoogleGenAI } from "@google/genai";
 
 export interface DiagnosticIssue {
   id: string;
@@ -68,13 +67,6 @@ export interface ProjectFileContext {
   filename: string;
   content: string;
   size: number;
-}
-
-// Lazy Gemini helper
-function getGeminiClient(): GoogleGenAI | null {
-  const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  if (!key) return null;
-  return new GoogleGenAI({ apiKey: key });
 }
 
 export async function analyzeFileDiagnostics(
@@ -118,16 +110,6 @@ export async function analyzeFileDiagnostics(
   // 5. CSS Analysis
   else if ([".css", ".scss"].includes(ext)) {
     analyzeCss(targetFile, content, lines, issues);
-  }
-
-  // 6. Deep Semantic & Context Analysis via Gemini (if available)
-  // Only invoke if file is not huge (<500 lines) and API key exists
-  if (!fastMode && process.env.GEMINI_API_KEY && lines.length <= 600) {
-    try {
-      await runGeminiContextDiagnostics(targetFile, content, lang, projectFiles, issues);
-    } catch (err) {
-      console.warn("Gemini diagnostics skipped or failed:", err);
-    }
   }
 
   // Deduplicate issues by line & message
@@ -641,98 +623,3 @@ function analyzeCss(targetFile: string, content: string, lines: string[], issues
   }
 }
 
-// ---------------------------------------------------------------------------
-// 6. Gemini Contextual Intelligence (Reasoning on real bugs & corrections)
-// ---------------------------------------------------------------------------
-async function runGeminiContextDiagnostics(
-  targetFile: string,
-  content: string,
-  language: string,
-  projectFiles: ProjectFileContext[],
-  issues: DiagnosticIssue[]
-) {
-  const client = getGeminiClient();
-  if (!client) return;
-
-  const projectContext = projectFiles
-    .filter(f => f.filename !== targetFile && !f.filename.includes("node_modules"))
-    .slice(0, 8)
-    .map(f => `File: ${f.filename} (${f.size} bytes)`)
-    .join("\n");
-
-  const prompt = `You are a high-precision language server and code compiler diagnostic tool.
-Analyze the following file from a project and detect ANY real syntax errors, logic bugs, undefined references, unhandled promises, or missing dependencies.
-
-IMPORTANT RULES:
-1. ONLY report genuine, high-confidence problems. Do NOT guess or invent fake issues.
-2. If the code is valid and well-written, return an empty array [].
-3. For each real problem found, specify:
-   - line (1-based number)
-   - column (1-based number)
-   - type: "CONFIRMED ERROR", "POTENTIAL ISSUE", "WARNING", or "SUGGESTION"
-   - severity: "error", "warning", or "info"
-   - message: concise title (e.g. "Unexpected token ')'" or "Missing await before asynchronous call")
-   - explanation: clear explanation of the problem
-   - correction: exact recommended fix
-   - currentCode: the exact line or snippet with the bug
-   - suggestedCode: the replacement line with the fix applied
-
-Target File: ${targetFile}
-Language: ${language}
-Project files list:
-${projectContext}
-
-File Content:
-\`\`\`
-${content}
-\`\`\`
-
-Return a valid JSON array of objects with keys: line, column, type, severity, message, explanation, correction, currentCode, suggestedCode. Output ONLY raw JSON.`;
-
-  const response = await client.models.generateContent({
-    model: "gemini-3.6-flash",
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-    },
-  });
-
-  const text = response.text?.trim();
-  if (!text) return;
-
-  try {
-    const aiIssues = JSON.parse(text);
-    if (Array.isArray(aiIssues)) {
-      for (const item of aiIssues) {
-        if (!item.line || !item.message) continue;
-
-        // Skip if parser already found an issue on this exact line
-        const existingOnLine = issues.find(i => i.line === item.line);
-        if (existingOnLine && existingOnLine.severity === "error") continue;
-
-        let patchedContent: string | undefined;
-        if (item.suggestedCode && item.currentCode && content.includes(item.currentCode)) {
-          patchedContent = content.replace(item.currentCode, item.suggestedCode);
-        }
-
-        issues.push({
-          id: `ai_${item.line}_${issues.length + 1}`,
-          file: targetFile,
-          line: item.line,
-          column: item.column || 1,
-          type: item.type || "POTENTIAL ISSUE",
-          severity: item.severity || "warning",
-          message: item.message,
-          explanation: item.explanation || "",
-          correction: item.correction || item.suggestedCode || "",
-          currentCode: item.currentCode,
-          suggestedCode: item.suggestedCode,
-          patchedContent,
-          diff: item.currentCode && item.suggestedCode ? { before: item.currentCode, after: item.suggestedCode } : undefined,
-        });
-      }
-    }
-  } catch (err) {
-    console.warn("Failed to parse Gemini diagnostics output:", err);
-  }
-}

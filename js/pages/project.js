@@ -125,9 +125,10 @@ async function renderProjectList(main) {
   let projects = [];
   try {
     const data = await window.Clarity.api.get("/api/projects");
-    projects = data.projects || [];
+    projects = Array.isArray(data) ? data : (data?.projects || []);
   } catch (err) {
-    window.Clarity.toast.show("Failed to load projects", "danger");
+    console.error("Failed to load projects:", err);
+    window.Clarity.toast.show("Failed to load projects: " + (err.message || "Unknown error"), "danger");
   }
 
   main.innerHTML = [
@@ -161,8 +162,8 @@ async function renderProjectList(main) {
     '<div><strong style="font-size:15px;">Drop any project ZIP, folder, or files here</strong><div class="muted" style="margin-top:4px;">Universal engine automatically detects language, frameworks, architecture, and security</div></div>',
     '</div></div>',
     '<div id="uploadProgressContainer" style="display:none; margin-bottom:24px;"></div>',
-    '<section class="project-grid">',
-    projects.length === 0 ? '<div class="empty-state" style="grid-column: 1 / -1; padding:48px 24px; text-align:center;"><div style="font-size:32px; margin-bottom:12px;">📦</div><h3 style="font-size:16px; font-weight:600; margin-bottom:6px;">No projects yet</h3><p class="muted">Upload or create a project to get started.</p></div>' : '',
+    '<section class="project-grid" id="projectGridContainer">',
+    projects.length === 0 ? '<div class="empty-state" id="noProjectsEmptyState" style="grid-column: 1 / -1; padding:48px 24px; text-align:center;"><div style="font-size:32px; margin-bottom:12px;">📦</div><h3 style="font-size:16px; font-weight:600; margin-bottom:6px;">No projects yet</h3><p class="muted">Upload or create a project to get started.</p></div>' : '',
     projects.map(p => projectCardHtml(p)).join(""),
     '</section>',
     '</div></div>'
@@ -242,17 +243,22 @@ async function renderProjectList(main) {
       }
       fd.append("paths", JSON.stringify(paths));
 
-      const resp = await fetch(window.Clarity.api.base + "/api/projects/upload-files", {
-        method: "POST",
-        body: fd,
-      });
-
-      if (!resp.ok) {
-        const errJson = await resp.json().catch(() => ({}));
-        throw new Error(errJson.error || "Failed to upload and analyze project files.");
+      let resData;
+      if (window.Clarity?.api?.upload) {
+        resData = await window.Clarity.api.upload("/api/projects/upload-files", fd);
+      } else {
+        const resp = await fetch("/api/projects/upload-files", {
+          method: "POST",
+          body: fd,
+          credentials: "include",
+        });
+        const text = await resp.text();
+        try { resData = JSON.parse(text); } catch { resData = { error: text }; }
+        if (!resp.ok) {
+          throw new Error((resData && resData.error) || "Failed to upload and analyze project files.");
+        }
       }
 
-      const resData = await resp.json();
       window.Clarity.toast.show("Project created and analyzed successfully! " + (resData.filesCount || files.length) + " files indexed.", "success");
       window.location.hash = "#/project/" + resData.project.id;
     } catch (err) {
@@ -269,20 +275,43 @@ async function renderProjectList(main) {
     });
   }
 
+  // Handle Project Card Actions (Open, Ask AI, and Delete directly from project card)
   document.querySelectorAll("[data-project-action]").forEach(btn => {
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
       const id = btn.getAttribute("data-project-id");
       const action = btn.getAttribute("data-project-action");
       if (action === "open") {
         window.location.hash = "#/project/" + id;
       } else if (action === "delete") {
-        if (!confirm("Are you sure you want to delete this project and all its analyzed data?")) return;
+        if (!confirm("Are you sure you want to permanently delete this project and all its analyzed data?")) return;
         try {
           btn.disabled = true;
-          btn.textContent = "Deleting...";
+          const origHtml = btn.innerHTML;
+          btn.innerHTML = '<span class="spinner" style="width:12px; height:12px; margin-right:4px;"></span> Deleting...';
+          
           await window.Clarity.api.del("/api/projects/" + id);
           window.Clarity.toast.show("Project deleted successfully", "success");
-          await renderProjectList(main);
+          
+          // Animate card removal
+          const cardEl = document.getElementById("project-card-" + id);
+          if (cardEl) {
+            cardEl.style.transition = "opacity 0.25s ease, transform 0.25s ease";
+            cardEl.style.opacity = "0";
+            cardEl.style.transform = "scale(0.95)";
+            setTimeout(() => {
+              cardEl.remove();
+              const remaining = document.querySelectorAll(".project-card");
+              if (remaining.length === 0) {
+                const grid = document.getElementById("projectGridContainer");
+                if (grid) {
+                  grid.innerHTML = '<div class="empty-state" id="noProjectsEmptyState" style="grid-column: 1 / -1; padding:48px 24px; text-align:center;"><div style="font-size:32px; margin-bottom:12px;">📦</div><h3 style="font-size:16px; font-weight:600; margin-bottom:6px;">No projects yet</h3><p class="muted">Upload or create a project to get started.</p></div>';
+                }
+              }
+            }, 250);
+          } else {
+            await renderProjectList(main);
+          }
         } catch (err) {
           btn.disabled = false;
           btn.textContent = "Delete";
@@ -301,30 +330,34 @@ function projectCardHtml(p) {
   const lang = p.primary_language || "Codebase";
   const type = p.project_type || "Universal Project";
   const filesCount = p.file_count || 0;
+  const timeFormatted = p.updated_at ? new Date(p.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 
   const githubBadge = p.github
     ? '<span class="tag tag--xs" style="background:#24292e; color:#fff; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>' + window.Clarity.utils.escapeHtml(p.github.owner + '/' + p.github.repo) + '</span>'
     : '';
 
-  return '<article class="card project-card" style="display:flex; flex-direction:column; justify-content:space-between;">' +
+  return '<article class="card project-card" id="project-card-' + p.id + '" style="display:flex; flex-direction:column; justify-content:space-between; position:relative;">' +
     '<div class="card__body">' +
       '<div class="project-card__head" style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:8px; gap:8px;">' +
-        '<h3 style="font-size:16px; font-weight:600; color:var(--ink);">' + window.Clarity.utils.escapeHtml(p.name) + '</h3>' +
+        '<h3 style="font-size:16px; font-weight:600; color:var(--ink); cursor:pointer;" data-project-action="open" data-project-id="' + p.id + '">' + window.Clarity.utils.escapeHtml(p.name) + '</h3>' +
         '<div style="display:flex; gap:6px; flex-shrink:0;">' +
           githubBadge +
           '<span class="tag tag--xs" style="background:var(--accent-soft); color:var(--accent); font-weight:600;">' + window.Clarity.utils.escapeHtml(lang) + '</span>' +
         '</div>' +
       '</div>' +
       '<div class="muted" style="font-size:13px; margin-bottom:12px; line-height:1.4;">' + window.Clarity.utils.escapeHtml(p.description || type) + '</div>' +
-      '<div class="hstack" style="gap:12px; font-size:12px; color:var(--ink-muted); margin-bottom:16px;">' +
-        '<span>' + filesCount + ' files</span>' +
-        '<span>' + window.Clarity.utils.escapeHtml(type) + '</span>' +
-        (p.github ? '<span>' + window.Clarity.utils.escapeHtml(p.github.branch) + '</span>' : '') +
+      '<div class="hstack" style="gap:12px; font-size:12px; color:var(--ink-muted); margin-bottom:16px; flex-wrap:wrap;">' +
+        '<span>📁 ' + filesCount + ' files</span>' +
+        '<span>⚙️ ' + window.Clarity.utils.escapeHtml(type) + '</span>' +
+        (p.github ? '<span>🌿 ' + window.Clarity.utils.escapeHtml(p.github.branch) + '</span>' : '') +
+        (timeFormatted ? '<span class="muted" style="margin-left:auto;">' + timeFormatted + '</span>' : '') +
       '</div>' +
-      '<div class="hstack" style="gap:6px; margin-top:auto; pt-2; border-top:1px solid var(--line);">' +
-        '<button class="btn btn--primary btn--sm" type="button" data-project-action="open" data-project-id="' + p.id + '">View Intelligence</button>' +
-        '<button class="btn btn--outline btn--sm" type="button" data-project-action="ask" data-project-id="' + p.id + '">Ask AI</button>' +
-        '<button class="btn btn--ghost btn--sm" type="button" data-project-action="delete" data-project-id="' + p.id + '">Delete</button>' +
+      '<div class="hstack" style="gap:6px; margin-top:auto; padding-top:12px; border-top:1px solid var(--line);">' +
+        '<button class="btn btn--primary btn--sm" type="button" data-project-action="open" data-project-id="' + p.id + '" style="cursor:pointer;">View Intelligence</button>' +
+        '<button class="btn btn--outline btn--sm" type="button" data-project-action="ask" data-project-id="' + p.id + '" style="cursor:pointer;">Ask AI</button>' +
+        '<button class="btn btn--ghost btn--sm" type="button" data-project-action="delete" data-project-id="' + p.id + '" style="cursor:pointer; color:var(--danger, #dc2626); margin-left:auto;" title="Delete project">' +
+          '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete' +
+        '</button>' +
       '</div>' +
     '</div>' +
   '</article>';
@@ -543,17 +576,22 @@ async function handleZipUpload(file) {
     fd.append("file", file, file.name);
     fd.append("name", file.name.replace(/\.zip$/i, ""));
 
-    const resp = await fetch(window.Clarity.api.base + "/api/projects/upload-zip", {
-      method: "POST",
-      body: fd,
-    });
-
-    if (!resp.ok) {
-      const errJson = await resp.json().catch(() => ({}));
-      throw new Error(errJson.error || "Failed to upload and analyze project ZIP.");
+    let resData;
+    if (window.Clarity?.api?.upload) {
+      resData = await window.Clarity.api.upload("/api/projects/upload-zip", fd);
+    } else {
+      const resp = await fetch("/api/projects/upload-zip", {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      const text = await resp.text();
+      try { resData = JSON.parse(text); } catch { resData = { error: text }; }
+      if (!resp.ok) {
+        throw new Error((resData && resData.error) || "Failed to upload and analyze project ZIP.");
+      }
     }
 
-    const resData = await resp.json();
     window.Clarity.toast.show("Project analyzed successfully! " + (resData.filesCount || 0) + " files indexed.", "success");
     window.location.hash = "#/project/" + resData.project.id;
   } catch (err) {
@@ -2257,11 +2295,19 @@ function renderFilesTab(container, treeData, projectId, initialSelectPath, initi
 
     window.Clarity.toast.show("Uploading " + fileList.length + " files...", "info");
     try {
-      const res = await fetch(window.Clarity.api.base + "/api/projects/upload-files", {
-        method: "POST",
-        body: fd,
-      });
-      if (!res.ok) throw new Error("Upload failed with status " + res.status);
+      if (window.Clarity?.api?.upload) {
+        await window.Clarity.api.upload("/api/projects/upload-files", fd);
+      } else {
+        const res = await fetch("/api/projects/upload-files", {
+          method: "POST",
+          body: fd,
+          credentials: "include",
+        });
+        const text = await res.text();
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch { parsed = { error: text }; }
+        if (!res.ok) throw new Error((parsed && parsed.error) || "Upload failed with status " + res.status);
+      }
       window.Clarity.toast.show("Successfully uploaded " + fileList.length + " files!", "success");
       await refreshTree();
     } catch (err) {
@@ -2280,15 +2326,21 @@ function renderFilesTab(container, treeData, projectId, initialSelectPath, initi
 
     window.Clarity.toast.show("Extracting and merging ZIP archive...", "info");
     try {
-      const res = await fetch(window.Clarity.api.base + "/api/projects/upload-zip", {
-        method: "POST",
-        body: fd,
-      });
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || "ZIP upload failed");
+      let data;
+      if (window.Clarity?.api?.upload) {
+        data = await window.Clarity.api.upload("/api/projects/upload-zip", fd);
+      } else {
+        const res = await fetch("/api/projects/upload-zip", {
+          method: "POST",
+          body: fd,
+          credentials: "include",
+        });
+        const text = await res.text();
+        try { data = JSON.parse(text); } catch { data = { error: text }; }
+        if (!res.ok) {
+          throw new Error((data && data.error) || "ZIP upload failed");
+        }
       }
-      const data = await res.json();
       window.Clarity.toast.show("ZIP merged! " + (data.filesCount || 0) + " files updated.", "success");
       await refreshTree();
     } catch (err) {
