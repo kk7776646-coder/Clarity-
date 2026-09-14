@@ -1896,6 +1896,19 @@ ${params.textMsg}`;
   registerRagRoutes(app);
 
   // -------------------------------------------------------------------------
+  // Diagnostic Route
+  // -------------------------------------------------------------------------
+  app.get("/api/debug/routes", (req, res) => {
+    const routes = app._router.stack
+      .filter((layer: any) => layer.route)
+      .map((layer: any) => ({
+        method: Object.keys(layer.route.methods)[0].toUpperCase(),
+        path: layer.route.path,
+      }));
+    res.json(routes);
+  });
+
+  // -------------------------------------------------------------------------
   // Universal File & Asset Generation Engine Endpoints (Step 3)
   // -------------------------------------------------------------------------
   
