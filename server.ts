@@ -1057,7 +1057,12 @@ async function startServer() {
       });
       if (!syncRes.success) {
         console.error(`[MODEL TRACE] POST /api/models persistence failed: ${syncRes.error}`);
-        return res.status(500).json({ error: syncRes.error || "Failed to persist model to Supabase" });
+        return res.status(500).json({
+          error: syncRes.error || "Failed to persist model to Supabase",
+          code: syncRes.code,
+          details: syncRes.details,
+          hint: syncRes.hint,
+        });
       }
       console.log(`[MODEL TRACE] POST /api/models persistence succeeded for id=${id}`);
     } else {

@@ -500,7 +500,7 @@ export async function syncKnowledgeChunkToSupabase(chunk: {
   }
 }
 
-export async function syncModelToSupabase(model: any): Promise<{ success: boolean; error?: any }> {
+export async function syncModelToSupabase(model: any): Promise<{ success: boolean; error?: any; code?: string; details?: string; hint?: string }> {
   const client = getSupabaseAdmin();
   if (!client) {
     console.error("[MODEL TRACE] syncModelToSupabase: Supabase admin client not configured");
@@ -536,7 +536,13 @@ export async function syncModelToSupabase(model: any): Promise<{ success: boolea
     const { data, error } = await client.from("models").upsert(record).select();
     if (error) {
       console.error(`[MODEL TRACE] Model upsert error code=${error.code}, message=${error.message}, details=${error.details}, hint=${error.hint}`);
-      return { success: false, error: error.message || "Database upsert failed" };
+      return { 
+        success: false, 
+        error: error.message || "Database upsert failed", 
+        code: error.code, 
+        details: error.details, 
+        hint: error.hint 
+      };
     }
 
     console.log(`[MODEL TRACE] Model upsert successful id=${record.id}`);
