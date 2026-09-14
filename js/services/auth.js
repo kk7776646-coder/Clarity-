@@ -133,17 +133,27 @@ window.Clarity.auth = {
             <div class="robot-standing-mesh">
               <svg id="robotSvgRoot" viewBox="0 0 460 560" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" class="robot-svg">
   <defs>
-    <!-- Soft Floor Contact Shadows -->
+    <!-- Soft Black Floor Contact Shadows -->
     <radialGradient id="groundShadowL" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#0f172a" stop-opacity="0.35"/>
-      <stop offset="60%" stop-color="#0f172a" stop-opacity="0.12"/>
-      <stop offset="100%" stop-color="#0f172a" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#000000" stop-opacity="0.42"/>
+      <stop offset="40%" stop-color="#000000" stop-opacity="0.20"/>
+      <stop offset="75%" stop-color="#000000" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="groundShadowR" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#0f172a" stop-opacity="0.32"/>
-      <stop offset="60%" stop-color="#0f172a" stop-opacity="0.10"/>
-      <stop offset="100%" stop-color="#0f172a" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#000000" stop-opacity="0.38"/>
+      <stop offset="40%" stop-color="#000000" stop-opacity="0.18"/>
+      <stop offset="75%" stop-color="#000000" stop-opacity="0.04"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
     </radialGradient>
+    <radialGradient id="groundShadowAmbient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0.14"/>
+      <stop offset="55%" stop-color="#000000" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadowBlur" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.5"/>
+    </filter>
 
     <!-- 3D White Chassis & Head Shading -->
     <radialGradient id="headShading" cx="30%" cy="20%" r="80%">
@@ -289,12 +299,21 @@ window.Clarity.auth = {
     </style>
   </defs>
 
-  <!-- Ground Shadows -->
+  <!-- Soft Black Ground Contact Shadows -->
+  <g class="ground-shadows-ambient">
+    <ellipse cx="205" cy="510" rx="98" ry="15" fill="url(#groundShadowAmbient)"/>
+  </g>
   <g class="ground-shadow-left">
-    <ellipse cx="140" cy="515" rx="55" ry="14" fill="url(#groundShadowL)"/>
+    <!-- Diffuse soft black foot shadow -->
+    <ellipse cx="140" cy="515" rx="56" ry="14" fill="url(#groundShadowL)"/>
+    <!-- Direct sole contact black shadow -->
+    <ellipse cx="143" cy="514" rx="42" ry="7" fill="#000000" opacity="0.32" filter="url(#shadowBlur)"/>
   </g>
   <g class="ground-shadow-right">
-    <ellipse cx="270" cy="505" rx="46" ry="12" fill="url(#groundShadowR)"/>
+    <!-- Diffuse soft black foot shadow -->
+    <ellipse cx="266" cy="505" rx="48" ry="12" fill="url(#groundShadowR)"/>
+    <!-- Direct sole contact black shadow -->
+    <ellipse cx="264" cy="503" rx="36" ry="6" fill="#000000" opacity="0.28" filter="url(#shadowBlur)"/>
   </g>
 
   <!-- ================= 1. RIGHT LEG ================= -->
