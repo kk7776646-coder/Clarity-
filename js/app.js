@@ -289,16 +289,16 @@ if (sidebarCollapse) {
   },
 
   async navigate(route) {
-    const path = String(route || "#/chat");
-    if (path === "#/explore") {
+    const rawPath = String(route || "#/chat");
+    if (rawPath === "#/explore") {
       window.location.hash = "#/knowledge";
       return;
     }
     const main = document.getElementById("main");
     if (!main) return;
 
-    if (path.startsWith("#/chat/")) {
-      const cid = path.replace("#/chat/", "");
+    if (rawPath.startsWith("#/chat/")) {
+      const cid = rawPath.replace("#/chat/", "");
       if (cid) {
         await window.Clarity.uiChat.loadConversation(cid);
       } else {
@@ -307,15 +307,16 @@ if (sidebarCollapse) {
       return;
     }
 
+    const cleanPath = rawPath.split("?")[0].replace(/\/+$/, "");
     const page = (
-      path === "#/" || path === "#/chat" ? "chat" :
-      path === "#/home" ? "home" :
-      path === "#/knowledge" ? "knowledge" :
-      path === "#/collections" ? "collections" :
-      path === "#/history" ? "history" :
-      path === "#/settings" ? "settings" :
-      path === "#/model" ? "model" :
-      path === "#/project" || path.startsWith("#/project/") ? "project" :
+      cleanPath === "" || cleanPath === "#" || cleanPath === "#/" || cleanPath === "#/chat" ? "chat" :
+      cleanPath === "#/home" ? "home" :
+      cleanPath === "#/knowledge" ? "knowledge" :
+      cleanPath === "#/collections" ? "collections" :
+      cleanPath === "#/history" ? "history" :
+      cleanPath === "#/settings" ? "settings" :
+      cleanPath === "#/model" || cleanPath === "#/models" ? "model" :
+      cleanPath === "#/project" || cleanPath.startsWith("#/project/") ? "project" :
       "chat"
     );
 
@@ -328,7 +329,12 @@ if (sidebarCollapse) {
       }
     } else {
       const handler = window.Clarity.pages && window.Clarity.pages[page];
-      if (typeof handler === "function") await handler(path);
+      if (typeof handler === "function") {
+        console.log(`[APP ROUTER] Executing page handler '${page}' for route '${rawPath}'`);
+        await handler(rawPath);
+      } else {
+        console.warn(`[APP ROUTER] Handler for '${page}' not found on window.Clarity.pages`);
+      }
     }
 
     if (window.Clarity.uiSidebar) window.Clarity.uiSidebar.render();

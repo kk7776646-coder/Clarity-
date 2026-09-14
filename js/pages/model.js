@@ -17,7 +17,8 @@ const MODEL_PROVIDERS = [
 
 function escapeAttr(s) { return String(s ?? "").replace(/"/g, "&quot;"); }
 
-window.Clarity.pages.model = async function renderModelPage() {
+window.Clarity.pages.model = async function renderModelPage(path) {
+  console.log("[MODEL PAGE] Mount: renderModelPage invoked for path:", path);
   const main = document.getElementById("main");
   if (!main) return;
 
@@ -25,10 +26,19 @@ window.Clarity.pages.model = async function renderModelPage() {
   let activeId = null;
   let loadError = null;
   try {
+    console.log("[MODEL PAGE] Fetching GET /api/models...");
     const data = await window.Clarity.api.get("/api/models");
-    models = data.models || [];
-    activeId = data.active;
+    console.log("[MODEL PAGE] GET /api/models returned:", data);
+    models = Array.isArray(data) ? data : (data.models || []);
+    activeId = data.active || (window.Clarity.modelSelector && window.Clarity.modelSelector._active);
+    
+    // Sync modelSelector internal cache if present
+    if (window.Clarity.modelSelector) {
+      window.Clarity.modelSelector._models = models;
+      if (activeId) window.Clarity.modelSelector._active = activeId;
+    }
   } catch (err) {
+    console.error("[MODEL PAGE] Failed to load models from /api/models:", err);
     loadError = err.message || "Failed to load models";
   }
 

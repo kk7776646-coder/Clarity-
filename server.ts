@@ -385,7 +385,7 @@ const welcomeMsg: MessageItem = {
 messages.set(welcomeMsg.id, welcomeMsg);
 
 // Hydrate state from persistent SQLite database on boot
-function hydrateFromDatabase() {
+async function hydrateFromDatabase() {
   try {
     initDatabaseSchema();
     const dbProjects = dbListProjects();
@@ -470,42 +470,70 @@ function hydrateFromDatabase() {
       });
     }
 
-    // Load models from SQLite
-    const dbM = dbGetModels();
-    for (const m of dbM) {
-      if (
-        m.id === "Gemini 3.5 Flash-Lite" ||
-        m.name === "Gemini 3.5 Flash-Lite" ||
-        m.model_name === "gemini-3.5-flash-lite"
-      ) {
-        try { dbDeleteModel(m.id); } catch {}
-        continue;
+    // Load models from Supabase or SQLite
+    const supaAdmin = getSupabaseAdmin();
+    if (supaAdmin) {
+      try {
+        const { data: dbModels } = await supaAdmin.from("models").select("*");
+        if (dbModels) {
+          for (const m of dbModels) {
+            let caps = {};
+            if (m.capabilities) {
+              try { caps = typeof m.capabilities === "string" ? JSON.parse(m.capabilities) : m.capabilities; } catch {}
+            }
+            models.set(m.id, {
+              id: m.id,
+              name: m.name || m.id,
+              provider: m.provider || "custom",
+              baseUrl: m.base_url || m.baseUrl || "",
+              apiKey: m.api_secret || m.api_key || m.apiKey || "",
+              modelName: m.provider_model_id || m.model_name || m.modelName || m.id,
+              modelType: m.model_type || m.modelType || "text",
+              capabilities: caps,
+              contextWindow: Number(m.context_window ?? m.contextWindow ?? 16000),
+              maxOutputTokens: Number(m.max_output_tokens ?? m.maxOutputTokens ?? 4096),
+              defaultTemperature: Number(m.temperature ?? m.default_temperature ?? m.defaultTemperature ?? 0.7),
+              defaultTopP: Number(m.top_p ?? m.default_top_p ?? m.defaultTopP ?? 1.0),
+              supportsStreaming: m.supports_streaming !== undefined ? Boolean(m.supports_streaming) : true,
+              enabled: m.enabled !== undefined ? Boolean(m.enabled) : true,
+              status: m.status || "available",
+              isUser: Boolean(m.is_user ?? m.isUser ?? true),
+              user_id: m.user_id,
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load models from Supabase at startup:", e);
       }
-      let caps = {};
-      if (m.capabilities) {
-        try { caps = typeof m.capabilities === "string" ? JSON.parse(m.capabilities) : m.capabilities; } catch {}
+    } else {
+      const dbM = dbGetModels();
+      for (const m of dbM) {
+        let caps = {};
+        if (m.capabilities) {
+          try { caps = typeof m.capabilities === "string" ? JSON.parse(m.capabilities) : m.capabilities; } catch {}
+        }
+        models.set(m.id, {
+          id: m.id,
+          name: m.name,
+          provider: m.provider,
+          baseUrl: m.base_url,
+          apiKey: m.api_key,
+          modelName: m.model_name,
+          modelType: m.model_type,
+          capabilities: caps,
+          contextWindow: m.context_window,
+          maxOutputTokens: m.max_output_tokens,
+          defaultTemperature: m.default_temperature,
+          defaultTopP: m.default_top_p,
+          supportsStreaming: Boolean(m.supports_streaming),
+          enabled: Boolean(m.enabled),
+          status: m.status,
+          isUser: Boolean(m.is_user),
+          user_id: m.user_id,
+        });
       }
-      models.set(m.id, {
-        id: m.id,
-        name: m.name,
-        provider: m.provider,
-        baseUrl: m.base_url,
-        apiKey: m.api_key,
-        modelName: m.model_name,
-        modelType: m.model_type,
-        capabilities: caps,
-        contextWindow: m.context_window,
-        maxOutputTokens: m.max_output_tokens,
-        defaultTemperature: m.default_temperature,
-        defaultTopP: m.default_top_p,
-        supportsStreaming: Boolean(m.supports_streaming),
-        enabled: Boolean(m.enabled),
-        status: m.status,
-        isUser: Boolean(m.is_user),
-      });
     }
 
-    // Ensure default Gemini model is seeded if database has no models
     // Load conversations & messages
     const convs = dbListConversations(initialUser.id);
     if (convs.length > 0) {
@@ -541,11 +569,7 @@ function hydrateFromDatabase() {
     const dbUsersList = dbListUsers();
     if (dbUsersList.length > 0) {
       for (const u of dbUsersList) {
-        let activeModel = u.active_model_id;
-        if (!activeModel || activeModel === "Gemini 3.5 Flash-Lite" || !models.has(activeModel)) {
-          activeModel = "clarity-gemini";
-          try { dbSaveUser({ ...u, active_model_id: activeModel }); } catch {}
-        }
+        let activeModel = u.active_model_id || "";
         users.set(u.id, {
           id: u.id,
           email: u.email,
@@ -910,25 +934,88 @@ async function startServer() {
   // -------------------------------------------------------------------------
   // Models API
   // -------------------------------------------------------------------------
-  app.get("/api/models", (req, res) => {
+  app.get("/api/models", async (req, res) => {
     const user = resolveUser(req);
     if (!user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
     
+    const client = getSupabaseAdmin();
+    if (client) {
+      let rows: any[] | null = null;
+      let dbError: any = null;
+      
+      try {
+        const resOr = await client.from("models").select("*").or(`user_id.eq.${user.id},user_id.eq.user_default,user_id.is.null`);
+        if (!resOr.error && resOr.data) {
+          rows = resOr.data;
+        } else {
+          dbError = resOr.error;
+        }
+      } catch (e) {
+        dbError = e;
+      }
+
+      if (!rows) {
+        const resEq = await client.from("models").select("*").eq("user_id", user.id);
+        if (resEq.error) {
+          console.error("GET /api/models Supabase error:", resEq.error || dbError);
+          return res.status(500).json({ error: resEq.error?.message || "Failed to query Supabase models" });
+        }
+        rows = resEq.data || [];
+      }
+
+      const mappedList = (rows || []).map((row: any) => {
+        let caps = {};
+        if (row.capabilities) {
+          try { caps = typeof row.capabilities === "string" ? JSON.parse(row.capabilities) : row.capabilities; } catch {}
+        }
+        const item: ModelItem = {
+          id: row.id,
+          name: row.name || row.id,
+          provider: row.provider || "custom",
+          baseUrl: row.base_url || row.baseUrl || "",
+          apiKey: row.api_secret || row.api_key || row.apiKey || "",
+          modelName: row.provider_model_id || row.model_name || row.modelName || row.id,
+          modelType: row.model_type || row.modelType || "text",
+          capabilities: caps as any,
+          contextWindow: Number(row.context_window ?? row.contextWindow ?? 16000),
+          maxOutputTokens: Number(row.max_output_tokens ?? row.maxOutputTokens ?? 4096),
+          defaultTemperature: Number(row.temperature ?? row.default_temperature ?? row.defaultTemperature ?? 0.7),
+          defaultTopP: Number(row.top_p ?? row.default_top_p ?? row.defaultTopP ?? 1.0),
+          supportsStreaming: row.supports_streaming !== undefined ? Boolean(row.supports_streaming) : true,
+          enabled: row.enabled !== undefined ? Boolean(row.enabled) : true,
+          status: row.status || "available",
+          isUser: Boolean(row.is_user ?? row.isUser ?? true),
+          user_id: user.id,
+        };
+        models.set(item.id, item);
+        const pub = publicModel(item);
+        return {
+          ...pub,
+          is_active: pub.id === user.active_model_id,
+        };
+      });
+
+      // Merge in any active models in memory for this user if not already present
+      for (const [id, item] of models.entries()) {
+        if ((item.user_id === user.id || item.user_id === "user_default") && !mappedList.some(m => m.id === id)) {
+          const pub = publicModel(item);
+          mappedList.push({
+            ...pub,
+            is_active: pub.id === user.active_model_id,
+          });
+        }
+      }
+
+      return res.json({ models: mappedList, active: user.active_model_id || "" });
+    }
+    
     // Refresh models map from SQLite database to guarantee consistency
     try {
-      const dbM = dbGetModels();
+      const dbM = dbGetModels(user.id);
       models.clear();
       for (const m of dbM) {
-        if (
-          m.id === "Gemini 3.5 Flash-Lite" ||
-          m.name === "Gemini 3.5 Flash-Lite" ||
-          m.model_name === "gemini-3.5-flash-lite"
-        ) {
-          try { dbDeleteModel(m.id); } catch {}
-          continue;
-        }
         let caps = {};
         if (m.capabilities) {
           try { caps = typeof m.capabilities === "string" ? JSON.parse(m.capabilities) : m.capabilities; } catch {}
@@ -950,6 +1037,7 @@ async function startServer() {
           enabled: Boolean(m.enabled),
           status: m.status,
           isUser: Boolean(m.is_user),
+          user_id: user.id,
         });
       }
     } catch (e) {
@@ -973,12 +1061,18 @@ async function startServer() {
     res.json({ models: list, active });
   });
 
-  app.post("/api/models", (req, res) => {
+  app.post("/api/models", async (req, res) => {
+    const user = resolveUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
     const body = req.body || {};
     const id = String(body.id || `custom_${Date.now()}`).trim();
     if (models.has(id)) {
       return res.status(409).json({ error: `Model '${id}' already exists`, type: "duplicate_model" });
     }
+    
     const newModel: ModelItem = {
       id,
       name: String(body.name || id).trim(),
@@ -1003,9 +1097,24 @@ async function startServer() {
       enabled: body.enabled !== false,
       status: "available",
       isUser: true,
+      user_id: user.id,
     };
+    
+    const client = getSupabaseAdmin();
+    if (client) {
+      const syncRes = await syncModelToSupabase({
+        ...newModel,
+        user_id: user.id,
+        created_at: Date.now(),
+        updated_at: Date.now(),
+      });
+      if (!syncRes.success) {
+        return res.status(500).json({ error: syncRes.error || "Failed to persist model to Supabase" });
+      }
+    } else {
+      try { dbSaveModel(newModel); } catch(err) { console.error(err); }
+    }
     models.set(id, newModel);
-    try { dbSaveModel(newModel); } catch(err) { console.error(err); }
     res.status(201).json(publicModel(newModel));
   });
 
@@ -1015,27 +1124,38 @@ async function startServer() {
     res.json(publicModel(m));
   });
 
-  app.put("/api/models/:id", (req, res) => {
+  app.put("/api/models/:id", async (req, res) => {
+    const user = resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
     const id = req.params.id;
-    const existing = models.get(id);
-    if (!existing) return res.status(404).json({ error: "Model not found", type: "model_not_found" });
+    const client = getSupabaseAdmin();
+    let existing: any;
+
+    if (client) {
+      const { data, error } = await client.from("models").select("*").eq("id", id).eq("user_id", user.id).single();
+      if (error) return res.status(404).json({ error: "Model not found or unauthorized" });
+      existing = data;
+    } else {
+      const m = models.get(id);
+      if (!m) return res.status(404).json({ error: "Model not found" });
+      if (m.user_id !== user.id) return res.status(403).json({ error: "Forbidden" });
+      existing = m;
+    }
 
     const body = req.body || {};
     const submittedKey = String(body.apiKey || "").trim();
     const keepOldKey = !submittedKey || submittedKey.includes("•");
 
-    const updated: ModelItem = {
+    const updated = {
       ...existing,
       name: String(body.name || existing.name).trim(),
       provider: String(body.provider || existing.provider).toLowerCase(),
-      baseUrl: String(body.baseUrl !== undefined ? body.baseUrl : existing.baseUrl).trim(),
-      apiKey: keepOldKey ? existing.apiKey : submittedKey,
-      modelName: String(body.modelName || existing.modelName).trim(),
+      baseUrl: String(body.baseUrl !== undefined ? body.baseUrl : (existing.baseUrl || "")).trim(),
+      apiKey: keepOldKey ? (existing.api_secret || existing.apiKey) : submittedKey,
+      modelName: String(body.modelName || (existing.modelName || existing.provider_model_id)).trim(),
       modelType: String(body.modelType || existing.modelType),
-      capabilities: {
-        ...existing.capabilities,
-        ...(body.capabilities || {}),
-      },
+      capabilities: typeof existing.capabilities === 'string' ? existing.capabilities : JSON.stringify(existing.capabilities || {}),
       contextWindow: Number(body.contextWindow || existing.contextWindow),
       maxOutputTokens: Number(body.maxOutputTokens || existing.maxOutputTokens),
       defaultTemperature: Number(body.defaultTemperature ?? existing.defaultTemperature),
@@ -1043,23 +1163,54 @@ async function startServer() {
       supportsStreaming: body.supportsStreaming !== false,
       enabled: body.enabled !== false,
       status: "available",
+      updated_at: Date.now(),
     };
-    models.set(id, updated);
-    try { dbSaveModel(updated); } catch(err) { console.error(err); }
+
+    if (client) {
+        await syncModelToSupabase({
+            ...updated,
+            user_id: user.id,
+            api_secret: updated.apiKey,
+            provider_model_id: updated.modelName,
+            created_at: existing.created_at || Date.now(),
+        });
+        models.set(id, updated);
+    } else {
+        models.set(id, updated);
+        try { dbSaveModel(updated); } catch(err) { console.error(err); }
+    }
     res.json(publicModel(updated));
   });
 
-  app.delete("/api/models/:id", (req, res) => {
+  app.delete("/api/models/:id", async (req, res) => {
+    const user = resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
     const id = req.params.id;
+    const client = getSupabaseAdmin();
+
+    if (client) {
+      const { error } = await client.from("models").delete().eq("id", id).eq("user_id", user.id);
+      if (error) return res.status(500).json({ error: error.message });
+      models.delete(id);
+      if (user.active_model_id === id) {
+        user.active_model_id = "";
+        await client.from("users").update({ active_model_id: "" }).eq("id", user.id);
+      }
+      return res.json({ deleted: true, id });
+    }
+
     if (models.has(id)) {
+      const m = models.get(id);
+      if (m && m.user_id && m.user_id !== user.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
       models.delete(id);
       try {
         dbDeleteModel(id);
-        for (const u of users.values()) {
-          if (u.active_model_id === id) {
-            u.active_model_id = Array.from(models.keys())[0] || "";
-            dbSaveUser(u);
-          }
+        if (user.active_model_id === id) {
+          user.active_model_id = "";
+          dbSaveUser(user);
         }
       } catch (err) {
         console.error("Error deleting model:", err);
@@ -1088,18 +1239,24 @@ async function startServer() {
     return String(m.baseUrl || "").trim();
   }
 
-  app.post("/api/models/set-active", (req, res) => {
+  app.post("/api/models/set-active", async (req, res) => {
     const user = resolveUser(req);
     if (!user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
     const { model_id } = req.body || {};
-    if (!model_id || !models.has(model_id)) {
-      return res.status(404).json({ error: `Model '${model_id}' not found`, type: "model_not_found" });
+    const targetModelId = String(model_id || "").trim();
+    user.active_model_id = targetModelId;
+    
+    const client = getSupabaseAdmin();
+    if (client) {
+      await client.from("users").update({ active_model_id: targetModelId }).eq("id", user.id);
+    } else {
+      try { dbSaveUser(user); } catch {}
     }
-    user.active_model_id = model_id;
-    try { dbSaveUser(user); } catch {}
-    res.json({ ok: true, active: model_id, model: publicModel(models.get(model_id)!) });
+    
+    const m = models.get(targetModelId) || null;
+    res.json({ ok: true, active: targetModelId, model: m ? publicModel(m) : null });
   });
 
   app.post("/api/models/test", async (req, res) => {

@@ -475,9 +475,14 @@ export function initDatabaseSchema() {
         supports_streaming INTEGER DEFAULT 1,
         enabled INTEGER DEFAULT 1,
         status TEXT,
-        is_user INTEGER DEFAULT 0
+        is_user INTEGER DEFAULT 0,
+        user_id TEXT
       );
     `);
+    try {
+      db.exec(`ALTER TABLE models ADD COLUMN user_id TEXT`);
+    } catch (e) {}
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_models_user_id ON models(user_id);`);
 
     // 17. Visual Assets
     db.exec(`
@@ -1652,8 +1657,8 @@ export function getGithubConnection(projectId: string) {
 // Initialize schema on load
 initDatabaseSchema();
 
-export function dbGetModels(): any[] {
-  return db.prepare("SELECT * FROM models").all();
+export function dbGetModels(userId: string): any[] {
+  return db.prepare("SELECT * FROM models WHERE user_id = ?").all(userId);
 }
 
 export function dbGetModel(id: string): any {
@@ -1662,9 +1667,10 @@ export function dbGetModel(id: string): any {
 
 export function dbSaveModel(model: any) {
   const stmt = db.prepare(`
-    INSERT INTO models (id, name, provider, base_url, api_key, model_name, model_type, capabilities, context_window, max_output_tokens, default_temperature, default_top_p, supports_streaming, enabled, status, is_user)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO models (id, user_id, name, provider, base_url, api_key, model_name, model_type, capabilities, context_window, max_output_tokens, default_temperature, default_top_p, supports_streaming, enabled, status, is_user)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
+      user_id = excluded.user_id,
       name = excluded.name,
       provider = excluded.provider,
       base_url = excluded.base_url,
@@ -1683,7 +1689,7 @@ export function dbSaveModel(model: any) {
   `);
   
   ((...args) => { try { return stmt.run(...args); } catch(e) { console.error("SQL ERROR in:", stmt.source, "\nARGS:", args); throw e; } })(
-    model.id, model.name, model.provider, model.baseUrl || model.base_url || null, model.apiKey || model.api_key || null,
+    model.id, model.user_id || "user_default", model.name, model.provider, model.baseUrl || model.base_url || null, model.apiKey || model.api_key || null,
     model.modelName || model.model_name || "", model.modelType || model.model_type || "text",
     typeof model.capabilities === 'string' ? model.capabilities : JSON.stringify(model.capabilities || {}),
     model.contextWindow || model.context_window || 0, model.maxOutputTokens || model.max_output_tokens || 0,

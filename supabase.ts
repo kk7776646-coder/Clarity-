@@ -490,6 +490,55 @@ export async function syncKnowledgeChunkToSupabase(chunk: {
   }
 }
 
+export async function syncModelToSupabase(model: any): Promise<{ success: boolean; error?: any }> {
+  const client = getSupabaseAdmin();
+  if (!client) return { success: false, error: "Supabase client not configured" };
+  try {
+    let capsStr = "{}";
+    if (model.capabilities) {
+      capsStr = typeof model.capabilities === 'string' ? model.capabilities : JSON.stringify(model.capabilities);
+    }
+    const record = {
+      id: model.id,
+      user_id: model.user_id || model.userId || "user_default",
+      name: model.name || model.id,
+      provider: model.provider || "custom",
+      provider_model_id: model.modelName || model.provider_model_id || model.model_name || model.id,
+      capabilities: capsStr,
+      context_window: Number(model.contextWindow ?? model.context_window ?? 16000),
+      max_output_tokens: Number(model.maxOutputTokens ?? model.max_output_tokens ?? 4096),
+      temperature: Number(model.defaultTemperature ?? model.temperature ?? model.default_temperature ?? 0.7),
+      top_p: Number(model.defaultTopP ?? model.top_p ?? model.default_top_p ?? 1.0),
+      base_url: model.baseUrl || model.base_url || "",
+      api_secret: model.apiKey || model.api_secret || model.api_key || "",
+      enabled: model.enabled !== false ? 1 : 0,
+      status: model.status || "available",
+      is_user: model.isUser || model.is_user ? 1 : 0,
+      created_at: model.created_at || Date.now(),
+      updated_at: model.updated_at || Date.now(),
+    };
+    const { error } = await client.from("models").upsert(record);
+    if (error) {
+      console.error("[Supabase Sync] Model upsert error:", error);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.error("[Supabase Sync] Model upsert exception:", err);
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
+export async function deleteModelFromSupabase(modelId: string) {
+  const client = getSupabaseAdmin();
+  if (!client) return;
+  try {
+    await client.from("models").delete().eq("id", modelId);
+  } catch (err) {
+    console.warn("[Supabase Sync] Model delete error:", err);
+  }
+}
+
 export async function syncUserToSupabase(user: {
   id: string;
   email: string;
