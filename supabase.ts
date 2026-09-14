@@ -500,6 +500,39 @@ export async function syncKnowledgeChunkToSupabase(chunk: {
   }
 }
 
+export async function ensureStorageBuckets(): Promise<void> {
+  const client = getSupabaseAdmin();
+  if (!client) return;
+  try {
+    const { data: buckets } = await client.storage.listBuckets();
+    const existingNames = new Set((buckets || []).map((b) => b.name));
+    const required = [
+      "projects",
+      "project-files",
+      "rag-documents",
+      "artifacts",
+      "clarity-project-files",
+      "clarity-rag-documents",
+      "clarity-artifacts",
+      "clarity-exports",
+    ];
+    for (const bucketName of required) {
+      if (!existingNames.has(bucketName)) {
+        try {
+          await client.storage.createBucket(bucketName, { public: false });
+          console.log(`[Supabase Storage] Created bucket: ${bucketName}`);
+        } catch (err: any) {
+          if (!err?.message?.includes("already exists")) {
+            console.warn(`[Supabase Storage] Notice creating bucket ${bucketName}:`, err?.message || err);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[Supabase Storage] Bucket check notice:", err);
+  }
+}
+
 export async function syncModelToSupabase(model: any): Promise<{ success: boolean; error?: any; code?: string; details?: string; hint?: string }> {
   const client = getSupabaseAdmin();
   if (!client) {
@@ -511,9 +544,14 @@ export async function syncModelToSupabase(model: any): Promise<{ success: boolea
     if (model.capabilities) {
       capsStr = typeof model.capabilities === 'string' ? model.capabilities : JSON.stringify(model.capabilities);
     }
+    const uid = model.user_id || model.userId;
+    if (!uid) {
+      return { success: false, error: "User ID is required to persist model" };
+    }
+    const recordId = model.id.includes(":::") ? model.id : `${uid}:::${model.id}`;
     const record = {
-      id: model.id,
-      user_id: model.user_id || model.userId || "user_default",
+      id: recordId,
+      user_id: uid,
       name: model.name || model.id,
       provider: model.provider || "custom",
       provider_model_id: model.modelName || model.provider_model_id || model.model_name || model.id,
@@ -533,7 +571,12 @@ export async function syncModelToSupabase(model: any): Promise<{ success: boolea
 
     console.log(`[MODEL TRACE] UPSERTing model id=${record.id}, user_id=${record.user_id}, provider=${record.provider}, provider_model_id=${record.provider_model_id}, hasApiKey=${Boolean(record.api_secret)}`);
 
-    const { data, error } = await client.from("models").upsert(record).select();
+    let { data, error } = await client.from("models").upsert(record, { onConflict: "id" }).select();
+    if (error && (error.message?.includes("constraint") || error.code === "42P10")) {
+      const res2 = await client.from("models").upsert(record, { onConflict: "user_id,id" }).select();
+      error = res2.error;
+      data = res2.data;
+    }
     if (error) {
       console.error(`[MODEL TRACE] Model upsert error code=${error.code}, message=${error.message}, details=${error.details}, hint=${error.hint}`);
       return { 
@@ -545,7 +588,7 @@ export async function syncModelToSupabase(model: any): Promise<{ success: boolea
       };
     }
 
-    console.log(`[MODEL TRACE] Model upsert successful id=${record.id}`);
+    console.log(`[MODEL TRACE] Model upsert successful id=${record.id}, user_id=${record.user_id}`);
     return { success: true };
   } catch (err: any) {
     console.error("[MODEL TRACE] Model upsert exception:", err?.message || err);
@@ -553,11 +596,19 @@ export async function syncModelToSupabase(model: any): Promise<{ success: boolea
   }
 }
 
-export async function deleteModelFromSupabase(modelId: string) {
+export async function deleteModelFromSupabase(modelId: string, userId?: string) {
   const client = getSupabaseAdmin();
   if (!client) return;
   try {
-    await client.from("models").delete().eq("id", modelId);
+    const idsToDelete = [modelId];
+    if (userId && !modelId.includes(":::")) {
+      idsToDelete.push(`${userId}:::${modelId}`);
+    }
+    let query = client.from("models").delete().in("id", idsToDelete);
+    if (userId) {
+      query = query.eq("user_id", userId);
+    }
+    await query;
   } catch (err) {
     console.warn("[Supabase Sync] Model delete error:", err);
   }

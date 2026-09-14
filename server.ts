@@ -37,6 +37,7 @@ import {
   initDatabaseSchema,
   createProject as dbCreateProject,
   dbGetModels,
+  dbGetModel,
   dbSaveModel,
   dbDeleteModel,
   dbSaveUser,
@@ -236,8 +237,15 @@ export function verifyPassword(password: string, storedHash: string): boolean {
     const [salt, key] = storedHash.split(":");
     const keyBuffer = Buffer.from(key, "hex");
     const derivedKey = crypto.scryptSync(password, salt, 64);
-    return crypto.timingSafeEqual(keyBuffer, derivedKey);
-  } catch {
+    const match = crypto.timingSafeEqual(keyBuffer, derivedKey);
+    if (!match) {
+      console.log(`[AUTH] Password verification failed`);
+    } else {
+      console.log(`[AUTH] Password verification succeeded`);
+    }
+    return match;
+  } catch (e) {
+    console.error("[AUTH] Password verification error");
     return false;
   }
 }
@@ -298,23 +306,97 @@ const initialUser: User = {
 const users = new Map<string, User>([[initialUser.id, initialUser]]);
 const sessions = new Map<string, string>([["default_token", initialUser.id]]);
 
-// Active models in memory (loaded from SQLite database)
+// User-isolated in-memory models store
+// Storage key is composite `${userId}:::${modelId}`
+export const userModelKey = (userId: string, modelId: string) => `${userId || "user_default"}:::${modelId}`;
 const models = new Map<string, ModelItem>();
 
-// Safe model resolver that matches ID, name, or returns active user-configured model (or null if none)
-export function resolveModelConfig(requestedModelId?: string | null, userId?: string | null): ModelItem | null {
-  if (requestedModelId) {
-    // 1. Direct match by exact ID
-    if (models.has(requestedModelId)) {
-      return models.get(requestedModelId)!;
+export function getUserModel(userId: string, modelId: string): ModelItem | null {
+  if (!userId || !modelId) return null;
+  return models.get(userModelKey(userId, modelId)) || null;
+}
+
+export function hasUserModel(userId: string, modelId: string): boolean {
+  if (!userId || !modelId) return false;
+  return models.has(userModelKey(userId, modelId));
+}
+
+export function setUserModel(userId: string, item: ModelItem): void {
+  const uid = userId || item.user_id || "user_default";
+  item.user_id = uid;
+  models.set(userModelKey(uid, item.id), item);
+}
+
+export function deleteUserModel(userId: string, modelId: string): boolean {
+  if (!userId || !modelId) return false;
+  return models.delete(userModelKey(userId, modelId));
+}
+
+export function listUserModels(userId: string): ModelItem[] {
+  if (!userId) return [];
+  const list: ModelItem[] = [];
+  for (const [key, val] of models.entries()) {
+    if (val.user_id === userId || key.startsWith(`${userId}:::`)) {
+      list.push(val);
     }
-    // 2. Case-insensitive match on ID, name, or modelName
+  }
+  return list;
+}
+
+// Helper to convert database row to ModelItem
+export function mapDbRowToModelItem(row: any, fallbackUserId: string): ModelItem {
+  let caps = {};
+  if (row.capabilities) {
+    try {
+      caps = typeof row.capabilities === "string" ? JSON.parse(row.capabilities) : row.capabilities;
+    } catch {}
+  }
+  return {
+    id: row.id,
+    name: row.name || row.id,
+    provider: row.provider || "custom",
+    baseUrl: row.base_url || row.baseUrl || "",
+    apiKey: row.api_secret || row.api_key || row.apiKey || "",
+    modelName: row.provider_model_id || row.model_name || row.modelName || row.id,
+    modelType: row.model_type || row.modelType || "text",
+    capabilities: caps as any,
+    contextWindow: Number(row.context_window ?? row.contextWindow ?? 16000),
+    maxOutputTokens: Number(row.max_output_tokens ?? row.maxOutputTokens ?? 4096),
+    defaultTemperature: Number(row.temperature ?? row.default_temperature ?? row.defaultTemperature ?? 0.7),
+    defaultTopP: Number(row.top_p ?? row.default_top_p ?? row.defaultTopP ?? 1.0),
+    supportsStreaming: row.supports_streaming !== undefined ? Boolean(row.supports_streaming) : true,
+    enabled: row.enabled !== undefined ? Boolean(row.enabled) : true,
+    status: row.status || "available",
+    isUser: Boolean(row.is_user ?? row.isUser ?? true),
+    user_id: row.user_id || fallbackUserId,
+  };
+}
+
+// Strict user-isolated model resolver that returns active user-configured model (or null if none)
+export function resolveModelConfig(requestedModelId?: string | null, userId?: string | null): ModelItem | null {
+  if (!userId) {
+    return null;
+  }
+
+  const userModels = listUserModels(userId);
+  if (userModels.length === 0) {
+    return null;
+  }
+
+  if (requestedModelId) {
+    // 1. Direct match by exact ID for this user
+    const exact = getUserModel(userId, requestedModelId);
+    if (exact && exact.enabled) {
+      return exact;
+    }
+    // 2. Case-insensitive match on ID, name, or modelName strictly within this user's models
     const norm = requestedModelId.toLowerCase().trim();
-    for (const m of models.values()) {
+    for (const m of userModels) {
       if (
-        m.id.toLowerCase() === norm ||
-        m.name.toLowerCase() === norm ||
-        m.modelName.toLowerCase() === norm
+        (m.id.toLowerCase() === norm ||
+         m.name.toLowerCase() === norm ||
+         m.modelName.toLowerCase() === norm) &&
+        m.enabled
       ) {
         return m;
       }
@@ -322,17 +404,20 @@ export function resolveModelConfig(requestedModelId?: string | null, userId?: st
   }
 
   // Check user active model
-  if (userId && users.has(userId)) {
-    const u = users.get(userId)!;
-    if (u.active_model_id && models.has(u.active_model_id)) {
-      return models.get(u.active_model_id)!;
+  const u = users.get(userId);
+  if (u && u.active_model_id) {
+    const active = getUserModel(userId, u.active_model_id);
+    if (active && active.enabled) {
+      return active;
     }
   }
 
-  // Fallback: First enabled model configured by user
-  const enabledModel = Array.from(models.values()).find((m) => m.enabled) || Array.from(models.values())[0];
+  // Fallback: First enabled model configured by THIS user
+  const enabledModel = userModels.find((m) => m.enabled);
   if (enabledModel) return enabledModel;
 
+  // STRICT REQUIREMENT: Zero configured or enabled models for this user -> return null.
+  // NO FALLBACK to other users, NO fallback to global maps, NO fallback to developer models.
   return null;
 }
 const conversations = new Map<string, ConversationItem>();
@@ -478,29 +563,8 @@ async function hydrateFromDatabase() {
         const { data: dbModels } = await supaAdmin.from("models").select("*");
         if (dbModels) {
           for (const m of dbModels) {
-            let caps = {};
-            if (m.capabilities) {
-              try { caps = typeof m.capabilities === "string" ? JSON.parse(m.capabilities) : m.capabilities; } catch {}
-            }
-            models.set(m.id, {
-              id: m.id,
-              name: m.name || m.id,
-              provider: m.provider || "custom",
-              baseUrl: m.base_url || m.baseUrl || "",
-              apiKey: m.api_secret || m.api_key || m.apiKey || "",
-              modelName: m.provider_model_id || m.model_name || m.modelName || m.id,
-              modelType: m.model_type || m.modelType || "text",
-              capabilities: caps,
-              contextWindow: Number(m.context_window ?? m.contextWindow ?? 16000),
-              maxOutputTokens: Number(m.max_output_tokens ?? m.maxOutputTokens ?? 4096),
-              defaultTemperature: Number(m.temperature ?? m.default_temperature ?? m.defaultTemperature ?? 0.7),
-              defaultTopP: Number(m.top_p ?? m.default_top_p ?? m.defaultTopP ?? 1.0),
-              supportsStreaming: m.supports_streaming !== undefined ? Boolean(m.supports_streaming) : true,
-              enabled: m.enabled !== undefined ? Boolean(m.enabled) : true,
-              status: m.status || "available",
-              isUser: Boolean(m.is_user ?? m.isUser ?? true),
-              user_id: m.user_id,
-            });
+            const item = mapDbRowToModelItem(m, m.user_id || "user_default");
+            setUserModel(item.user_id, item);
           }
         }
       } catch (e) {
@@ -509,29 +573,8 @@ async function hydrateFromDatabase() {
     } else {
       const dbM = dbGetModels();
       for (const m of dbM) {
-        let caps = {};
-        if (m.capabilities) {
-          try { caps = typeof m.capabilities === "string" ? JSON.parse(m.capabilities) : m.capabilities; } catch {}
-        }
-        models.set(m.id, {
-          id: m.id,
-          name: m.name,
-          provider: m.provider,
-          baseUrl: m.base_url,
-          apiKey: m.api_key,
-          modelName: m.model_name,
-          modelType: m.model_type,
-          capabilities: caps,
-          contextWindow: m.context_window,
-          maxOutputTokens: m.max_output_tokens,
-          defaultTemperature: m.default_temperature,
-          defaultTopP: m.default_top_p,
-          supportsStreaming: Boolean(m.supports_streaming),
-          enabled: Boolean(m.enabled),
-          status: m.status,
-          isUser: Boolean(m.is_user),
-          user_id: m.user_id,
-        });
+        const item = mapDbRowToModelItem(m, m.user_id || "user_default");
+        setUserModel(item.user_id, item);
       }
     }
 
@@ -833,6 +876,7 @@ async function startServer() {
   });
 
   app.post("/api/auth/signup", (req, res) => {
+    console.log("[AUTH] Signup started");
     const { email, password, name } = req.body || {};
     if (!email || !password) {
       return res.status(400).json({ error: "Email and password are required" });
@@ -849,12 +893,13 @@ async function startServer() {
 
     const id = `user_${Date.now()}`;
     const hashedPassword = hashPassword(String(password));
+    console.log("[AUTH] Signup user created");
     const newUser: User = {
       id,
       email: cleanEmail,
       name: String(name || cleanEmail.split("@")[0]).trim(),
       password: hashedPassword,
-      active_model_id: Array.from(models.keys())[0] || "",
+      active_model_id: "",
       created_at: Date.now(),
     };
 
@@ -876,6 +921,7 @@ async function startServer() {
   });
 
   app.post("/api/auth/login", (req, res) => {
+    console.log("[AUTH] Login started");
     const { email, password } = req.body || {};
     if (!email || !password) {
       return res.status(400).json({ error: "Email and password are required" });
@@ -901,6 +947,7 @@ async function startServer() {
           created_at: dbU.created_at,
         };
         users.set(matched.id, matched);
+        console.log("[AUTH] Login user lookup succeeded");
       }
     }
 
@@ -912,6 +959,7 @@ async function startServer() {
     const expiresAt = Date.now() + 30 * 24 * 3600 * 1000;
     dbSaveSession(token, matched.id, expiresAt);
     sessions.set(token, matched.id);
+    console.log("[AUTH] Session created");
 
     res.cookie(SESSION_COOKIE, token, {
       httpOnly: true,
@@ -923,7 +971,10 @@ async function startServer() {
   });
 
   app.post("/api/auth/logout", (req, res) => {
-    const token = req.cookies?.[SESSION_COOKIE];
+    let token = req.cookies?.[SESSION_COOKIE];
+    if (!token && req.headers.authorization?.startsWith("Bearer ")) {
+      token = req.headers.authorization.substring(7).trim();
+    }
     if (token) {
       sessions.delete(token);
       dbDeleteSession(token);
@@ -937,58 +988,35 @@ async function startServer() {
   // -------------------------------------------------------------------------
   app.get("/api/models", async (req, res) => {
     const user = resolveUser(req);
-    console.log(`[MODEL TRACE] GET /api/models ENTER`);
-    console.log(`[MODEL TRACE] user=${user ? user.id : "null"}`);
+    console.log(`[MODEL TRACE] GET /api/models ENTER, user=${user ? user.id : "null"}`);
     if (!user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
     
-    const client = getSupabaseAdmin();
-    if (!client) {
-      return res.status(503).json({ error: "Supabase database not configured in production" });
-    }
-
     try {
-      console.log(`[MODEL TRACE] BEFORE models PostgreSQL query`);
-      const { data: rows, error } = await client
-        .from("models")
-        .select("*")
-        .eq("user_id", user.id);
-      console.log(`[MODEL TRACE] AFTER models PostgreSQL query`);
+      const client = getSupabaseAdmin();
+      let rows: any[] = [];
 
-      if (error) {
-        console.log(`[MODEL TRACE] MODELS ERROR`);
-        console.log(`[MODEL TRACE] name=${error.name || "PostgrestError"}`);
-        console.log(`[MODEL TRACE] code=${error.code}`);
-        console.log(`[MODEL TRACE] message=${error.message}`);
-        return res.status(500).json({ error: error.message || "Failed to query Supabase models" });
+      if (client) {
+        console.log(`[MODEL TRACE] BEFORE models PostgreSQL query for user=${user.id}`);
+        const { data, error } = await client
+          .from("models")
+          .select("*")
+          .eq("user_id", user.id);
+        console.log(`[MODEL TRACE] AFTER models PostgreSQL query for user=${user.id}`);
+
+        if (error) {
+          console.error(`[MODEL TRACE] MODELS ERROR:`, error);
+          return res.status(500).json({ error: error.message || "Failed to query Supabase models" });
+        }
+        rows = data || [];
+      } else {
+        rows = dbGetModels(user.id) || [];
       }
 
-      const mappedList = (rows || []).map((row: any) => {
-        let caps = {};
-        if (row.capabilities) {
-          try { caps = typeof row.capabilities === "string" ? JSON.parse(row.capabilities) : row.capabilities; } catch {}
-        }
-        const item: ModelItem = {
-          id: row.id,
-          name: row.name || row.id,
-          provider: row.provider || "custom",
-          baseUrl: row.base_url || row.baseUrl || "",
-          apiKey: row.api_secret || row.api_key || row.apiKey || "",
-          modelName: row.provider_model_id || row.model_name || row.modelName || row.id,
-          modelType: row.model_type || row.modelType || "text",
-          capabilities: caps as any,
-          contextWindow: Number(row.context_window ?? row.contextWindow ?? 16000),
-          maxOutputTokens: Number(row.max_output_tokens ?? row.maxOutputTokens ?? 4096),
-          defaultTemperature: Number(row.temperature ?? row.default_temperature ?? row.defaultTemperature ?? 0.7),
-          defaultTopP: Number(row.top_p ?? row.default_top_p ?? row.defaultTopP ?? 1.0),
-          supportsStreaming: row.supports_streaming !== undefined ? Boolean(row.supports_streaming) : true,
-          enabled: row.enabled !== undefined ? Boolean(row.enabled) : true,
-          status: row.status || "available",
-          isUser: Boolean(row.is_user ?? row.isUser ?? true),
-          user_id: user.id,
-        };
-        models.set(item.id, item);
+      const mappedList = rows.map((row: any) => {
+        const item = mapDbRowToModelItem(row, user.id);
+        setUserModel(user.id, item);
         const pub = publicModel(item);
         return {
           ...pub,
@@ -998,11 +1026,10 @@ async function startServer() {
 
       return res.json({ models: mappedList, active: user.active_model_id || "" });
     } catch (err: any) {
-      console.error("[MODEL TRACE] MODELS ERROR exception:", err);
+      console.error("[MODEL TRACE] GET /api/models exception:", err);
       return res.status(500).json({ error: err?.message || "Internal server error" });
     }
   });
-
 
   app.post("/api/models", async (req, res) => {
     const user = resolveUser(req);
@@ -1014,10 +1041,28 @@ async function startServer() {
 
     const body = req.body || {};
     const id = String(body.id || `custom_${Date.now()}`).trim();
-    console.log(`[MODEL TRACE] POST /api/models modelId=${id}, provider=${body.provider || "custom"}`);
+    console.log(`[MODEL TRACE] POST /api/models user=${user.id}, modelId=${id}, provider=${body.provider || "custom"}`);
 
-    if (models.has(id)) {
+    if (hasUserModel(user.id, id)) {
       return res.status(409).json({ error: `Model '${id}' already exists`, type: "duplicate_model" });
+    }
+
+    const client = getSupabaseAdmin();
+    if (client) {
+      const { data: existingRow } = await client
+        .from("models")
+        .select("id")
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (existingRow) {
+        return res.status(409).json({ error: `Model '${id}' already exists`, type: "duplicate_model" });
+      }
+    } else {
+      const existingRow = dbGetModel(id, user.id);
+      if (existingRow) {
+        return res.status(409).json({ error: `Model '${id}' already exists`, type: "duplicate_model" });
+      }
     }
     
     const newModel: ModelItem = {
@@ -1047,7 +1092,6 @@ async function startServer() {
       user_id: user.id,
     };
     
-    const client = getSupabaseAdmin();
     if (client) {
       console.log(`[MODEL TRACE] calling syncModelToSupabase for user=${user.id}, id=${id}`);
       const syncRes = await syncModelToSupabase({
@@ -1067,15 +1111,55 @@ async function startServer() {
       }
       console.log(`[MODEL TRACE] POST /api/models persistence succeeded for id=${id}`);
     } else {
-      return res.status(503).json({ error: "Supabase database not configured in production" });
+      try {
+        dbSaveModel(newModel);
+      } catch (err: any) {
+        return res.status(500).json({ error: err?.message || "Failed to persist model" });
+      }
     }
-    models.set(id, newModel);
+
+    setUserModel(user.id, newModel);
+
+    // If user has no active model, make this first configured model their active model
+    if (!user.active_model_id) {
+      user.active_model_id = id;
+      if (client) {
+        try {
+          await client.from("users").update({ active_model_id: id }).eq("id", user.id);
+        } catch {}
+      } else {
+        try { dbSaveUser(user); } catch {}
+      }
+    }
+
     res.status(201).json(publicModel(newModel));
   });
 
-  app.get("/api/models/:id", (req, res) => {
-    const m = models.get(req.params.id);
-    if (!m) return res.status(404).json({ error: "Model not found", type: "model_not_found" });
+  app.get("/api/models/:id", async (req, res) => {
+    const user = resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+    let m = getUserModel(user.id, req.params.id);
+    if (!m) {
+      const client = getSupabaseAdmin();
+      if (client) {
+        const { data } = await client.from("models").select("*").eq("id", req.params.id).eq("user_id", user.id).maybeSingle();
+        if (data) {
+          m = mapDbRowToModelItem(data, user.id);
+          setUserModel(user.id, m);
+        }
+      } else {
+        const row = dbGetModel(req.params.id, user.id);
+        if (row) {
+          m = mapDbRowToModelItem(row, user.id);
+          setUserModel(user.id, m);
+        }
+      }
+    }
+
+    if (!m || m.user_id !== user.id) {
+      return res.status(404).json({ error: "Model not found", type: "model_not_found" });
+    }
     res.json(publicModel(m));
   });
 
@@ -1088,13 +1172,12 @@ async function startServer() {
     let existing: any;
 
     if (client) {
-      const { data, error } = await client.from("models").select("*").eq("id", id).eq("user_id", user.id).single();
-      if (error) return res.status(404).json({ error: "Model not found or unauthorized" });
+      const { data, error } = await client.from("models").select("*").eq("id", id).eq("user_id", user.id).maybeSingle();
+      if (error || !data) return res.status(404).json({ error: "Model not found or unauthorized" });
       existing = data;
     } else {
-      const m = models.get(id);
-      if (!m) return res.status(404).json({ error: "Model not found" });
-      if (m.user_id !== user.id) return res.status(403).json({ error: "Forbidden" });
+      const m = getUserModel(user.id, id) || dbGetModel(id, user.id);
+      if (!m || m.user_id !== user.id) return res.status(404).json({ error: "Model not found" });
       existing = m;
     }
 
@@ -1102,38 +1185,39 @@ async function startServer() {
     const submittedKey = String(body.apiKey || "").trim();
     const keepOldKey = !submittedKey || submittedKey.includes("•");
 
-    const updated = {
-      ...existing,
+    const updated: ModelItem = {
+      id,
       name: String(body.name || existing.name).trim(),
       provider: String(body.provider || existing.provider).toLowerCase(),
-      baseUrl: String(body.baseUrl !== undefined ? body.baseUrl : (existing.baseUrl || "")).trim(),
-      apiKey: keepOldKey ? (existing.api_secret || existing.apiKey) : submittedKey,
-      modelName: String(body.modelName || (existing.modelName || existing.provider_model_id)).trim(),
-      modelType: String(body.modelType || existing.modelType),
-      capabilities: typeof existing.capabilities === 'string' ? existing.capabilities : JSON.stringify(existing.capabilities || {}),
-      contextWindow: Number(body.contextWindow || existing.contextWindow),
-      maxOutputTokens: Number(body.maxOutputTokens || existing.maxOutputTokens),
-      defaultTemperature: Number(body.defaultTemperature ?? existing.defaultTemperature),
-      defaultTopP: Number(body.defaultTopP ?? existing.defaultTopP),
+      baseUrl: String(body.baseUrl !== undefined ? body.baseUrl : (existing.baseUrl || existing.base_url || "")).trim(),
+      apiKey: keepOldKey ? (existing.api_secret || existing.apiKey || existing.api_key) : submittedKey,
+      modelName: String(body.modelName || (existing.modelName || existing.provider_model_id || existing.model_name)).trim(),
+      modelType: String(body.modelType || existing.modelType || existing.model_type || "text"),
+      capabilities: typeof existing.capabilities === 'string' ? JSON.parse(existing.capabilities || "{}") : (existing.capabilities || {}),
+      contextWindow: Number(body.contextWindow || existing.contextWindow || existing.context_window || 16000),
+      maxOutputTokens: Number(body.maxOutputTokens || existing.maxOutputTokens || existing.max_output_tokens || 4096),
+      defaultTemperature: Number(body.defaultTemperature ?? existing.defaultTemperature ?? existing.temperature ?? 0.7),
+      defaultTopP: Number(body.defaultTopP ?? existing.defaultTopP ?? existing.top_p ?? 1.0),
       supportsStreaming: body.supportsStreaming !== false,
       enabled: body.enabled !== false,
       status: "available",
-      updated_at: Date.now(),
+      isUser: true,
+      user_id: user.id,
     };
 
     if (client) {
-        await syncModelToSupabase({
-            ...updated,
-            user_id: user.id,
-            api_secret: updated.apiKey,
-            provider_model_id: updated.modelName,
-            created_at: existing.created_at || Date.now(),
-        });
-        models.set(id, updated);
+      await syncModelToSupabase({
+        ...updated,
+        user_id: user.id,
+        api_secret: updated.apiKey,
+        provider_model_id: updated.modelName,
+        created_at: existing.created_at || Date.now(),
+        updated_at: Date.now(),
+      });
     } else {
-        models.set(id, updated);
-        try { dbSaveModel(updated); } catch(err) { console.error(err); }
+      try { dbSaveModel(updated); } catch (err) { console.error(err); }
     }
+    setUserModel(user.id, updated);
     res.json(publicModel(updated));
   });
 
@@ -1147,39 +1231,44 @@ async function startServer() {
     if (client) {
       const { error } = await client.from("models").delete().eq("id", id).eq("user_id", user.id);
       if (error) return res.status(500).json({ error: error.message });
-      models.delete(id);
-      if (user.active_model_id === id) {
-        user.active_model_id = "";
-        await client.from("users").update({ active_model_id: "" }).eq("id", user.id);
-      }
-      return res.json({ deleted: true, id });
-    }
-
-    if (models.has(id)) {
-      const m = models.get(id);
-      if (m && m.user_id && m.user_id !== user.id) {
-        return res.status(403).json({ error: "Forbidden" });
-      }
-      models.delete(id);
+    } else {
       try {
-        dbDeleteModel(id);
-        if (user.active_model_id === id) {
-          user.active_model_id = "";
-          dbSaveUser(user);
-        }
+        dbDeleteModel(id, user.id);
       } catch (err) {
         console.error("Error deleting model:", err);
       }
-      return res.json({ deleted: true, id });
     }
-    res.status(404).json({ error: "Model not found", type: "model_not_found" });
+
+    deleteUserModel(user.id, id);
+
+    if (user.active_model_id === id) {
+      const remaining = listUserModels(user.id);
+      user.active_model_id = remaining.length > 0 ? remaining[0].id : "";
+      if (client) {
+        await client.from("users").update({ active_model_id: user.active_model_id }).eq("id", user.id);
+      } else {
+        try { dbSaveUser(user); } catch {}
+      }
+    }
+    return res.json({ deleted: true, id });
   });
 
-  app.post("/api/models/:id/enable", (req, res) => {
+  app.post("/api/models/:id/enable", async (req, res) => {
+    const user = resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
     const id = req.params.id;
-    const m = models.get(id);
+    const m = getUserModel(user.id, id);
     if (!m) return res.status(404).json({ error: "Model not found", type: "model_not_found" });
     m.enabled = Boolean(req.body?.enabled ?? true);
+
+    const client = getSupabaseAdmin();
+    if (client) {
+      await client.from("models").update({ enabled: m.enabled ? 1 : 0 }).eq("id", id).eq("user_id", user.id);
+    } else {
+      try { dbSaveModel(m); } catch {}
+    }
+    setUserModel(user.id, m);
     res.json({ ok: true, enabled: m.enabled, model: publicModel(m) });
   });
 
@@ -1201,6 +1290,31 @@ async function startServer() {
     }
     const { model_id } = req.body || {};
     const targetModelId = String(model_id || "").trim();
+
+    let targetModel: ModelItem | null = null;
+    if (targetModelId) {
+      targetModel = getUserModel(user.id, targetModelId);
+      if (!targetModel) {
+        const client = getSupabaseAdmin();
+        if (client) {
+          const { data } = await client.from("models").select("*").eq("id", targetModelId).eq("user_id", user.id).maybeSingle();
+          if (data) {
+            targetModel = mapDbRowToModelItem(data, user.id);
+            setUserModel(user.id, targetModel);
+          }
+        } else {
+          const row = dbGetModel(targetModelId, user.id);
+          if (row) {
+            targetModel = mapDbRowToModelItem(row, user.id);
+            setUserModel(user.id, targetModel);
+          }
+        }
+      }
+      if (!targetModel) {
+        return res.status(404).json({ error: "Model not found for this account", type: "model_not_found" });
+      }
+    }
+
     user.active_model_id = targetModelId;
     
     const client = getSupabaseAdmin();
@@ -1210,14 +1324,16 @@ async function startServer() {
       try { dbSaveUser(user); } catch {}
     }
     
-    const m = models.get(targetModelId) || null;
-    res.json({ ok: true, active: targetModelId, model: m ? publicModel(m) : null });
+    res.json({ ok: true, active: targetModelId, model: targetModel ? publicModel(targetModel) : null });
   });
 
   app.post("/api/models/test", async (req, res) => {
+    const user = resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
     const body = req.body || {};
     const mid = String(body.id || "").trim();
-    const existing = models.get(mid);
+    const existing = getUserModel(user.id, mid);
     
     // Merge body onto existing (if any), preserving existing API key if body has empty or masked key
     const submittedKey = String(body.apiKey || "").trim();
@@ -1231,7 +1347,7 @@ async function startServer() {
     
     if (provider === "gemini") {
       try {
-        const apiKey = m.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+        const apiKey = m.apiKey;
         if (!apiKey) return res.status(400).json({ error: "API Key required for Gemini." });
         const testModel = m.modelName || "gemini-3.6-flash";
         const testRes = await generateGeminiWithResilience({
@@ -1276,7 +1392,9 @@ async function startServer() {
   });
 
   app.get("/api/models/:id/capabilities", (req, res) => {
-    const m = models.get(req.params.id);
+    const user = resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+    const m = getUserModel(user.id, req.params.id);
     if (!m) return res.status(404).json({ error: "Model not found", type: "model_not_found" });
     res.json({ capabilities: m.capabilities });
   });
@@ -1335,7 +1453,7 @@ async function startServer() {
     const body = req.body || {};
     const id = `conv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const title = String(body.title || "New Chat").trim();
-    const model_id = body.model_id || user.active_model_id || Array.from(models.keys())[0] || "";
+    const model_id = body.model_id || user.active_model_id || "";
 
     const conv: ConversationItem = {
       id,
@@ -1604,7 +1722,7 @@ ${params.textMsg}`;
         id: cid,
         user_id: user.id,
         title: "New Chat",
-        model_id: user.active_model_id || Array.from(models.keys())[0] || "",
+        model_id: user.active_model_id || "",
         created_at: Date.now(),
         updated_at: Date.now(),
       };
@@ -1637,8 +1755,8 @@ ${params.textMsg}`;
     if (!modelConfig) {
       sendSSE({
         error: {
-          message: "No AI model is configured. Please navigate to Models in the navigation bar to add your model.",
-          type: "no_model",
+          message: "No AI model is configured for this account. Add your API key and model in Model Registry to start chatting.",
+          type: "MODEL_NOT_CONFIGURED",
         },
       });
       return res.end();
@@ -1646,7 +1764,7 @@ ${params.textMsg}`;
     let activeModelId = modelConfig.id;
     conv.model_id = activeModelId;
     conv.updated_at = Date.now();
-    if (!user.active_model_id || !models.has(user.active_model_id)) {
+    if (!user.active_model_id || !hasUserModel(user.id, user.active_model_id)) {
       user.active_model_id = activeModelId;
       try { dbSaveUser(user); } catch {}
     }
@@ -1725,8 +1843,8 @@ ${params.textMsg}`;
       }
 
       if (modelConfig.provider === "gemini") {
-        const apiKey = modelConfig.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-        if (!apiKey) throw new Error("Gemini API key is missing. Please configure it in your model settings.");
+        const apiKey = modelConfig.apiKey;
+        if (!apiKey) throw new Error(`Gemini API key is missing for model '${modelConfig.name}'. Please configure it in your model settings.`);
         
         const contents = [
           ...history,
@@ -1753,6 +1871,9 @@ ${params.textMsg}`;
         // OpenAI compatible endpoint
         const baseUrl = getEffectiveBaseUrl(modelConfig);
         if (!baseUrl) throw new Error("Base URL is missing for this model.");
+        if (!modelConfig.apiKey && modelConfig.provider !== "ollama") {
+          throw new Error(`API key is missing for model '${modelConfig.name}'. Please configure your API key in Model settings.`);
+        }
         
         const openAiHistory = history.map(h => ({
           role: h.role === "model" ? "assistant" : "user",
@@ -1760,7 +1881,7 @@ ${params.textMsg}`;
         }));
         openAiHistory.push({ role: "user", content: promptWithContext });
 
-        const headers = { "Content-Type": "application/json" };
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
         if (modelConfig.apiKey) headers["Authorization"] = `Bearer ${modelConfig.apiKey}`;
         
         const reqBody = {
@@ -1841,7 +1962,8 @@ ${params.textMsg}`;
     const cid = req.params.cid;
     const conv = conversations.get(cid);
     if (!conv) return res.status(404).json({ error: "Conversation not found", type: "not_found" });
-    const user = resolveUser(req) || initialUser;
+    const user = resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
 
     // Find last user message
     const convMsgs = Array.from(messages.values())
@@ -1873,10 +1995,13 @@ ${params.textMsg}`;
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
+      const sendSSE = (payload: any) => {
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      };
       sendSSE({
         error: {
-          message: "No AI model is configured. Please navigate to Models in the navigation bar to add your model.",
-          type: "no_model",
+          message: "No AI model is configured for this account. Add your API key and model in Model Registry to start chatting.",
+          type: "MODEL_NOT_CONFIGURED",
         },
       });
       return res.end();
@@ -1929,8 +2054,8 @@ ${params.textMsg}`;
       }
 
       if (modelConfig.provider === "gemini") {
-        const apiKey = modelConfig.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-        if (!apiKey) throw new Error("Gemini API key is missing. Please configure it in your model settings.");
+        const apiKey = modelConfig.apiKey;
+        if (!apiKey) throw new Error(`Gemini API key is missing for model '${modelConfig.name}'. Please configure it in your model settings.`);
         
         const contents = [
           ...history,
@@ -1957,6 +2082,9 @@ ${params.textMsg}`;
         // OpenAI compatible endpoint
         const baseUrl = getEffectiveBaseUrl(modelConfig);
         if (!baseUrl) throw new Error("Base URL is missing for this model.");
+        if (!modelConfig.apiKey && modelConfig.provider !== "ollama") {
+          throw new Error(`API key is missing for model '${modelConfig.name}'. Please configure your API key in Model settings.`);
+        }
         
         const openAiHistory = history.map(h => ({
           role: h.role === "model" ? "assistant" : "user",
@@ -1964,7 +2092,7 @@ ${params.textMsg}`;
         }));
         openAiHistory.push({ role: "user", content: promptWithContext });
 
-        const headers = { "Content-Type": "application/json" };
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
         if (modelConfig.apiKey) headers["Authorization"] = `Bearer ${modelConfig.apiKey}`;
         
         const reqBody = {

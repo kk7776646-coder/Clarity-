@@ -32,9 +32,14 @@ window.Clarity.auth = {
     });
   },
 
-async refresh() {
+  _fetch(path, options) {
+    const fetchFn = window.Clarity?.api?.fetch || (typeof window !== "undefined" && window.fetch ? window.fetch.bind(window) : fetch);
+    return fetchFn(path, options);
+  },
+
+  async refresh() {
     try {
-      const resp = await fetch("/api/auth/me", { credentials: "include" });
+      const resp = await this._fetch("/api/auth/me", { credentials: "include" });
       const json = await resp.json().catch(() => ({}));
       this._user = json.user || null;
     } catch (e) {
@@ -45,7 +50,7 @@ async refresh() {
   },
 
   async signup(email, password, name) {
-    const r = await fetch("/api/auth/signup", {
+    const r = await this._fetch("/api/auth/signup", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -53,13 +58,16 @@ async refresh() {
     });
     const json = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(json.error || "Sign up failed");
+    if (json.token) {
+      try { localStorage.setItem("clarity_token", json.token); } catch (e) {}
+    }
     this._user = json.user;
     this._emit();
     return this._user;
   },
 
   async login(email, password) {
-    const r = await fetch("/api/auth/login", {
+    const r = await this._fetch("/api/auth/login", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -67,6 +75,9 @@ async refresh() {
     });
     const json = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(json.error || "Login failed");
+    if (json.token) {
+      try { localStorage.setItem("clarity_token", json.token); } catch (e) {}
+    }
     this._user = json.user;
     this._emit();
     return this._user;
@@ -74,13 +85,15 @@ async refresh() {
 
   async logout() {
     try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      await this._fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     } catch (e) {}
+    try { localStorage.removeItem("clarity_token"); } catch (e) {}
     this._user = null;
     this._emit();
   },
 
   handleSessionExpired() {
+    try { localStorage.removeItem("clarity_token"); } catch (e) {}
     if (!this._user) return;
     this._user = null;
     this._emit();

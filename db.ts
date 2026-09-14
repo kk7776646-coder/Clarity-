@@ -460,7 +460,8 @@ export function initDatabaseSchema() {
     // 16. Models
     db.exec(`
       CREATE TABLE IF NOT EXISTS models (
-        id TEXT PRIMARY KEY,
+        id TEXT NOT NULL,
+        user_id TEXT NOT NULL DEFAULT 'user_default',
         name TEXT NOT NULL,
         provider TEXT NOT NULL,
         base_url TEXT,
@@ -476,12 +477,45 @@ export function initDatabaseSchema() {
         enabled INTEGER DEFAULT 1,
         status TEXT,
         is_user INTEGER DEFAULT 0,
-        user_id TEXT
+        PRIMARY KEY (user_id, id)
       );
     `);
     try {
-      db.exec(`ALTER TABLE models ADD COLUMN user_id TEXT`);
+      db.exec(`ALTER TABLE models ADD COLUMN user_id TEXT DEFAULT 'user_default'`);
     } catch (e) {}
+
+    try {
+      const tableInfo = db.prepare("PRAGMA table_info(models)").all() as any[];
+      const pkCols = tableInfo.filter(c => c.pk > 0);
+      if (pkCols.length === 1 && pkCols[0].name === 'id') {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS models_new (
+            id TEXT NOT NULL,
+            user_id TEXT NOT NULL DEFAULT 'user_default',
+            name TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            base_url TEXT,
+            api_key TEXT,
+            model_name TEXT NOT NULL,
+            model_type TEXT,
+            capabilities TEXT,
+            context_window INTEGER,
+            max_output_tokens INTEGER,
+            default_temperature REAL,
+            default_top_p REAL,
+            supports_streaming INTEGER DEFAULT 1,
+            enabled INTEGER DEFAULT 1,
+            status TEXT,
+            is_user INTEGER DEFAULT 0,
+            PRIMARY KEY (user_id, id)
+          );
+          INSERT OR IGNORE INTO models_new SELECT id, COALESCE(user_id, 'user_default'), name, provider, base_url, api_key, model_name, model_type, capabilities, context_window, max_output_tokens, default_temperature, default_top_p, supports_streaming, enabled, status, is_user FROM models;
+          DROP TABLE models;
+          ALTER TABLE models_new RENAME TO models;
+        `);
+      }
+    } catch (e) {}
+
     db.exec(`CREATE INDEX IF NOT EXISTS idx_models_user_id ON models(user_id);`);
 
     // 17. Visual Assets
@@ -1657,11 +1691,17 @@ export function getGithubConnection(projectId: string) {
 // Initialize schema on load
 initDatabaseSchema();
 
-export function dbGetModels(userId: string): any[] {
-  return db.prepare("SELECT * FROM models WHERE user_id = ?").all(userId);
+export function dbGetModels(userId?: string): any[] {
+  if (userId) {
+    return db.prepare("SELECT * FROM models WHERE user_id = ?").all(userId);
+  }
+  return db.prepare("SELECT * FROM models").all();
 }
 
-export function dbGetModel(id: string): any {
+export function dbGetModel(id: string, userId?: string): any {
+  if (userId) {
+    return db.prepare("SELECT * FROM models WHERE id = ? AND user_id = ?").get(id, userId);
+  }
   return db.prepare("SELECT * FROM models WHERE id = ?").get(id);
 }
 
@@ -1669,8 +1709,7 @@ export function dbSaveModel(model: any) {
   const stmt = db.prepare(`
     INSERT INTO models (id, user_id, name, provider, base_url, api_key, model_name, model_type, capabilities, context_window, max_output_tokens, default_temperature, default_top_p, supports_streaming, enabled, status, is_user)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      user_id = excluded.user_id,
+    ON CONFLICT(user_id, id) DO UPDATE SET
       name = excluded.name,
       provider = excluded.provider,
       base_url = excluded.base_url,
@@ -1699,8 +1738,12 @@ export function dbSaveModel(model: any) {
   );
 }
 
-export function dbDeleteModel(id: string) {
-  db.prepare("DELETE FROM models WHERE id = ?").run(id);
+export function dbDeleteModel(id: string, userId?: string) {
+  if (userId) {
+    db.prepare("DELETE FROM models WHERE id = ? AND user_id = ?").run(id, userId);
+  } else {
+    db.prepare("DELETE FROM models WHERE id = ?").run(id);
+  }
 }
 
 // ---------------------------------------------------------------------------
