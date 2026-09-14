@@ -1,0 +1,1211 @@
+
+js/app.js:229
+          if (chip) {
+            const rect = chip.getBoundingClientRect();
+>           dd.style.top = (rect.bottom + 8) + "px";
+            dd.style.left = (rect.left) + "px";
+          }
+
+js/app.js:230
+            const rect = chip.getBoundingClientRect();
+            dd.style.top = (rect.bottom + 8) + "px";
+>           dd.style.left = (rect.left) + "px";
+          }
+        }
+
+js/pages/model.js:676
+    el.textContent = msg;
+    el.className = "alert " + (ok === null ? "alert--info" : ok ? "alert--success" : "alert--danger");
+>   el.style.display = "";
+  }
+  
+
+js/pages/model.js:684
+    el.textContent = msg;
+    el.className = "alert " + (ok === null ? "alert--info" : ok ? "alert--success" : "alert--danger");
+>   el.style.display = "";
+  }
+  
+
+js/pages/project.js:373
+        dropZone.addEventListener('dragover', (e) => {
+          e.preventDefault();
+>         dropZone.style.borderColor = 'var(--accent)';
+          dropZone.style.background = 'var(--accent-soft)';
+        });
+
+js/pages/project.js:374
+          e.preventDefault();
+          dropZone.style.borderColor = 'var(--accent)';
+>         dropZone.style.background = 'var(--accent-soft)';
+        });
+        
+
+js/pages/project.js:379
+        dropZone.addEventListener('dragleave', (e) => {
+          e.preventDefault();
+>         dropZone.style.borderColor = 'var(--line)';
+          dropZone.style.background = 'var(--surface-muted)';
+        });
+
+js/pages/project.js:380
+          e.preventDefault();
+          dropZone.style.borderColor = 'var(--line)';
+>         dropZone.style.background = 'var(--surface-muted)';
+        });
+        
+
+js/pages/project.js:385
+        dropZone.addEventListener('drop', (e) => {
+          e.preventDefault();
+>         dropZone.style.borderColor = 'var(--line)';
+          dropZone.style.background = 'var(--surface-muted)';
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+
+js/pages/project.js:386
+          e.preventDefault();
+          dropZone.style.borderColor = 'var(--line)';
+>         dropZone.style.background = 'var(--surface-muted)';
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleRagUpload(e.dataTransfer.files, progressEl);
+
+js/pages/project.js:400
+      
+      async function handleRagUpload(files, progressEl) {
+>       progressEl.style.display = 'block';
+        progressEl.innerHTML = `<span style="animation: pulse 1.5s infinite;">Uploading and processing ${files.length} file(s)...</span>`;
+        
+
+js/pages/project.js:640
+      const progCont = document.getElementById("uploadProgressContainer");
+      if (progCont) {
+>       progCont.style.display = "block";
+        progCont.innerHTML = [
+          '<div class="card" style="padding:16px 20px;">',
+
+js/pages/project.js:685
+        console.error("Batch upload error:", err);
+        window.Clarity.toast.show("Upload failed: " + (err.message || "Unknown error"), "danger");
+>       if (progCont) progCont.style.display = "none";
+      }
+    }
+
+js/pages/project.js:725
+              const cardEl = document.getElementById("project-card-" + id);
+              if (cardEl) {
+>               cardEl.style.transition = "opacity 0.25s ease, transform 0.25s ease";
+                cardEl.style.opacity = "0";
+                cardEl.style.transform = "scale(0.95)";
+
+js/pages/project.js:726
+              if (cardEl) {
+                cardEl.style.transition = "opacity 0.25s ease, transform 0.25s ease";
+>               cardEl.style.opacity = "0";
+                cardEl.style.transform = "scale(0.95)";
+                setTimeout(() => {
+
+js/pages/project.js:727
+                cardEl.style.transition = "opacity 0.25s ease, transform 0.25s ease";
+                cardEl.style.opacity = "0";
+>               cardEl.style.transform = "scale(0.95)";
+                setTimeout(() => {
+                  cardEl.remove();
+
+js/pages/project.js:802
+    const modal = document.createElement("div");
+    modal.id = "githubImportModal";
+>   modal.style = "position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.65); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; padding:16px;";
+  
+    modal.innerHTML = [
+
+js/pages/project.js:906
+        });
+  
+>       metaBox.style.display = "block";
+        metaTitle.textContent = res.fullName;
+        metaDesc.textContent = res.description || "No description provided.";
+
+js/pages/project.js:910
+        metaDesc.textContent = res.description || "No description provided.";
+        metaStars.textContent = "★ " + (res.stars || 0);
+>       metaPrivateTag.style.display = res.isPrivate ? "inline" : "none";
+  
+        if (!nameInput.value.trim()) {
+
+js/pages/project.js:951
+      submitBtn.disabled = true;
+      fetchBtn.disabled = true;
+>     progressBox.style.display = "block";
+      progressText.textContent = "Downloading repository from GitHub...";
+  
+
+js/pages/project.js:969
+        submitBtn.disabled = false;
+        fetchBtn.disabled = false;
+>       progressBox.style.display = "none";
+        window.Clarity.toast.show("Import failed: " + (err.message || "Unknown error"), "danger");
+      }
+
+js/pages/project.js:986
+    const progCont = document.getElementById("uploadProgressContainer");
+    if (progCont) {
+>     progCont.style.display = "block";
+      progCont.innerHTML = [
+        '<div class="card" style="padding:16px; border:1px solid var(--accent); background:var(--surface);">' +
+
+js/pages/project.js:1027
+      console.error("ZIP upload error:", err);
+      window.Clarity.toast.show("Upload failed: " + (err.message || "Unknown error"), "danger");
+>     if (progCont) progCont.style.display = "none";
+    }
+  }
+
+js/pages/project.js:1673
+          else openFolders.delete(folderPath);
+          if (next && next.classList.contains("tree-children")) {
+>           next.style.display = isOpen ? "block" : "none";
+          }
+        });
+
+js/pages/project.js:1761
+        ].join("");
+  
+>       if (actions) actions.style.display = "flex";
+  
+        // Show/hide relevant action buttons
+
+js/pages/project.js:1772
+        const diagBtn = document.getElementById("diagnosticsToggleBtn");
+  
+>       if (editBtn) editBtn.style.display = isImg || data.isBinary ? "none" : "inline-flex";
+        if (saveBtn) saveBtn.style.display = "none";
+        if (cancelBtn) cancelBtn.style.display = "none";
+
+js/pages/project.js:1773
+  
+        if (editBtn) editBtn.style.display = isImg || data.isBinary ? "none" : "inline-flex";
+>       if (saveBtn) saveBtn.style.display = "none";
+        if (cancelBtn) cancelBtn.style.display = "none";
+        if (mdBtn) mdBtn.style.display = isMd ? "inline-flex" : "none";
+
+js/pages/project.js:1774
+        if (editBtn) editBtn.style.display = isImg || data.isBinary ? "none" : "inline-flex";
+        if (saveBtn) saveBtn.style.display = "none";
+>       if (cancelBtn) cancelBtn.style.display = "none";
+        if (mdBtn) mdBtn.style.display = isMd ? "inline-flex" : "none";
+        if (searchBtn) searchBtn.style.display = isImg || data.isBinary ? "none" : "inline-flex";
+
+js/pages/project.js:1775
+        if (saveBtn) saveBtn.style.display = "none";
+        if (cancelBtn) cancelBtn.style.display = "none";
+>       if (mdBtn) mdBtn.style.display = isMd ? "inline-flex" : "none";
+        if (searchBtn) searchBtn.style.display = isImg || data.isBinary ? "none" : "inline-flex";
+        if (jumpBtn) jumpBtn.style.display = isImg || data.isBinary ? "none" : "inline-flex";
+
+js/pages/project.js:1776
+        if (cancelBtn) cancelBtn.style.display = "none";
+        if (mdBtn) mdBtn.style.display = isMd ? "inline-flex" : "none";
+>       if (searchBtn) searchBtn.style.display = isImg || data.isBinary ? "none" : "inline-flex";
+        if (jumpBtn) jumpBtn.style.display = isImg || data.isBinary ? "none" : "inline-flex";
+        if (diagBtn) {
+
+js/pages/project.js:1777
+        if (mdBtn) mdBtn.style.display = isMd ? "inline-flex" : "none";
+        if (searchBtn) searchBtn.style.display = isImg || data.isBinary ? "none" : "inline-flex";
+>       if (jumpBtn) jumpBtn.style.display = isImg || data.isBinary ? "none" : "inline-flex";
+        if (diagBtn) {
+          diagBtn.style.display = isImg || data.isBinary ? "none" : "inline-flex";
+
+js/pages/project.js:1779
+        if (jumpBtn) jumpBtn.style.display = isImg || data.isBinary ? "none" : "inline-flex";
+        if (diagBtn) {
+>         diagBtn.style.display = isImg || data.isBinary ? "none" : "inline-flex";
+          diagBtn.textContent = "Problems (0)";
+          diagBtn.className = "btn btn--outline btn--sm";
+
+js/pages/project.js:1813
+      if (isEditMode) {
+        editingFile = true;
+>       if (editBtn) editBtn.style.display = "none";
+        if (saveBtn) saveBtn.style.display = "inline-flex";
+        if (cancelBtn) cancelBtn.style.display = "inline-flex";
+
+js/pages/project.js:1814
+        editingFile = true;
+        if (editBtn) editBtn.style.display = "none";
+>       if (saveBtn) saveBtn.style.display = "inline-flex";
+        if (cancelBtn) cancelBtn.style.display = "inline-flex";
+        if (searchBtn) searchBtn.style.display = "none";
+
+js/pages/project.js:1815
+        if (editBtn) editBtn.style.display = "none";
+        if (saveBtn) saveBtn.style.display = "inline-flex";
+>       if (cancelBtn) cancelBtn.style.display = "inline-flex";
+        if (searchBtn) searchBtn.style.display = "none";
+        if (jumpBtn) jumpBtn.style.display = "none";
+
+js/pages/project.js:1816
+        if (saveBtn) saveBtn.style.display = "inline-flex";
+        if (cancelBtn) cancelBtn.style.display = "inline-flex";
+>       if (searchBtn) searchBtn.style.display = "none";
+        if (jumpBtn) jumpBtn.style.display = "none";
+        if (diagBtn) diagBtn.style.display = "none";
+
+js/pages/project.js:1817
+        if (cancelBtn) cancelBtn.style.display = "inline-flex";
+        if (searchBtn) searchBtn.style.display = "none";
+>       if (jumpBtn) jumpBtn.style.display = "none";
+        if (diagBtn) diagBtn.style.display = "none";
+  
+
+js/pages/project.js:1818
+        if (searchBtn) searchBtn.style.display = "none";
+        if (jumpBtn) jumpBtn.style.display = "none";
+>       if (diagBtn) diagBtn.style.display = "none";
+  
+        content.innerHTML = [
+
+js/pages/project.js:1852
+      const isImg = activeFileRecord.category === "image";
+      const isBin = activeFileRecord.isBinary;
+>     if (editBtn) editBtn.style.display = isImg || isBin ? "none" : "inline-flex";
+      if (saveBtn) saveBtn.style.display = "none";
+      if (cancelBtn) cancelBtn.style.display = "none";
+
+js/pages/project.js:1853
+      const isBin = activeFileRecord.isBinary;
+      if (editBtn) editBtn.style.display = isImg || isBin ? "none" : "inline-flex";
+>     if (saveBtn) saveBtn.style.display = "none";
+      if (cancelBtn) cancelBtn.style.display = "none";
+      if (searchBtn) searchBtn.style.display = isImg || isBin ? "none" : "inline-flex";
+
+js/pages/project.js:1854
+      if (editBtn) editBtn.style.display = isImg || isBin ? "none" : "inline-flex";
+      if (saveBtn) saveBtn.style.display = "none";
+>     if (cancelBtn) cancelBtn.style.display = "none";
+      if (searchBtn) searchBtn.style.display = isImg || isBin ? "none" : "inline-flex";
+      if (jumpBtn) jumpBtn.style.display = isImg || isBin ? "none" : "inline-flex";
+
+js/pages/project.js:1855
+      if (saveBtn) saveBtn.style.display = "none";
+      if (cancelBtn) cancelBtn.style.display = "none";
+>     if (searchBtn) searchBtn.style.display = isImg || isBin ? "none" : "inline-flex";
+      if (jumpBtn) jumpBtn.style.display = isImg || isBin ? "none" : "inline-flex";
+      if (diagBtn) diagBtn.style.display = isImg || isBin ? "none" : "inline-flex";
+
+js/pages/project.js:1856
+      if (cancelBtn) cancelBtn.style.display = "none";
+      if (searchBtn) searchBtn.style.display = isImg || isBin ? "none" : "inline-flex";
+>     if (jumpBtn) jumpBtn.style.display = isImg || isBin ? "none" : "inline-flex";
+      if (diagBtn) diagBtn.style.display = isImg || isBin ? "none" : "inline-flex";
+  
+
+js/pages/project.js:1857
+      if (searchBtn) searchBtn.style.display = isImg || isBin ? "none" : "inline-flex";
+      if (jumpBtn) jumpBtn.style.display = isImg || isBin ? "none" : "inline-flex";
+>     if (diagBtn) diagBtn.style.display = isImg || isBin ? "none" : "inline-flex";
+  
+      // Image Preview
+
+js/pages/project.js:1946
+             explainBtn.id = "explainCodeFloatBtn";
+             explainBtn.className = "btn btn--sm btn--primary";
+>            explainBtn.style.position = "fixed";
+             explainBtn.style.display = "none";
+             explainBtn.style.zIndex = "9999";
+
+js/pages/project.js:1947
+             explainBtn.className = "btn btn--sm btn--primary";
+             explainBtn.style.position = "fixed";
+>            explainBtn.style.display = "none";
+             explainBtn.style.zIndex = "9999";
+             explainBtn.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
+
+js/pages/project.js:1948
+             explainBtn.style.position = "fixed";
+             explainBtn.style.display = "none";
+>            explainBtn.style.zIndex = "9999";
+             explainBtn.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
+             explainBtn.textContent = "✨ Explain Code";
+
+js/pages/project.js:1949
+             explainBtn.style.display = "none";
+             explainBtn.style.zIndex = "9999";
+>            explainBtn.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
+             explainBtn.textContent = "✨ Explain Code";
+             document.body.appendChild(explainBtn);
+
+js/pages/project.js:1959
+            if (text.length > 0) {
+              const rect = selection.getRangeAt(0).getBoundingClientRect();
+>             explainBtn.style.display = "block";
+              explainBtn.style.top = (rect.top - 36) + "px";
+              explainBtn.style.left = (rect.left + (rect.width/2) - 50) + "px";
+
+js/pages/project.js:1960
+              const rect = selection.getRangeAt(0).getBoundingClientRect();
+              explainBtn.style.display = "block";
+>             explainBtn.style.top = (rect.top - 36) + "px";
+              explainBtn.style.left = (rect.left + (rect.width/2) - 50) + "px";
+              
+
+js/pages/project.js:1961
+              explainBtn.style.display = "block";
+              explainBtn.style.top = (rect.top - 36) + "px";
+>             explainBtn.style.left = (rect.left + (rect.width/2) - 50) + "px";
+              
+              explainBtn.onclick = () => {
+
+js/pages/project.js:1964
+              
+              explainBtn.onclick = () => {
+>                explainBtn.style.display = "none";
+                 const chatTabBtn = document.querySelector('.project-tab-btn[data-tab="chat"]');
+                 if (chatTabBtn) chatTabBtn.click();
+
+js/pages/project.js:1977
+              };
+            } else {
+>             explainBtn.style.display = "none";
+            }
+          });
+
+js/pages/project.js:1982
+          document.addEventListener("mousedown", (e) => {
+            if (e.target.id !== "explainCodeFloatBtn") {
+>             explainBtn.style.display = "none";
+            }
+          }, { once: false });
+
+js/pages/project.js:2046
+        isProblemsPanelOpen = false;
+        const panel = document.getElementById("vscodeProblemsPanel");
+>       if (panel) panel.style.display = "none";
+      });
+  
+
+js/pages/project.js:2059
+      const analyzeProjBtn = document.createElement("button");
+      analyzeProjBtn.className = "btn btn--outline btn--sm";
+>     analyzeProjBtn.style.padding = "2px 8px";
+      analyzeProjBtn.style.fontSize = "11px";
+      analyzeProjBtn.innerHTML = "Analyze Project";
+
+js/pages/project.js:2060
+      analyzeProjBtn.className = "btn btn--outline btn--sm";
+      analyzeProjBtn.style.padding = "2px 8px";
+>     analyzeProjBtn.style.fontSize = "11px";
+      analyzeProjBtn.innerHTML = "Analyze Project";
+      analyzeProjBtn.title = "Run full project intelligence analysis";
+
+js/pages/project.js:2129
+        const panel = document.getElementById("vscodeProblemsPanel");
+        if (panel) {
+>         panel.style.display = isProblemsPanelOpen ? "flex" : "none";
+        }
+        renderProblemsList();
+
+js/pages/project.js:2334
+      if (!bar) return;
+  
+>     const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : bar.style.display === "none";
+      bar.style.display = shouldOpen ? "flex" : "none";
+  
+
+js/pages/project.js:2335
+  
+      const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : bar.style.display === "none";
+>     bar.style.display = shouldOpen ? "flex" : "none";
+  
+      if (shouldOpen && input) {
+
+js/pages/project.js:2557
+      isProblemsPanelOpen = !isProblemsPanelOpen;
+      const panel = document.getElementById("vscodeProblemsPanel");
+>     if (panel) panel.style.display = isProblemsPanelOpen ? "flex" : "none";
+      if (isProblemsPanelOpen) renderProblemsList();
+    });
+
+js/pages/project.js:2701
+      sidebar.addEventListener("dragover", (e) => {
+        e.preventDefault();
+>       sidebar.style.outline = "2px dashed var(--accent)";
+      });
+      sidebar.addEventListener("dragleave", () => {
+
+js/pages/project.js:2704
+      });
+      sidebar.addEventListener("dragleave", () => {
+>       sidebar.style.outline = "none";
+      });
+      sidebar.addEventListener("drop", async (e) => {
+
+js/pages/project.js:2708
+      sidebar.addEventListener("drop", async (e) => {
+        e.preventDefault();
+>       sidebar.style.outline = "none";
+        const droppedFiles = Array.from(e.dataTransfer.files || []);
+        if (droppedFiles.length === 0) return;
+
+js/pages/project.js:3009
+              const content = document.getElementById("viewerContent");
+              if (meta) meta.innerHTML = '<span class="muted">Select any file to inspect code</span>';
+>             if (actions) actions.style.display = "none";
+              if (content) content.innerHTML = '<div style="padding:40px; text-align:center; color:var(--ink-muted);">File was deleted.</div>';
+            }
+
+js/pages/project.js:3260
+      if (mode === "graph") {
+        viewGraphBtn?.classList.add("is-active");
+>       if (graphContainer) graphContainer.style.display = "block";
+        if (mindmapContainer) mindmapContainer.style.display = "none";
+        if (dataflowContainer) dataflowContainer.style.display = "none";
+
+js/pages/project.js:3261
+        viewGraphBtn?.classList.add("is-active");
+        if (graphContainer) graphContainer.style.display = "block";
+>       if (mindmapContainer) mindmapContainer.style.display = "none";
+        if (dataflowContainer) dataflowContainer.style.display = "none";
+        if (advisorContainer) advisorContainer.style.display = "none";
+
+js/pages/project.js:3262
+        if (graphContainer) graphContainer.style.display = "block";
+        if (mindmapContainer) mindmapContainer.style.display = "none";
+>       if (dataflowContainer) dataflowContainer.style.display = "none";
+        if (advisorContainer) advisorContainer.style.display = "none";
+        if (lodGroup) lodGroup.style.display = "inline-flex";
+
+js/pages/project.js:3263
+        if (mindmapContainer) mindmapContainer.style.display = "none";
+        if (dataflowContainer) dataflowContainer.style.display = "none";
+>       if (advisorContainer) advisorContainer.style.display = "none";
+        if (lodGroup) lodGroup.style.display = "inline-flex";
+        if (searchWrapper) searchWrapper.style.display = "flex";
+
+js/pages/project.js:3264
+        if (dataflowContainer) dataflowContainer.style.display = "none";
+        if (advisorContainer) advisorContainer.style.display = "none";
+>       if (lodGroup) lodGroup.style.display = "inline-flex";
+        if (searchWrapper) searchWrapper.style.display = "flex";
+        setTimeout(() => {
+
+js/pages/project.js:3265
+        if (advisorContainer) advisorContainer.style.display = "none";
+        if (lodGroup) lodGroup.style.display = "inline-flex";
+>       if (searchWrapper) searchWrapper.style.display = "flex";
+        setTimeout(() => {
+          if (cyInstance) {
+
+js/pages/project.js:3277
+      } else if (mode === "mindmap") {
+        viewMindmapBtn?.classList.add("is-active");
+>       if (graphContainer) graphContainer.style.display = "none";
+        if (mindmapContainer) mindmapContainer.style.display = "flex";
+        if (dataflowContainer) dataflowContainer.style.display = "none";
+
+js/pages/project.js:3278
+        viewMindmapBtn?.classList.add("is-active");
+        if (graphContainer) graphContainer.style.display = "none";
+>       if (mindmapContainer) mindmapContainer.style.display = "flex";
+        if (dataflowContainer) dataflowContainer.style.display = "none";
+        if (advisorContainer) advisorContainer.style.display = "none";
+
+js/pages/project.js:3279
+        if (graphContainer) graphContainer.style.display = "none";
+        if (mindmapContainer) mindmapContainer.style.display = "flex";
+>       if (dataflowContainer) dataflowContainer.style.display = "none";
+        if (advisorContainer) advisorContainer.style.display = "none";
+        if (lodGroup) lodGroup.style.display = "none";
+
+js/pages/project.js:3280
+        if (mindmapContainer) mindmapContainer.style.display = "flex";
+        if (dataflowContainer) dataflowContainer.style.display = "none";
+>       if (advisorContainer) advisorContainer.style.display = "none";
+        if (lodGroup) lodGroup.style.display = "none";
+        if (searchWrapper) searchWrapper.style.display = "none";
+
+js/pages/project.js:3281
+        if (dataflowContainer) dataflowContainer.style.display = "none";
+        if (advisorContainer) advisorContainer.style.display = "none";
+>       if (lodGroup) lodGroup.style.display = "none";
+        if (searchWrapper) searchWrapper.style.display = "none";
+        renderMindMapView();
+
+js/pages/project.js:3282
+        if (advisorContainer) advisorContainer.style.display = "none";
+        if (lodGroup) lodGroup.style.display = "none";
+>       if (searchWrapper) searchWrapper.style.display = "none";
+        renderMindMapView();
+      } else if (mode === "dataflow") {
+
+js/pages/project.js:3286
+      } else if (mode === "dataflow") {
+        viewDataflowBtn?.classList.add("is-active");
+>       if (graphContainer) graphContainer.style.display = "none";
+        if (mindmapContainer) mindmapContainer.style.display = "none";
+        if (dataflowContainer) dataflowContainer.style.display = "flex";
+
+js/pages/project.js:3287
+        viewDataflowBtn?.classList.add("is-active");
+        if (graphContainer) graphContainer.style.display = "none";
+>       if (mindmapContainer) mindmapContainer.style.display = "none";
+        if (dataflowContainer) dataflowContainer.style.display = "flex";
+        if (advisorContainer) advisorContainer.style.display = "none";
+
+js/pages/project.js:3288
+        if (graphContainer) graphContainer.style.display = "none";
+        if (mindmapContainer) mindmapContainer.style.display = "none";
+>       if (dataflowContainer) dataflowContainer.style.display = "flex";
+        if (advisorContainer) advisorContainer.style.display = "none";
+        if (lodGroup) lodGroup.style.display = "none";
+
+js/pages/project.js:3289
+        if (mindmapContainer) mindmapContainer.style.display = "none";
+        if (dataflowContainer) dataflowContainer.style.display = "flex";
+>       if (advisorContainer) advisorContainer.style.display = "none";
+        if (lodGroup) lodGroup.style.display = "none";
+        if (searchWrapper) searchWrapper.style.display = "none";
+
+js/pages/project.js:3290
+        if (dataflowContainer) dataflowContainer.style.display = "flex";
+        if (advisorContainer) advisorContainer.style.display = "none";
+>       if (lodGroup) lodGroup.style.display = "none";
+        if (searchWrapper) searchWrapper.style.display = "none";
+        renderDataFlowView();
+
+js/pages/project.js:3291
+        if (advisorContainer) advisorContainer.style.display = "none";
+        if (lodGroup) lodGroup.style.display = "none";
+>       if (searchWrapper) searchWrapper.style.display = "none";
+        renderDataFlowView();
+      } else if (mode === "advisor") {
+
+js/pages/project.js:3295
+      } else if (mode === "advisor") {
+        viewAdvisorBtn?.classList.add("is-active");
+>       if (graphContainer) graphContainer.style.display = "none";
+        if (mindmapContainer) mindmapContainer.style.display = "none";
+        if (dataflowContainer) dataflowContainer.style.display = "none";
+
+js/pages/project.js:3296
+        viewAdvisorBtn?.classList.add("is-active");
+        if (graphContainer) graphContainer.style.display = "none";
+>       if (mindmapContainer) mindmapContainer.style.display = "none";
+        if (dataflowContainer) dataflowContainer.style.display = "none";
+        if (advisorContainer) advisorContainer.style.display = "block";
+
+js/pages/project.js:3297
+        if (graphContainer) graphContainer.style.display = "none";
+        if (mindmapContainer) mindmapContainer.style.display = "none";
+>       if (dataflowContainer) dataflowContainer.style.display = "none";
+        if (advisorContainer) advisorContainer.style.display = "block";
+        if (lodGroup) lodGroup.style.display = "none";
+
+js/pages/project.js:3298
+        if (mindmapContainer) mindmapContainer.style.display = "none";
+        if (dataflowContainer) dataflowContainer.style.display = "none";
+>       if (advisorContainer) advisorContainer.style.display = "block";
+        if (lodGroup) lodGroup.style.display = "none";
+        if (searchWrapper) searchWrapper.style.display = "none";
+
+js/pages/project.js:3299
+        if (dataflowContainer) dataflowContainer.style.display = "none";
+        if (advisorContainer) advisorContainer.style.display = "block";
+>       if (lodGroup) lodGroup.style.display = "none";
+        if (searchWrapper) searchWrapper.style.display = "none";
+        renderAdvisorView();
+
+js/pages/project.js:3300
+        if (advisorContainer) advisorContainer.style.display = "block";
+        if (lodGroup) lodGroup.style.display = "none";
+>       if (searchWrapper) searchWrapper.style.display = "none";
+        renderAdvisorView();
+      }
+
+js/pages/project.js:3382
+  
+      const hud = document.getElementById("archFlowHud");
+>     if (hud) hud.style.display = "flex";
+  
+      const titleEl = document.getElementById("archFlowHudTitleText");
+
+js/pages/project.js:3515
+  
+      const hud = document.getElementById("archFlowHud");
+>     if (hud) hud.style.display = "none";
+  
+      const playBtn = document.getElementById("flowPlayBtn");
+
+js/pages/project.js:3545
+    searchInput?.addEventListener("input", (e) => {
+      activeSearchQuery = (e.target.value || "").trim().toLowerCase();
+>     if (searchClear) searchClear.style.display = activeSearchQuery ? "block" : "none";
+      filterGraphElements();
+    });
+
+js/pages/project.js:3551
+      if (searchInput) searchInput.value = "";
+      activeSearchQuery = "";
+>     if (searchClear) searchClear.style.display = "none";
+      filterGraphElements();
+    });
+
+js/pages/project.js:3606
+      if (searchInput) searchInput.value = "";
+      activeSearchQuery = "";
+>     if (searchClear) searchClear.style.display = "none";
+      closeInspector();
+      buildAndMountGraph();
+
+js/pages/project.js:4199
+      if (!drawer || !headTitle || !bodyContent) return;
+  
+>     drawer.style.display = "flex";
+  
+      headTitle.innerHTML = [
+
+js/pages/project.js:4305
+      if (!drawer || !headTitle || !bodyContent) return;
+  
+>     drawer.style.display = "flex";
+  
+      const srcNode = (arch.nodes || []).find(n => n.id === edgeData.source);
+
+js/pages/project.js:4439
+    function closeInspector() {
+      const drawer = document.getElementById("archInspectorDrawer");
+>     if (drawer) drawer.style.display = "none";
+      clearHighlights();
+    }
+
+js/pages/project.js:4692
+  
+        if (copyBtn) {
+>         copyBtn.style.display = "inline-flex";
+          copyBtn.addEventListener("click", () => {
+            navigator.clipboard.writeText(explanationText);
+
+js/pages/project.js:4807
+        if (issueCount > 0) {
+          badge.textContent = issueCount;
+>         badge.style.display = "inline-block";
+        } else {
+          badge.style.display = "none";
+
+js/pages/project.js:4809
+          badge.style.display = "inline-block";
+        } else {
+>         badge.style.display = "none";
+        }
+      }
+
+js/pages/project.js:4814
+  
+      if (healthChip) {
+>       healthChip.style.display = "inline-flex";
+        const rate = advisorData.stats ? advisorData.stats.verificationRate : 100;
+        if (issueCount === 0) {
+
+js/pages/project.js:4935
+          const idx = btn.getAttribute("data-file-idx");
+          contents.forEach(c => {
+>           c.style.display = c.getAttribute("data-content-idx") === idx ? "block" : "none";
+          });
+        });
+
+js/pages/project.js:5878
+      customSubmitBtn.textContent = "Analyzing & Generating...";
+      if (statusMsg) {
+>       statusMsg.style.display = "block";
+        statusMsg.style.color = "var(--ink-muted)";
+        statusMsg.textContent = "Analyzing project context, validating code structures, and compiling asset...";
+
+js/pages/project.js:5879
+      if (statusMsg) {
+        statusMsg.style.display = "block";
+>       statusMsg.style.color = "var(--ink-muted)";
+        statusMsg.textContent = "Analyzing project context, validating code structures, and compiling asset...";
+      }
+
+js/pages/project.js:5893
+        if (customTargetInput) customTargetInput.value = "";
+        if (statusMsg) {
+>         statusMsg.style.color = "var(--success)";
+          statusMsg.textContent = "✓ Generated " + (res.artifact?.filename || "asset") + " successfully.";
+        }
+
+js/pages/project.js:5902
+      } catch (err) {
+        if (statusMsg) {
+>         statusMsg.style.color = "var(--danger)";
+          statusMsg.textContent = "Failed: " + (err.message || "");
+        }
+
+js/pages/project.js:6215
+    function checkLogsForError(logs, status) {
+      if (status === "failed" || (logs && logs.some(l => l.toLowerCase().includes("error") || l.includes("Traceback") || l.includes("Exception")))) {
+>       debugBtn.style.display = "inline-block";
+      } else {
+        debugBtn.style.display = "none";
+
+js/pages/project.js:6217
+        debugBtn.style.display = "inline-block";
+      } else {
+>       debugBtn.style.display = "none";
+      }
+    }
+
+js/pages/project.js:6247
+      stateLabel.textContent = data.status.toUpperCase();
+      if (data.status === 'running' || data.status === 'starting') {
+>       stateLabel.style.color = 'var(--accent)';
+      } else if (data.status === 'failed') {
+        stateLabel.style.color = 'var(--danger)';
+
+js/pages/project.js:6249
+        stateLabel.style.color = 'var(--accent)';
+      } else if (data.status === 'failed') {
+>       stateLabel.style.color = 'var(--danger)';
+      } else if (data.status === 'completed') {
+        stateLabel.style.color = 'var(--success-color)';
+
+js/pages/project.js:6251
+        stateLabel.style.color = 'var(--danger)';
+      } else if (data.status === 'completed') {
+>       stateLabel.style.color = 'var(--success-color)';
+      } else {
+        stateLabel.style.color = 'var(--ink-muted)';
+
+js/pages/project.js:6253
+        stateLabel.style.color = 'var(--success-color)';
+      } else {
+>       stateLabel.style.color = 'var(--ink-muted)';
+      }
+  
+
+js/pages/project.js:6303
+      termOut.textContent = "Initializing sandboxed execution environment...\n";
+      stateLabel.textContent = "STARTING";
+>     stateLabel.style.color = 'var(--ink-muted)';
+      try {
+        const res = await fetch(`/api/projects/${projectId}/${type}`, { method: "POST" });
+
+js/pages/project.js:6310
+          termOut.textContent += "\n\n[Error] " + (err.error || err.message || "Failed to start execution");
+          stateLabel.textContent = "FAILED";
+>         stateLabel.style.color = 'var(--danger)';
+          return;
+        }
+
+js/services/theme.js:44
+      // Also set color-scheme on <html> so the browser chrome (scrollbars, form
+      // controls) matches. The CSS sets color-scheme via tokens too.
+>     try { document.documentElement.style.colorScheme = themeToApply; } catch (e) {}
+      this.notifyComponents(themeToApply);
+    },
+
+js/ui/artifact.js:236
+                const appliedTag = document.createElement("span");
+                appliedTag.className = "tag tag--xs tag--applied";
+>               appliedTag.style.cssText = "background:#e0e7ff; color:#4338ca; font-weight:600;";
+                appliedTag.textContent = "⚡ In Workspace";
+                badgeContainer.appendChild(appliedTag);
+
+js/ui/artifact.js:282
+        container = document.createElement("div");
+        container.id = "clarityArtifactPreviewContainer";
+>       container.style.display = "none";
+        container.innerHTML = `
+          <div id="clarityArtifactDivider" class="artifact-preview-resizer" title="Drag to resize preview">
+
+js/ui/artifact.js:308
+        startWidth = panel ? panel.offsetWidth : getSavedWidth();
+        divider.setPointerCapture(e.pointerId);
+>       document.body.style.userSelect = "none";
+        document.body.classList.add("is-resizing-artifact");
+      });
+
+js/ui/artifact.js:319
+        const panel = document.getElementById("clarityArtifactPanel");
+        if (panel) {
+>         panel.style.width = `${newWidth}px`;
+        }
+      });
+
+js/ui/artifact.js:326
+        if (isDraggingDivider) {
+          isDraggingDivider = false;
+>         document.body.style.userSelect = "";
+          document.body.classList.remove("is-resizing-artifact");
+          const panel = document.getElementById("clarityArtifactPanel");
+
+js/ui/artifact.js:345
+      const width = getSavedWidth();
+      if (panel) {
+>       panel.style.width = `${width}px`;
+      }
+      container.style.display = "flex";
+
+js/ui/artifact.js:347
+        panel.style.width = `${width}px`;
+      }
+>     container.style.display = "flex";
+      document.body.classList.add("has-artifact-preview");
+  
+
+js/ui/artifact.js:357
+      activeArtifact = null;
+      const container = document.getElementById("clarityArtifactPreviewContainer");
+>     if (container) container.style.display = "none";
+      document.body.classList.remove("has-artifact-preview");
+    }
+
+js/ui/artifact.js:574
+  
+      const updateZoom = () => {
+>       if (wrapper) wrapper.style.transform = `scale(${zoom})`;
+        if (zoomLevel) zoomLevel.textContent = `${Math.round(zoom * 100)}%`;
+      };
+
+js/ui/artifact.js:596
+      document.getElementById("svgBgToggleBtn")?.addEventListener("click", () => {
+        isDarkBg = !isDarkBg;
+>       if (canvasContainer) canvasContainer.style.background = isDarkBg ? "#0f172a" : "#ffffff";
+      });
+    }
+
+js/ui/artifact.js:656
+        trs.forEach(tr => {
+          const text = tr.textContent.toLowerCase();
+>         tr.style.display = (!q || text.includes(q)) ? "" : "none";
+        });
+      });
+
+js/ui/artifact.js:859
+        codeLines.forEach(cl => {
+          if (!q) {
+>           cl.style.backgroundColor = "";
+          } else if (cl.textContent.toLowerCase().includes(q)) {
+            cl.style.backgroundColor = "rgba(255, 235, 59, 0.25)";
+
+js/ui/artifact.js:861
+            cl.style.backgroundColor = "";
+          } else if (cl.textContent.toLowerCase().includes(q)) {
+>           cl.style.backgroundColor = "rgba(255, 235, 59, 0.25)";
+            matches++;
+          } else {
+
+js/ui/artifact.js:864
+            matches++;
+          } else {
+>           cl.style.backgroundColor = "";
+          }
+        });
+
+js/ui/chat.js:865
+          statusDot.className = "message__status status--streaming";
+        } else {
+>         statusDot.style.display = "none";
+        }
+      }
+
+js/ui/chat.js:1638
+                  const appliedTag = document.createElement("span");
+                  appliedTag.className = "tag tag--xs tag--applied";
+>                 appliedTag.style.cssText = "background:#e0e7ff; color:#4338ca; font-weight:600;";
+                  appliedTag.textContent = "⚡ In Workspace";
+                  badgeContainer.appendChild(appliedTag);
+
+js/ui/code-viewer.js:159
+          const ta = document.createElement("textarea");
+          ta.value = code;
+>         ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+
+js/ui/code-viewer.js:160
+          ta.value = code;
+          ta.style.position = "fixed";
+>         ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+
+js/ui/code-viewer.js:436
+        initialTop = rect.top;
+  
+>       ws.style.position = "fixed";
+        ws.style.left = initialLeft + "px";
+        ws.style.top = initialTop + "px";
+
+js/ui/code-viewer.js:437
+  
+        ws.style.position = "fixed";
+>       ws.style.left = initialLeft + "px";
+        ws.style.top = initialTop + "px";
+        ws.style.margin = "0";
+
+js/ui/code-viewer.js:438
+        ws.style.position = "fixed";
+        ws.style.left = initialLeft + "px";
+>       ws.style.top = initialTop + "px";
+        ws.style.margin = "0";
+  
+
+js/ui/code-viewer.js:439
+        ws.style.left = initialLeft + "px";
+        ws.style.top = initialTop + "px";
+>       ws.style.margin = "0";
+  
+        const onMouseMove = (moveEvent) => {
+
+js/ui/code-viewer.js:447
+          const newLeft = Math.max(10, Math.min(window.innerWidth - ws.offsetWidth - 10, initialLeft + dx));
+          const newTop = Math.max(10, Math.min(window.innerHeight - ws.offsetHeight - 10, initialTop + dy));
+>         ws.style.left = newLeft + "px";
+          ws.style.top = newTop + "px";
+        };
+
+js/ui/code-viewer.js:448
+          const newTop = Math.max(10, Math.min(window.innerHeight - ws.offsetHeight - 10, initialTop + dy));
+          ws.style.left = newLeft + "px";
+>         ws.style.top = newTop + "px";
+        };
+  
+
+js/ui/code-viewer.js:474
+            const newW = Math.max(280, Math.min(window.innerWidth * 0.98, startW + (moveEvent.clientX - startClientX)));
+            const newH = Math.max(240, Math.min(window.innerHeight * 0.96, startH + (moveEvent.clientY - startClientY)));
+>           ws.style.width = newW + "px";
+            ws.style.height = newH + "px";
+            ws.style.maxWidth = "none";
+
+js/ui/code-viewer.js:475
+            const newH = Math.max(240, Math.min(window.innerHeight * 0.96, startH + (moveEvent.clientY - startClientY)));
+            ws.style.width = newW + "px";
+>           ws.style.height = newH + "px";
+            ws.style.maxWidth = "none";
+            ws.style.maxHeight = "none";
+
+js/ui/code-viewer.js:476
+            ws.style.width = newW + "px";
+            ws.style.height = newH + "px";
+>           ws.style.maxWidth = "none";
+            ws.style.maxHeight = "none";
+          };
+
+js/ui/code-viewer.js:477
+            ws.style.height = newH + "px";
+            ws.style.maxWidth = "none";
+>           ws.style.maxHeight = "none";
+          };
+  
+
+js/ui/code-viewer.js:500
+          const onMouseMove = (moveEvent) => {
+            const newW = Math.max(280, Math.min(window.innerWidth * 0.98, startW + (moveEvent.clientX - startClientX)));
+>           ws.style.width = newW + "px";
+            ws.style.maxWidth = "none";
+          };
+
+js/ui/code-viewer.js:501
+            const newW = Math.max(280, Math.min(window.innerWidth * 0.98, startW + (moveEvent.clientX - startClientX)));
+            ws.style.width = newW + "px";
+>           ws.style.maxWidth = "none";
+          };
+  
+
+js/ui/code-viewer.js:524
+          const onMouseMove = (moveEvent) => {
+            const newH = Math.max(240, Math.min(window.innerHeight * 0.96, startH + (moveEvent.clientY - startClientY)));
+>           ws.style.height = newH + "px";
+            ws.style.maxHeight = "none";
+          };
+
+js/ui/code-viewer.js:525
+            const newH = Math.max(240, Math.min(window.innerHeight * 0.96, startH + (moveEvent.clientY - startClientY)));
+            ws.style.height = newH + "px";
+>           ws.style.maxHeight = "none";
+          };
+  
+
+js/ui/code-viewer.js:662
+                ws.classList.toggle("is-fullscreen", activeWorkspaceState.isFullscreen);
+                if (activeWorkspaceState.isFullscreen) {
+>                 ws.style.position = "";
+                  ws.style.left = "";
+                  ws.style.top = "";
+
+js/ui/code-viewer.js:663
+                if (activeWorkspaceState.isFullscreen) {
+                  ws.style.position = "";
+>                 ws.style.left = "";
+                  ws.style.top = "";
+                  ws.style.width = "";
+
+js/ui/code-viewer.js:664
+                  ws.style.position = "";
+                  ws.style.left = "";
+>                 ws.style.top = "";
+                  ws.style.width = "";
+                  ws.style.height = "";
+
+js/ui/code-viewer.js:665
+                  ws.style.left = "";
+                  ws.style.top = "";
+>                 ws.style.width = "";
+                  ws.style.height = "";
+                  ws.style.margin = "";
+
+js/ui/code-viewer.js:666
+                  ws.style.top = "";
+                  ws.style.width = "";
+>                 ws.style.height = "";
+                  ws.style.margin = "";
+                }
+
+js/ui/code-viewer.js:667
+                  ws.style.width = "";
+                  ws.style.height = "";
+>                 ws.style.margin = "";
+                }
+              }
+
+js/ui/composer.js:40
+  
+      const autoResize = () => {
+>       input.style.height = "auto";
+        input.style.height = Math.min(input.scrollHeight, 220) + "px";
+      };
+
+js/ui/composer.js:41
+      const autoResize = () => {
+        input.style.height = "auto";
+>       input.style.height = Math.min(input.scrollHeight, 220) + "px";
+      };
+      const updateSendState = () => {
+
+js/ui/sources.js:19
+        const card = document.createElement('article');
+        card.className = 'doc-card';
+>       if (doc.onPreview) card.style.cursor = 'pointer';
+        card.innerHTML = [
+          '<div class="doc-card__title">' + window.Clarity.utils.escapeHtml(doc.title || 'Untitled source') + '</div>',
+
+js/ui/tooltip.js:63
+      }
+  
+>     tip.style.top = top_y + "px";
+      tip.style.left = left + "px";
+      tip.setAttribute("data-placement", actualPlacement);
+
+js/ui/tooltip.js:64
+  
+      tip.style.top = top_y + "px";
+>     tip.style.left = left + "px";
+      tip.setAttribute("data-placement", actualPlacement);
+    }
+
+js/ui/tooltip.js:92
+      currentTarget = target;
+      activeTip.textContent = text;
+>     activeTip.style.maxWidth = (opts.maxWidth || 320) + "px";
+      // Allow measurement before positioning.
+      activeTip.style.top = "0px";
+
+js/ui/tooltip.js:94
+      activeTip.style.maxWidth = (opts.maxWidth || 320) + "px";
+      // Allow measurement before positioning.
+>     activeTip.style.top = "0px";
+      activeTip.style.left = "0px";
+      activeTip.classList.add("is-visible");
+
+js/ui/tooltip.js:95
+      // Allow measurement before positioning.
+      activeTip.style.top = "0px";
+>     activeTip.style.left = "0px";
+      activeTip.classList.add("is-visible");
+      requestAnimationFrame(() => {
+
+js/ui/topbar.js:78
+          imgEl.onload = () => {
+            containerEl.classList.remove("avatar--fallback");
+>           imgEl.style.display = "";
+            if (fallbackEl) fallbackEl.style.display = "none";
+          };
+
+js/ui/topbar.js:79
+            containerEl.classList.remove("avatar--fallback");
+            imgEl.style.display = "";
+>           if (fallbackEl) fallbackEl.style.display = "none";
+          };
+          imgEl.onerror = () => {
+
+js/ui/topbar.js:83
+          imgEl.onerror = () => {
+            containerEl.classList.add("avatar--fallback");
+>           imgEl.style.display = "none";
+            if (fallbackEl) fallbackEl.style.display = "flex";
+          };
+
+js/ui/topbar.js:84
+            containerEl.classList.add("avatar--fallback");
+            imgEl.style.display = "none";
+>           if (fallbackEl) fallbackEl.style.display = "flex";
+          };
+          imgEl.src = photoUrl;
+
+js/ui/topbar.js:90
+        } else {
+          containerEl.classList.add("avatar--fallback");
+>         imgEl.style.display = "none";
+          imgEl.removeAttribute("src");
+          if (fallbackEl) fallbackEl.style.display = "flex";
+
+js/ui/topbar.js:92
+          imgEl.style.display = "none";
+          imgEl.removeAttribute("src");
+>         if (fallbackEl) fallbackEl.style.display = "flex";
+        }
+      };
+
+js/ui/topbar.js:115
+        button.setAttribute("aria-expanded", "true");
+        const rect = button.getBoundingClientRect();
+>       menu.style.top = rect.bottom + 8 + "px";
+        menu.style.right = Math.max(8, window.innerWidth - rect.right) + "px";
+      };
+
+js/ui/topbar.js:116
+        const rect = button.getBoundingClientRect();
+        menu.style.top = rect.bottom + 8 + "px";
+>       menu.style.right = Math.max(8, window.innerWidth - rect.right) + "px";
+      };
+  
+
+js/ui/topbar.js:150
+      const place = () => {
+        const rect = chip.getBoundingClientRect();
+>       dropdown.style.position = "fixed";
+        dropdown.style.top = rect.bottom + 8 + "px";
+        dropdown.style.left = rect.left + "px";
+
+js/ui/topbar.js:151
+        const rect = chip.getBoundingClientRect();
+        dropdown.style.position = "fixed";
+>       dropdown.style.top = rect.bottom + 8 + "px";
+        dropdown.style.left = rect.left + "px";
+        dropdown.style.minWidth = Math.max(320, rect.width) + "px";
+
+js/ui/topbar.js:152
+        dropdown.style.position = "fixed";
+        dropdown.style.top = rect.bottom + 8 + "px";
+>       dropdown.style.left = rect.left + "px";
+        dropdown.style.minWidth = Math.max(320, rect.width) + "px";
+      };
+
+js/ui/topbar.js:153
+        dropdown.style.top = rect.bottom + 8 + "px";
+        dropdown.style.left = rect.left + "px";
+>       dropdown.style.minWidth = Math.max(320, rect.width) + "px";
+      };
+  

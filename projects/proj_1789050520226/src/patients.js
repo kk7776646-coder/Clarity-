@@ -1,0 +1,1 @@
+function getPatientRecords() { return 'patient records'; }

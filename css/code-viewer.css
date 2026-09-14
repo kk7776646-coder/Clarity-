@@ -1,0 +1,777 @@
+/* ============================================================
+   Clarity Professional AI Code Experience
+   Modern Code Cells & Workspace
+   Fully theme-aware using Semantic CSS Tokens
+   ============================================================ */
+
+/* ---------- 1. INLINE CODE CELL (INSIDE CHAT MESSAGE) ---------- */
+.code-cell {
+  margin: 14px 0;
+  border-radius: 10px;
+  background: var(--code-cell-bg);
+  border: 1px solid var(--code-cell-border);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  position: relative;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  box-sizing: border-box;
+}
+
+.code-cell:hover {
+  border-color: var(--line-strong);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+/* Multi-file Tab Bar (when multiple files are present) */
+.code-cell__tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px 0 8px;
+  background: var(--code-cell-header-bg);
+  border-bottom: 1px solid var(--code-cell-border);
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+.code-cell__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.code-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  color: var(--code-cell-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.code-tab:hover {
+  color: var(--code-cell-ink);
+  background: var(--surface-hover);
+}
+.code-tab.is-active {
+  color: var(--code-active-tab-ink);
+  background: var(--code-active-tab-bg);
+  border-color: var(--code-tab-border);
+  font-weight: 600;
+  position: relative;
+}
+.code-tab.is-active::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--code-active-tab-ink);
+}
+
+/* Code Cell Header */
+.code-cell__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 12px;
+  background: var(--code-cell-header-bg);
+  border-bottom: 1px solid var(--code-cell-border);
+  font-size: 12px;
+  line-height: 1;
+  min-height: 38px;
+  box-sizing: border-box;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.code-cell__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code-cell__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2.5px 7px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.code-cell__filename {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--code-cell-ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+}
+
+.code-cell__lines-count {
+  font-size: 11px;
+  color: var(--code-cell-muted);
+  font-weight: 400;
+  margin-left: 2px;
+}
+
+/* Code Cell Actions */
+.code-cell__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.code-cell__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 8px;
+  height: 26px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--code-cell-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  user-select: none;
+  text-decoration: none;
+}
+
+.code-cell__btn * {
+  pointer-events: none;
+}
+
+.code-cell__btn:hover {
+  color: var(--code-cell-ink);
+  background: var(--surface-hover);
+  border-color: var(--line);
+}
+
+.code-cell__btn:active {
+  transform: translateY(1px);
+}
+
+.code-cell__btn--active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--line-strong);
+}
+
+.code-cell__btn--copied {
+  color: var(--success) !important;
+  background: var(--success-soft) !important;
+  border-color: var(--success) !important;
+}
+
+/* Code Body & Editor Layout */
+.code-cell__body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.code-cell__editor-wrap {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 480px;
+  padding: 10px 0;
+  background: var(--code-cell-bg);
+}
+
+/* Slim scrollbars for code */
+.code-cell__editor-wrap::-webkit-scrollbar,
+.code-workspace__code-pane::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.code-cell__editor-wrap::-webkit-scrollbar-track,
+.code-workspace__code-pane::-webkit-scrollbar-track {
+  background: transparent;
+}
+.code-cell__editor-wrap::-webkit-scrollbar-thumb,
+.code-workspace__code-pane::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 4px;
+}
+.code-cell__editor-wrap::-webkit-scrollbar-thumb:hover,
+.code-workspace__code-pane::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-faint);
+}
+
+/* Line Numbering & Code Lines */
+.code-line {
+  display: flex;
+  min-width: 100%;
+  width: max-content;
+  line-height: 20px;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  box-sizing: border-box;
+}
+
+.code-line:hover {
+  background: var(--code-line-hover);
+}
+
+.code-line__num {
+  width: 44px;
+  min-width: 44px;
+  text-align: right;
+  padding-right: 14px;
+  color: var(--code-gutter-ink);
+  user-select: none;
+  -webkit-user-select: none;
+  font-size: 12px;
+  box-sizing: border-box;
+  font-variant-numeric: tabular-nums;
+}
+
+.code-line:hover .code-line__num {
+  color: var(--code-cell-ink);
+}
+
+.code-line__code {
+  flex: 1;
+  padding-right: 18px;
+  color: var(--code-cell-ink);
+  white-space: pre;
+  tab-size: 4;
+}
+
+/* Large Code Block Footer Expand/Collapse */
+.code-cell__footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  background: var(--code-cell-header-bg);
+  border-top: 1px solid var(--code-cell-border);
+}
+
+.code-cell__expand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.code-cell__expand-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+/* ---------- 2. PROFESSIONAL SYNTAX COLORING (THEME-AWARE PALETTE) ---------- */
+/* Token normalization - completely prevent badge/pill/tag background overrides */
+.code-cell .token,
+.code-workspace .token,
+.code-line .token,
+.token,
+.token.tag,
+span.token,
+.language-markup .token.tag {
+  display: inline !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  font-weight: inherit !important;
+  box-shadow: none !important;
+  border: none !important;
+  outline: none !important;
+  vertical-align: baseline !important;
+}
+
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: var(--code-token-comment) !important;
+  font-style: italic;
+}
+
+.token.punctuation {
+  color: var(--code-token-punctuation) !important;
+}
+
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol,
+.token.deleted {
+  color: var(--code-token-number) !important;
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+  color: var(--code-token-string) !important;
+}
+
+.token.operator,
+.token.entity,
+.token.url,
+.language-css .token.string,
+.style .token.string {
+  color: var(--code-token-operator) !important;
+}
+
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+  color: var(--code-token-keyword) !important;
+  font-weight: 500;
+}
+
+.token.function,
+.token.class-name {
+  color: var(--code-token-function) !important;
+}
+
+.token.regex,
+.token.important,
+.token.variable {
+  color: var(--code-token-variable) !important;
+}
+
+.token.important,
+.token.bold {
+  font-weight: bold;
+}
+
+.token.italic {
+  font-style: italic;
+}
+
+.token.entity {
+  cursor: help;
+}
+
+/* HTML specific colors */
+.language-markup .token.tag {
+  color: var(--code-token-tag) !important;
+}
+.language-markup .token.tag .token.punctuation {
+  color: var(--code-token-punctuation) !important;
+}
+.language-markup .token.attr-name {
+  color: var(--code-token-attr-name) !important;
+}
+.language-markup .token.attr-value {
+  color: var(--code-token-attr-value) !important;
+}
+
+/* JSON specific colors */
+.language-json .token.property {
+  color: var(--code-token-property) !important;
+}
+.language-json .token.string {
+  color: var(--code-token-string) !important;
+}
+.language-json .token.number {
+  color: var(--code-token-number) !important;
+}
+
+/* CSS specific colors */
+.language-css .token.property {
+  color: var(--code-token-property) !important;
+}
+.language-css .token.selector {
+  color: var(--code-token-tag) !important;
+}
+
+/* Python decorators */
+.language-python .token.decorator {
+  color: var(--code-token-function) !important;
+}
+
+/* ---------- 3. EXPANDED CODE WORKSPACE OVERLAY ---------- */
+.code-workspace-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--scrim);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 100000 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: codeFadeIn 0.18s ease-out;
+  box-sizing: border-box;
+}
+
+@keyframes codeFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.code-workspace {
+  position: relative;
+  width: min(95vw, 1360px);
+  height: min(90vh, 880px);
+  min-width: 280px;
+  min-height: 260px;
+  max-width: 98vw;
+  max-height: 96vh;
+  background: var(--code-cell-bg);
+  border: 1px solid var(--code-cell-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-float);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  animation: codePopIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes codePopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Fullscreen Workspace */
+.code-workspace.is-fullscreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  border-radius: 0 !important;
+  border: none !important;
+  transform: none !important;
+  z-index: 999999 !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  background: var(--code-cell-bg) !important;
+}
+
+.code-workspace.is-fullscreen .code-workspace__header {
+  cursor: default;
+  padding: 12px 32px;
+  background: var(--code-cell-header-bg);
+  border-bottom: 1px solid var(--code-cell-border);
+}
+
+.code-workspace.is-fullscreen .code-workspace__main {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: stretch !important;
+  padding: 24px 32px !important;
+  box-sizing: border-box !important;
+  height: calc(100vh - 52px) !important;
+  overflow: hidden !important;
+  background: var(--code-cell-bg) !important;
+}
+
+.code-workspace.is-fullscreen .code-workspace__code-pane {
+  max-width: 1400px !important;
+  width: 100% !important;
+  margin: 0 auto !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--code-cell-border) !important;
+  padding: 20px 24px !important;
+  box-sizing: border-box !important;
+  box-shadow: var(--shadow-lift) !important;
+}
+
+.code-workspace__header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.code-workspace__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--code-cell-ink);
+}
+
+.code-workspace__badge {
+  padding: 2.5px 7px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.code-workspace__tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 8px;
+  border-left: 1px solid var(--code-cell-border);
+  padding-left: 8px;
+}
+
+.code-workspace__header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Workspace Action Buttons */
+.code-workspace__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 10px;
+  height: 30px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--code-cell-ink);
+  background: var(--surface-muted);
+  border: 1px solid var(--code-cell-border);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.code-workspace__btn:hover {
+  color: var(--code-cell-ink);
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+}
+
+.code-workspace__btn.is-active {
+  color: var(--accent) !important;
+  background: var(--accent-soft) !important;
+  border-color: var(--accent) !important;
+}
+
+.code-workspace__btn--copied {
+  color: var(--success) !important;
+  background: var(--success-soft) !important;
+  border-color: var(--success) !important;
+}
+
+.code-workspace__close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  color: var(--code-cell-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.code-workspace__close-btn:hover {
+  color: var(--code-cell-ink);
+  background: var(--surface-hover);
+}
+
+/* Workspace Main Body - Full-size clean code viewer */
+.code-workspace__main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+  background: var(--code-cell-bg);
+  width: 100%;
+}
+
+/* Code Pane */
+.code-workspace__code-pane {
+  flex: 1;
+  overflow: auto;
+  padding: 14px 0;
+  background: var(--code-cell-bg);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+/* Word Wrap Support */
+.code-workspace.is-wrapped .code-line__code {
+  white-space: pre-wrap !important;
+  word-break: break-all !important;
+}
+
+/* Resizing handles for Code Workspace */
+.code-workspace__resizer {
+  position: absolute;
+  z-index: 50;
+}
+
+.code-workspace__resizer--corner {
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+}
+.code-workspace__resizer--corner::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--line-strong);
+  border-bottom: 2px solid var(--line-strong);
+}
+
+.code-workspace__resizer--right {
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+}
+
+.code-workspace__resizer--bottom {
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.code-workspace.is-fullscreen .code-workspace__resizer {
+  display: none !important;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+  .code-cell__header {
+    padding: 6px 10px;
+  }
+  .code-cell__btn span {
+    display: none;
+  }
+  .code-cell__btn {
+    padding: 4px 6px;
+  }
+  .code-workspace {
+    width: 98vw;
+    height: 94vh;
+    border-radius: 8px;
+  }
+  .code-workspace__header {
+    padding: 8px 10px;
+  }
+  .code-workspace__btn span {
+    display: none;
+  }
+  .code-line__num {
+    width: 34px;
+    min-width: 34px;
+    padding-right: 8px;
+  }
+}
+
+/* ---------- UNIVERSAL FLOATING COPY BUTTON FOR PRE/CODE BLOCKS ---------- */
+.pre-copy-container {
+  position: relative;
+}
+
+.pre-copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 8px;
+  height: 26px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--code-cell-muted, #71717a);
+  background: var(--code-cell-header-bg, #f4f4f5);
+  border: 1px solid var(--code-cell-border, #e4e4e7);
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s ease;
+  z-index: 10;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.pre-copy-container:hover .pre-copy-btn,
+.pre-copy-btn:focus-visible {
+  opacity: 1;
+}
+
+.pre-copy-btn:hover {
+  color: var(--code-cell-ink, #18181b);
+  background: var(--surface-hover, #e4e4e7);
+  border-color: var(--line, #d4d4d8);
+}
+
+.pre-copy-btn--copied {
+  color: var(--success, #10b981) !important;
+  background: var(--success-soft, #ecfdf5) !important;
+  border-color: var(--success, #10b981) !important;
+}
+
