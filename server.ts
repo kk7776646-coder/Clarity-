@@ -936,34 +936,32 @@ async function startServer() {
   // -------------------------------------------------------------------------
   app.get("/api/models", async (req, res) => {
     const user = resolveUser(req);
-    console.log(`[MODEL DEBUG] GET /api/models entered`);
-    console.log(`[MODEL DEBUG] user=${user ? user.id : "null"}`);
+    console.log(`[MODEL TRACE] GET /api/models ENTER`);
+    console.log(`[MODEL TRACE] user=${user ? user.id : "null"}`);
     if (!user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
     
     const client = getSupabaseAdmin();
-    console.log(`[MODEL DEBUG] Supabase admin initialized=${Boolean(client)}`);
     if (!client) {
       return res.status(503).json({ error: "Supabase database not configured in production" });
     }
 
     try {
-      console.log(`[MODEL DEBUG] PostgreSQL models query starting`);
+      console.log(`[MODEL TRACE] BEFORE models PostgreSQL query`);
       const { data: rows, error } = await client
         .from("models")
         .select("*")
         .eq("user_id", user.id);
+      console.log(`[MODEL TRACE] AFTER models PostgreSQL query`);
 
       if (error) {
-        console.log(`[MODEL DEBUG] PostgreSQL query failed`);
-        console.log(`[MODEL DEBUG] code=${error.code}`);
-        console.log(`[MODEL DEBUG] message=${error.message}`);
+        console.log(`[MODEL TRACE] MODELS ERROR`);
+        console.log(`[MODEL TRACE] name=${error.name || "PostgrestError"}`);
+        console.log(`[MODEL TRACE] code=${error.code}`);
+        console.log(`[MODEL TRACE] message=${error.message}`);
         return res.status(500).json({ error: error.message || "Failed to query Supabase models" });
       }
-
-      console.log(`[MODEL DEBUG] PostgreSQL models query completed`);
-      console.log(`[MODEL DEBUG] rowCount=${rows?.length || 0}`);
 
       const mappedList = (rows || []).map((row: any) => {
         let caps = {};
@@ -999,7 +997,7 @@ async function startServer() {
 
       return res.json({ models: mappedList, active: user.active_model_id || "" });
     } catch (err: any) {
-      console.error("[Model Registry] GET /api/models exception:", err);
+      console.error("[MODEL TRACE] MODELS ERROR exception:", err);
       return res.status(500).json({ error: err?.message || "Internal server error" });
     }
   });

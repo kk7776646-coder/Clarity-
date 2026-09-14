@@ -5,8 +5,18 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
  * Secrets like SUPABASE_SERVICE_ROLE_KEY are server-side only and never exposed to the client.
  */
 export function getSupabaseUrl(): string {
-  const url = process.env.SUPABASE_URL || "";
-  return url.trim().replace(/\/+$/, "");
+  let url = process.env.SUPABASE_URL || "";
+  url = url.trim().replace(/\/+$/, "");
+  try {
+    const parsed = new URL(url);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return url
+      .replace(/\/storage\/v1.*$/, "")
+      .replace(/\/rest\/v1.*$/, "")
+      .replace(/\/auth\/v1.*$/, "")
+      .replace(/\/realtime.*$/, "");
+  }
 }
 
 export function getSupabaseAnonKey(): string {
