@@ -5,6 +5,7 @@ import {
   ensureSupabaseTablesExist,
   isSupabaseConfigured,
   getSupabaseAdmin,
+  syncModelToSupabase,
 } from "./supabase.js";
 import { syncProjectFiles, createTerminalSession, startTerminalSession, stopTerminalSession, sendInputToSession, getProjectSessions, activeSessions, sanitizeSession, resolveProjectWorkspace, detectProject } from "./run-engine";
 import httpProxy from "http-proxy";
