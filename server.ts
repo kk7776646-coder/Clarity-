@@ -766,8 +766,10 @@ async function startServer() {
   // Auth API
   // -------------------------------------------------------------------------
   app.get("/api/auth/me", (req, res) => {
+    console.log("[API] Auth Me called, path:", req.path);
     const user = resolveUser(req);
     if (!user) {
+      console.log("[API] Auth Me: User not resolved");
       return res.status(401).json({ user: null });
     }
     // Ensure default cookie is set if not already
