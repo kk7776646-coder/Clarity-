@@ -911,7 +911,10 @@ async function startServer() {
   // Models API
   // -------------------------------------------------------------------------
   app.get("/api/models", (req, res) => {
-    const user = resolveUser(req) || initialUser;
+    const user = resolveUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
     
     // Refresh models map from SQLite database to guarantee consistency
     try {
@@ -1086,7 +1089,10 @@ async function startServer() {
   }
 
   app.post("/api/models/set-active", (req, res) => {
-    const user = resolveUser(req) || initialUser;
+    const user = resolveUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
     const { model_id } = req.body || {};
     if (!model_id || !models.has(model_id)) {
       return res.status(404).json({ error: `Model '${model_id}' not found`, type: "model_not_found" });
@@ -1167,7 +1173,10 @@ async function startServer() {
   // Conversations API
   // -------------------------------------------------------------------------
   app.get("/api/conversations", (req, res) => {
-    const user = resolveUser(req) || initialUser;
+    const user = resolveUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
 
     // Ensure all conversations from database are in memory
     try {
