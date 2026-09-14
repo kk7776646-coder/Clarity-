@@ -502,7 +502,10 @@ export async function syncKnowledgeChunkToSupabase(chunk: {
 
 export async function syncModelToSupabase(model: any): Promise<{ success: boolean; error?: any }> {
   const client = getSupabaseAdmin();
-  if (!client) return { success: false, error: "Supabase client not configured" };
+  if (!client) {
+    console.error("[MODEL TRACE] syncModelToSupabase: Supabase admin client not configured");
+    return { success: false, error: "Supabase client not configured" };
+  }
   try {
     let capsStr = "{}";
     if (model.capabilities) {
@@ -527,14 +530,19 @@ export async function syncModelToSupabase(model: any): Promise<{ success: boolea
       created_at: model.created_at || Date.now(),
       updated_at: model.updated_at || Date.now(),
     };
-    const { error } = await client.from("models").upsert(record);
+
+    console.log(`[MODEL TRACE] UPSERTing model id=${record.id}, user_id=${record.user_id}, provider=${record.provider}, provider_model_id=${record.provider_model_id}, hasApiKey=${Boolean(record.api_secret)}`);
+
+    const { data, error } = await client.from("models").upsert(record).select();
     if (error) {
-      console.error("[Supabase Sync] Model upsert error:", error);
-      return { success: false, error: error.message };
+      console.error(`[MODEL TRACE] Model upsert error code=${error.code}, message=${error.message}, details=${error.details}, hint=${error.hint}`);
+      return { success: false, error: error.message || "Database upsert failed" };
     }
+
+    console.log(`[MODEL TRACE] Model upsert successful id=${record.id}`);
     return { success: true };
   } catch (err: any) {
-    console.error("[Supabase Sync] Model upsert exception:", err);
+    console.error("[MODEL TRACE] Model upsert exception:", err?.message || err);
     return { success: false, error: err?.message || String(err) };
   }
 }

@@ -1005,12 +1005,16 @@ async function startServer() {
 
   app.post("/api/models", async (req, res) => {
     const user = resolveUser(req);
+    console.log(`[MODEL TRACE] POST /api/models ENTER`);
+    console.log(`[MODEL TRACE] user=${user ? user.id : "null"}`);
     if (!user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
     const body = req.body || {};
     const id = String(body.id || `custom_${Date.now()}`).trim();
+    console.log(`[MODEL TRACE] POST /api/models modelId=${id}, provider=${body.provider || "custom"}`);
+
     if (models.has(id)) {
       return res.status(409).json({ error: `Model '${id}' already exists`, type: "duplicate_model" });
     }
@@ -1044,6 +1048,7 @@ async function startServer() {
     
     const client = getSupabaseAdmin();
     if (client) {
+      console.log(`[MODEL TRACE] calling syncModelToSupabase for user=${user.id}, id=${id}`);
       const syncRes = await syncModelToSupabase({
         ...newModel,
         user_id: user.id,
@@ -1051,10 +1056,12 @@ async function startServer() {
         updated_at: Date.now(),
       });
       if (!syncRes.success) {
+        console.error(`[MODEL TRACE] POST /api/models persistence failed: ${syncRes.error}`);
         return res.status(500).json({ error: syncRes.error || "Failed to persist model to Supabase" });
       }
+      console.log(`[MODEL TRACE] POST /api/models persistence succeeded for id=${id}`);
     } else {
-      try { dbSaveModel(newModel); } catch(err) { console.error(err); }
+      return res.status(503).json({ error: "Supabase database not configured in production" });
     }
     models.set(id, newModel);
     res.status(201).json(publicModel(newModel));
