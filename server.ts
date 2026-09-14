@@ -615,6 +615,11 @@ const upload = multer({
 // ---------------------------------------------------------------------------
 async function startServer() {
   const app = express();
+  
+  app.use((req, res, next) => {
+    console.log(`[DEBUG] Request: ${req.method} ${req.url}`);
+    next();
+  });
 
   const allowedOrigins = [
     "https://clarity.kk7776646.workers.dev",
