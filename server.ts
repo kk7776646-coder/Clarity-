@@ -3934,6 +3934,23 @@ ${vq.answer}
   });
 
   // -------------------------------------------------------------------------
+  // Diagnostic Route (Temporary)
+  // -------------------------------------------------------------------------
+  app.get("/api/debug/routes", (req, res) => {
+    const routes = app._router.stack
+      .filter((layer: any) => layer.route)
+      .map((layer: any) => ({
+        method: Object.keys(layer.route.methods)[0].toUpperCase(),
+        path: layer.route.path,
+      }));
+    res.json(routes);
+  });
+
+  console.log("[DEBUG] All routes registered. Route stack:", app._router.stack
+    .filter((layer: any) => layer.route)
+    .map((layer: any) => `${Object.keys(layer.route.methods)[0].toUpperCase()} ${layer.route.path}`));
+
+  // -------------------------------------------------------------------------
   // Vite Integration (Dev) vs Static Serving (Production)
   // -------------------------------------------------------------------------
   console.log("NODE_ENV is:", process.env.NODE_ENV);
