@@ -936,28 +936,34 @@ async function startServer() {
   // -------------------------------------------------------------------------
   app.get("/api/models", async (req, res) => {
     const user = resolveUser(req);
+    console.log(`[MODEL DEBUG] GET /api/models entered`);
+    console.log(`[MODEL DEBUG] user=${user ? user.id : "null"}`);
     if (!user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
     
     const client = getSupabaseAdmin();
+    console.log(`[MODEL DEBUG] Supabase admin initialized=${Boolean(client)}`);
     if (!client) {
       return res.status(503).json({ error: "Supabase database not configured in production" });
     }
 
     try {
-      console.log(`[Model Registry] GET user=${user.id}`);
+      console.log(`[MODEL DEBUG] PostgreSQL models query starting`);
       const { data: rows, error } = await client
         .from("models")
         .select("*")
         .eq("user_id", user.id);
 
       if (error) {
-        console.error(`[Model Registry] PostgreSQL query failed code=${error.code}:`, error.message);
+        console.log(`[MODEL DEBUG] PostgreSQL query failed`);
+        console.log(`[MODEL DEBUG] code=${error.code}`);
+        console.log(`[MODEL DEBUG] message=${error.message}`);
         return res.status(500).json({ error: error.message || "Failed to query Supabase models" });
       }
 
-      console.log(`[Model Registry] PostgreSQL query succeeded count=${rows?.length || 0}`);
+      console.log(`[MODEL DEBUG] PostgreSQL models query completed`);
+      console.log(`[MODEL DEBUG] rowCount=${rows?.length || 0}`);
 
       const mappedList = (rows || []).map((row: any) => {
         let caps = {};
