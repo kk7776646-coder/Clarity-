@@ -704,8 +704,8 @@ async function startServer() {
         if (u) return u;
       }
     }
-    // Fall back to initial user if default_token is in session or for seamless initial experience
-    return initialUser;
+    // Do not fall back to initial user in production, force re-authentication.
+    return null;
   }
 
   // -------------------------------------------------------------------------
