@@ -514,3 +514,79 @@ export async function syncUserToSupabase(user: {
     console.warn("[Supabase Sync] User upsert error:", err);
   }
 }
+
+export async function syncModelToSupabase(model: {
+  id: string;
+  name: string;
+  provider: string;
+  baseUrl?: string;
+  apiKey?: string;
+  modelName: string;
+  modelType?: string;
+  capabilities?: any;
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  defaultTemperature?: number;
+  defaultTopP?: number;
+  supportsStreaming?: boolean;
+  enabled?: boolean;
+  status?: string;
+  isUser?: boolean;
+}, userId: string) {
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase is not configured");
+  const record = {
+    id: model.id,
+    user_id: userId,
+    name: model.name,
+    provider: model.provider,
+    base_url: model.baseUrl || null,
+    api_key: model.apiKey || null,
+    model_name: model.modelName || "",
+    model_type: model.modelType || "text",
+    capabilities: typeof model.capabilities === 'string' ? model.capabilities : JSON.stringify(model.capabilities || {}),
+    context_window: model.contextWindow || 16000,
+    max_output_tokens: model.maxOutputTokens || 4096,
+    default_temperature: model.defaultTemperature || 0.7,
+    default_top_p: model.defaultTopP || 1.0,
+    supports_streaming: model.supportsStreaming !== false ? 1 : 0,
+    enabled: model.enabled !== false ? 1 : 0,
+    status: model.status || "available",
+    is_user: model.isUser ? 1 : 0,
+    created_at: Date.now(),
+  };
+  const { error } = await client.from("models").upsert(record, { onConflict: "id" });
+  if (error) {
+    console.error("[Supabase Model Sync] Error upserting model:", error);
+    throw new Error(error.message);
+  }
+}
+
+export async function fetchModelsFromSupabase(userId: string): Promise<any[]> {
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase is not configured");
+  const { data, error } = await client
+    .from("models")
+    .select("*")
+    .eq("user_id", userId);
+  if (error) {
+    console.error("[Supabase Model Fetch] Error fetching models:", error);
+    throw new Error(error.message);
+  }
+  return data || [];
+}
+
+export async function deleteModelFromSupabase(modelId: string, userId: string) {
+  const client = getSupabaseAdmin();
+  if (!client) throw new Error("Supabase is not configured");
+  const { error } = await client
+    .from("models")
+    .delete()
+    .eq("id", modelId)
+    .eq("user_id", userId);
+  if (error) {
+    console.error("[Supabase Model Delete] Error deleting model:", error);
+    throw new Error(error.message);
+  }
+}
+
