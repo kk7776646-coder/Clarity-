@@ -1,9 +1,10 @@
 -- ============================================================================
--- CLARITY PRODUCTION MIGRATION: public.models
+-- CLARITY PRODUCTION MIGRATION: public.models (Production-Safe RLS)
 -- ============================================================================
--- This migration creates the missing model registry table in Supabase PostgreSQL
--- with exact schema matching server.ts / supabase.ts, user ownership, RLS,
--- and PostgREST schema cache reload notification.
+-- This migration creates the model registry table in Supabase PostgreSQL
+-- with exact schema matching server.ts / supabase.ts, RLS enabled, and 
+-- zero permissive public policies (protecting against direct client access while
+-- allowing full access to the server-side Supabase service-role client).
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS public.models (
@@ -26,30 +27,23 @@ CREATE TABLE IF NOT EXISTS public.models (
   updated_at BIGINT
 );
 
--- Index on user_id for high-performance tenant filtering
+-- Index on user_id for efficient tenant isolation lookups
 CREATE INDEX IF NOT EXISTS idx_models_user_id ON public.models(user_id);
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE public.models ENABLE ROW LEVEL SECURITY;
 
--- Drop existing policies if re-running
+-- Drop any existing legacy policies
 DROP POLICY IF EXISTS "Users can view own models" ON public.models;
 DROP POLICY IF EXISTS "Users can insert own models" ON public.models;
 DROP POLICY IF EXISTS "Users can update own models" ON public.models;
 DROP POLICY IF EXISTS "Users can delete own models" ON public.models;
+DROP POLICY IF EXISTS "Deny direct public access" ON public.models;
 
--- Create secure RLS policies ensuring strict user data isolation
-CREATE POLICY "Users can view own models" ON public.models
-  FOR SELECT USING (true);
+-- Note: With RLS enabled and NO permissive policies for anon/authenticated roles,
+-- direct browser/client access is completely blocked. The Render backend uses
+-- the Supabase service-role key (getSupabaseAdmin()), which automatically bypasses
+-- RLS and performs all server-side queries securely.
 
-CREATE POLICY "Users can insert own models" ON public.models
-  FOR INSERT WITH CHECK (true);
-
-CREATE POLICY "Users can update own models" ON public.models
-  FOR UPDATE USING (true);
-
-CREATE POLICY "Users can delete own models" ON public.models
-  FOR DELETE USING (true);
-
--- Force PostgREST schema cache reload so the table is immediately recognized
+-- Force PostgREST schema cache reload so public.models is immediately recognized
 NOTIFY pgrst, 'reload schema';
