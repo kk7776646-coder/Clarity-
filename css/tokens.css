@@ -82,10 +82,10 @@ html[data-theme="light"] {
   --ink-faint: #9CA3AF;
 
   /* Accent (indigo) */
-  --accent: #4F46E5;
-  --accent-hover: #4338CA;
-  --accent-soft: #EEF2FF;
-  --accent-ink: #FFFFFF;
+  --accent: #79D3ED;
+  --accent-hover: #5ABFDA;
+  --accent-soft: #E6F8FC;
+  --accent-ink: #0F172A;
 
   /* Status */
   --success: #15803D;
@@ -108,9 +108,9 @@ html[data-theme="light"] {
   /* Chat composer */
   --composer-bg: #F3F4F6;
   --composer-border: #D1D5DB;
-  --bubble-user-bg: #EEF2FF;
-  --bubble-user-ink: #1E1B4B;
-  --bubble-user-border: #C7D2FE;
+  --bubble-user-bg: #E6F8FC;
+  --bubble-user-ink: #0C4A5C;
+  --bubble-user-border: #A3E5F5;
   --bubble-ai-bg: #FFFFFF;
   --bubble-ai-ink: #111827;
   --bubble-ai-border: #E5E7EB;
@@ -181,10 +181,10 @@ html[data-theme="dark"] {
   --ink-muted: #9CA3AF;
   --ink-faint: #6B7280;
 
-  --accent: #818CF8;
-  --accent-hover: #A5B4FC;
-  --accent-soft: #1E1B4B;
-  --accent-ink: #0B0D12;
+  --accent: #79D3ED;
+  --accent-hover: #A5E4F5;
+  --accent-soft: #0C3642;
+  --accent-ink: #0F172A;
 
   --success: #34D399;
   --success-soft: #064E3B;
@@ -204,9 +204,9 @@ html[data-theme="dark"] {
 
   --composer-bg: #181B22;
   --composer-border: #2D313A;
-  --bubble-user-bg: #1E1B4B;
-  --bubble-user-ink: #EEF2FF;
-  --bubble-user-border: #312E81;
+  --bubble-user-bg: #0C3642;
+  --bubble-user-ink: #E6F8FC;
+  --bubble-user-border: #145D72;
   --bubble-ai-bg: #111317;
   --bubble-ai-ink: #F3F4F6;
   --bubble-ai-border: #23262E;
@@ -277,10 +277,10 @@ html[data-theme="dark"] {
     --ink-muted: #a4a5af;
     --ink-faint: #7a7b86;
 
-    --accent: #8b83ff;
-    --accent-hover: #a39bff;
-    --accent-soft: #2a2849;
-    --accent-ink: #0f0f12;
+    --accent: #79D3ED;
+    --accent-hover: #A5E4F5;
+    --accent-soft: #082F3B;
+    --accent-ink: #0F172A;
 
     --success: #4ade80;
     --success-soft: #14321f;
@@ -300,9 +300,9 @@ html[data-theme="dark"] {
 
     --composer-bg: #1d1d22;
     --composer-border: #30313a;
-    --bubble-user-bg: #1f1f24;
-    --bubble-user-ink: #ededf2;
-    --bubble-user-border: #2e2e36;
+    --bubble-user-bg: #0C3642;
+    --bubble-user-ink: #E6F8FC;
+    --bubble-user-border: #145D72;
     --bubble-ai-bg: #18181c;
     --bubble-ai-ink: #ededf2;
     --bubble-ai-border: #2a2b33;

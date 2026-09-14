@@ -21,37 +21,27 @@ window.Clarity.composer = {
         '<!-- Top-left attachments tray -->',
         '<div class="composer-card__attachments" id="composerAttachments"></div>',
 
-        '<!-- Main compact single-line input row -->',
-        '<div class="composer-card__main">',
-          '<div class="composer-sparkle" aria-hidden="true" title="Clarity AI">',
-            '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">',
-              '<path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>',
-            '</svg>',
-          '</div>',
-          '<div class="composer-card__input-wrap">',
-            '<textarea id="composerInput" rows="1" placeholder="Ask Clarity about your project..." aria-label="Message input"></textarea>',
-          '</div>',
-        '</div>',
-
-        '<!-- Action footer -->',
-        '<div class="composer-card__footer">',
+        '<!-- Single unified compact row -->',
+        '<div class="composer-card__main composer-card__main--unified">',
           '<div class="composer-card__footer-left">',
             '<button class="composer-btn composer-btn--upload" id="composerUpload" type="button" title="Attach documents, PDFs, images, or code" aria-label="Attach documents">',
-              '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">',
+              '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">',
                 '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>',
                 '<polyline points="17 8 12 3 7 8"/>',
                 '<line x1="12" y1="3" x2="12" y2="15"/>',
               '</svg>',
-              '<span class="composer-upload-label">Upload</span>',
             '</button>',
             '<input type="file" id="composerFileInput" hidden multiple accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md,.csv,.json,.xml,.yaml,.yml,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.rs,.php,.rb,.sql,.html,.css,.scss,.sh,.zip,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tiff">',
+          '</div>',
+          '<div class="composer-card__input-wrap">',
+            '<textarea id="composerInput" rows="1" placeholder="Ask Clarity about your project..." aria-label="Message input"></textarea>',
           '</div>',
           '<div class="composer-card__footer-right">',
             '<button class="composer-btn composer-btn--send" id="composerSend" type="button" title="Send message" aria-label="Send message" disabled>',
               '<span class="composer-send-inner">',
-                '<svg class="composer-send-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">',
-                  '<line x1="12" y1="19" x2="12" y2="5"/>',
-                  '<polyline points="5 12 12 5 19 12"/>',
+                '<svg class="composer-send-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right: 2px; margin-top: 1px;">',
+                  '<line x1="22" y1="2" x2="11" y2="13"/>',
+                  '<polygon points="22 2 15 22 11 13 2 9 22 2"/>',
                 '</svg>',
               '</span>',
             '</button>',
@@ -293,9 +283,9 @@ window.Clarity.composer = {
       sendBtn.title = "Send message";
       sendBtn.innerHTML = `
         <span class="composer-send-inner">
-          <svg class="composer-send-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <line x1="12" y1="19" x2="12" y2="5"/>
-            <polyline points="5 12 12 5 19 12"/>
+          <svg class="composer-send-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right: 2px; margin-top: 1px;">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
           </svg>
         </span>
       `;

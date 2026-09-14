@@ -233,8 +233,8 @@ function openModelModal(existing) {
         '<div class="model-form__row model-form__row--2">',
           '<div class="model-form__field">',
             '<label class="model-form__label" for="mf-id">Registry ID <span class="req">*</span></label>',
-            '<input class="input model-form__input" id="mf-id" type="text" name="id" required ' + readonlyAttr + ' value="' + escapeAttr(m.id) + '" placeholder="my-llama">',
-            isEdit ? '<div class="muted">Local identifier (cannot be changed).</div>' : '<div class="muted">Local identifier; never sent to provider.</div>',
+            '<input class="input model-form__input" id="mf-id" type="text" name="id" required value="' + escapeAttr(m.id) + '" placeholder="my-llama">',
+            '<div class="muted">Local identifier; never sent to provider.</div>',
           '</div>',
           '<div class="model-form__field">',
             '<label class="model-form__label" for="mf-modelName">Provider model ID <span class="req">*</span></label>',
@@ -247,16 +247,16 @@ function openModelModal(existing) {
         '<div class="model-form__row model-form__row--2">',
           '<div class="model-form__field">',
             '<label class="model-form__label" for="mf-provider">Provider <span class="req">*</span></label>',
-            '<select class="input model-form__input" id="mf-provider" name="provider">' + providerOptions + '</select>',
+            '<select class="input model-form__input" id="mf-provider" name="provider" ' + readonlyAttr + '>' + providerOptions + '</select>',
           '</div>',
           '<div class="model-form__field">',
             '<label class="model-form__label" for="mf-base">Base URL <span class="req">*</span></label>',
-            '<input class="input model-form__input" id="mf-base" type="text" name="baseUrl" value="' + escapeAttr(m.baseUrl) + '" placeholder="https://openrouter.ai/api/v1">',
+            '<input class="input model-form__input" id="mf-base" type="text" name="baseUrl" ' + readonlyAttr + ' value="' + escapeAttr(m.baseUrl) + '" placeholder="https://openrouter.ai/api/v1">',
           '</div>',
         '</div>',
         '<div class="model-form__row">',
           '<label class="model-form__label" for="mf-key">API key' + (isEdit ? ' <span class="muted">(leave blank to keep current)</span>' : '') + '</label>',
-          '<input class="input model-form__input" id="mf-key" type="password" name="apiKey" value="" placeholder="' + (isEdit && m.hasApiKey ? '•••••••••••• (Saved securely)' : 'sk-...') + '" autocomplete="new-password">',
+          '<input class="input model-form__input" id="mf-key" type="password" name="apiKey" ' + readonlyAttr + ' value="" placeholder="' + (isEdit && m.hasApiKey ? '•••••••••••• (Saved securely)' : (isEdit ? '(Empty)' : 'sk-...')) + '" autocomplete="new-password">',
           maskedKeyNote,
         '</div>',
         '<fieldset class="model-form__caps">',
@@ -457,13 +457,31 @@ function openAddModelsModal() {
   document.getElementById("mf-provider")?.addEventListener("change", () => {
     const sel = document.getElementById("mf-provider");
     const baseInput = document.getElementById("mf-base");
+    const keyInput = document.getElementById("mf-key");
     if (sel && baseInput) {
-      const p = MODEL_PROVIDERS.find(x => x.id === sel.value);
-      if (p) {
-        baseInput.value = p.defaultBase || "";
+      const providerId = sel.value;
+      const state = window.Clarity.store.getState();
+      const existingForProvider = state.models?.find(m => m.provider === providerId && m.hasApiKey);
+      if (existingForProvider) {
+        baseInput.value = existingForProvider.baseUrl || "";
+        if (keyInput) {
+          keyInput.value = "••••••••";
+          keyInput.placeholder = "Reusing existing stored key";
+        }
+      } else {
+        const p = MODEL_PROVIDERS.find(x => x.id === providerId);
+        if (p) {
+          baseInput.value = p.defaultBase || "";
+        }
+        if (keyInput) {
+          keyInput.value = "";
+          keyInput.placeholder = "sk-or-v1-...";
+        }
       }
     }
   });
+  // Trigger change immediately to apply autofill for default selected provider
+  document.getElementById("mf-provider")?.dispatchEvent(new Event("change"));
 
   document.getElementById("addMappingBtn")?.addEventListener("click", () => {
     _modelMappings.push({ id: "", modelName: "", displayName: "" });

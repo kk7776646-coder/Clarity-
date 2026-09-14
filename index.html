@@ -2,7 +2,7 @@
 <html lang="en" data-theme="light" data-density="comfortable">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
@@ -29,11 +29,11 @@
     <link rel="stylesheet" href="/css/code-viewer.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-    
-  
-  
+
+
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-</head>
+  </head>
 
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
@@ -79,7 +79,7 @@
 
         <div class="sidebar__foot">
           <nav class="nav" id="secondaryNav" aria-label="Secondary" style="margin-bottom: 8px;"></nav>
-          
+
           <div class="sidebar-profile-container" style="position: relative; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 8px;">
             <!-- Authenticated user: circular avatar profile dropdown -->
             <button class="user-chip" id="userMenuBtn" type="button" aria-haspopup="menu" aria-expanded="false" title="Profile & Models" style="width: 100%; display: flex; align-items: center; gap: 10px; background: transparent; border: none; padding: 6px 8px; border-radius: var(--r-md); cursor: pointer; text-align: left; color: var(--ink);">
@@ -112,6 +112,7 @@
                 <span>Settings</span>
               </button>
               <div class="menu__sep" role="separator"></div>
+
               <button class="menu__item menu__item--danger" type="button" role="menuitem" data-user-action="logout">
                 <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
                 <span>Sign out</span>
@@ -140,7 +141,7 @@
         </header>
 
         <!-- Floating burger button for mobile immersive mode -->
-        <button class="btn btn--ghost btn--icon-sm floating-burger" id="floatingBurger" type="button" title="Open navigation" aria-label="Open navigation" style="position: fixed; top: 12px; left: 12px; z-index: 1000; display: none;">
+        <button class="btn btn--ghost btn--icon-sm floating-burger d-mobile-only" id="floatingBurger" type="button" title="Open navigation" aria-label="Open navigation" style="position: fixed; top: 12px; left: 12px; z-index: 1000;">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
 

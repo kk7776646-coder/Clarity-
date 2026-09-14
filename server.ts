@@ -683,11 +683,11 @@ const upload = multer({
 // ---------------------------------------------------------------------------
 async function startServer() {
   const app = express();
-  
+
   // Instance identity for debugging multi-instance issues
   const instanceId = crypto.randomUUID();
   console.log(`[DEBUG] Express app instance created. InstanceID: ${instanceId}`);
-  
+
   app.use((req, res, next) => {
     console.log(`[DEBUG] InstanceID: ${instanceId} | Request: ${req.method} ${req.url}`);
     next();
@@ -992,7 +992,7 @@ async function startServer() {
     if (!user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
-    
+
     try {
       const client = getSupabaseAdmin();
       let rows: any[] = [];
@@ -1064,7 +1064,7 @@ async function startServer() {
         return res.status(409).json({ error: `Model '${id}' already exists`, type: "duplicate_model" });
       }
     }
-    
+
     const newModel: ModelItem = {
       id,
       name: String(body.name || id).trim(),
@@ -1091,7 +1091,7 @@ async function startServer() {
       isUser: true,
       user_id: user.id,
     };
-    
+
     if (client) {
       console.log(`[MODEL TRACE] calling syncModelToSupabase for user=${user.id}, id=${id}`);
       const syncRes = await syncModelToSupabase({
@@ -1185,8 +1185,9 @@ async function startServer() {
     const submittedKey = String(body.apiKey || "").trim();
     const keepOldKey = !submittedKey || submittedKey.includes("•");
 
+    const newId = String(body.id || id).trim();
     const updated: ModelItem = {
-      id,
+      id: newId,
       name: String(body.name || existing.name).trim(),
       provider: String(body.provider || existing.provider).toLowerCase(),
       baseUrl: String(body.baseUrl !== undefined ? body.baseUrl : (existing.baseUrl || existing.base_url || "")).trim(),
@@ -1206,6 +1207,9 @@ async function startServer() {
     };
 
     if (client) {
+      if (newId !== id) {
+        await client.from("models").delete().eq("id", id).eq("user_id", user.id);
+      }
       await syncModelToSupabase({
         ...updated,
         user_id: user.id,
@@ -1215,7 +1219,15 @@ async function startServer() {
         updated_at: Date.now(),
       });
     } else {
+      if (newId !== id) {
+        // We need to delete the old one from in-memory / local storage if necessary
+        try { deleteUserModel(user.id, id); } catch(e) {}
+      }
       try { dbSaveModel(updated); } catch (err) { console.error(err); }
+    }
+
+    if (newId !== id) {
+      deleteUserModel(user.id, id);
     }
     setUserModel(user.id, updated);
     res.json(publicModel(updated));
@@ -1316,14 +1328,14 @@ async function startServer() {
     }
 
     user.active_model_id = targetModelId;
-    
+
     const client = getSupabaseAdmin();
     if (client) {
       await client.from("users").update({ active_model_id: targetModelId }).eq("id", user.id);
     } else {
       try { dbSaveUser(user); } catch {}
     }
-    
+
     res.json({ ok: true, active: targetModelId, model: targetModel ? publicModel(targetModel) : null });
   });
 
@@ -1334,17 +1346,17 @@ async function startServer() {
     const body = req.body || {};
     const mid = String(body.id || "").trim();
     const existing = getUserModel(user.id, mid);
-    
+
     // Merge body onto existing (if any), preserving existing API key if body has empty or masked key
     const submittedKey = String(body.apiKey || "").trim();
     const keepOldKey = existing && (!submittedKey || submittedKey.includes("•"));
-    
+
     const m = {
       ...body,
       apiKey: keepOldKey ? existing.apiKey : submittedKey,
     };
     const provider = String(m.provider || "").toLowerCase();
-    
+
     if (provider === "gemini") {
       try {
         const apiKey = m.apiKey;
@@ -1361,13 +1373,13 @@ async function startServer() {
         return res.status(400).json({ error: `Connection failed: ${formatApiError(err)}` });
       }
     }
-    
+
     try {
       const effectiveBaseUrl = getEffectiveBaseUrl(m);
       if (!effectiveBaseUrl) return res.status(400).json({ error: "Base URL is required." });
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (m.apiKey) headers["Authorization"] = `Bearer ${m.apiKey}`;
-      
+
       let response = await fetch(`${effectiveBaseUrl.replace(/\/$/, "")}/models`, { method: "GET", headers });
       if (!response.ok) {
         // Fallback: try a tiny chat completions request to verify API connection
@@ -1747,7 +1759,13 @@ ${params.textMsg}`;
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
 
+    const abortController = new AbortController();
+    req.on("close", () => {
+      abortController.abort();
+    });
+
     const sendSSE = (payload: any) => {
+      if (abortController.signal.aborted) return;
       res.write(`data: ${JSON.stringify(payload)}\n\n`);
     };
 
@@ -1845,7 +1863,7 @@ ${params.textMsg}`;
       if (modelConfig.provider === "gemini") {
         const apiKey = modelConfig.apiKey;
         if (!apiKey) throw new Error(`Gemini API key is missing for model '${modelConfig.name}'. Please configure it in your model settings.`);
-        
+
         const contents = [
           ...history,
           {
@@ -1859,6 +1877,7 @@ ${params.textMsg}`;
           modelName: modelConfig.modelName,
           contents,
           systemInstruction: sysInstruction,
+          abortSignal: abortController?.signal,
           onChunk: (text) => {
             assistantText += text;
             sendSSE({ content: text });
@@ -1874,7 +1893,7 @@ ${params.textMsg}`;
         if (!modelConfig.apiKey && modelConfig.provider !== "ollama") {
           throw new Error(`API key is missing for model '${modelConfig.name}'. Please configure your API key in Model settings.`);
         }
-        
+
         const openAiHistory = history.map(h => ({
           role: h.role === "model" ? "assistant" : "user",
           content: h.parts[0].text
@@ -1883,7 +1902,7 @@ ${params.textMsg}`;
 
         const headers: Record<string, string> = { "Content-Type": "application/json" };
         if (modelConfig.apiKey) headers["Authorization"] = `Bearer ${modelConfig.apiKey}`;
-        
+
         const reqBody = {
           model: modelConfig.modelName || "gpt-3.5-turbo",
           messages: [
@@ -1892,17 +1911,18 @@ ${params.textMsg}`;
           ],
           stream: true
         };
-        
+
         const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
           method: "POST",
           headers,
-          body: JSON.stringify(reqBody)
+          body: JSON.stringify(reqBody),
+          signal: abortController?.signal
         });
-        
+
         if (!response.ok) {
            throw new Error(`HTTP ${response.status}: ${await response.text()}`);
         }
-        
+
         if (response.body) {
            // We use a simple read loop. In standard node environments stream reading uses async iterators, but we can use chunk reading here.
            // Since Node 18 fetch is supported.
@@ -1946,14 +1966,21 @@ ${params.textMsg}`;
       });
       res.end();
     } catch (err: any) {
+      if (err.name === "AbortError" || formatApiError(err)?.includes("AbortError")) {
+        // gracefully handled AbortError silently
+        if (!res.writableEnded) res.end();
+        return;
+      }
       console.error("Chat generation error:", formatApiError(err));
-      sendSSE({
-        error: {
-          message: formatApiError(err) || "Failed to generate AI response",
-          type: "chat_error",
-        },
-      });
-      res.end();
+      if (!res.writableEnded) {
+        sendSSE({
+          error: {
+            message: formatApiError(err) || "Failed to generate AI response",
+            type: "chat_error",
+          },
+        });
+        res.end();
+      }
     }
   });
 
@@ -2012,7 +2039,13 @@ ${params.textMsg}`;
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
 
+    const abortController = new AbortController();
+    req.on("close", () => {
+      abortController.abort();
+    });
+
     const sendSSE = (payload: any) => {
+      if (abortController.signal.aborted) return;
       res.write(`data: ${JSON.stringify(payload)}\n\n`);
     };
 
@@ -2038,7 +2071,7 @@ ${params.textMsg}`;
       }
 
       const think = !!req.body.think;
-      let sysInstruction = "You are Clarity, an intelligent AI assistant grounded in the user's personal and organizational knowledge. \nYour goal is to provide crisp, well-structured, clear, and highly actionable answers with modern formatting. \n\nCHAT UX GUIDELINES:\n1. **Be Human-Like and Conversational**: Avoid robotic phrases like \"Here is your requested output.\" or \"Below is the response.\" Talk like a brilliant, helpful collaborator starting directly and naturally.\n2. **Natural Response Structure**: Do NOT respond like a documentation generator for normal conversation. If the user asks a conversational question (e.g. \"What is my project doing?\" or \"What does this do?\"), explain naturally in conversation. Avoid rigid \"PROJECT ANALYSIS REPORT: 1. Objective 2. Scope\" formats unless the user explicitly asks for a formal report.\n3. **Hinglish & Language Matching (CRITICAL)**: Always match the language used by the user. If the user asks in Hinglish (Hindi written in Roman/English characters, e.g. \"bhai ye batao\", \"ye code kaise run kare\", \"isme error kyu aa raha hai\"), you MUST reply in natural, fluent, friendly Hinglish while keeping technical terms accurate. If the user asks in English, reply in English. If in Hindi, reply in Hindi.\n4. **Use Markdown Effectively**: Use headings, bold, italics, bullet lists, and tables to structure your answers cleanly. DO NOT dump everything into a single large paragraph.\n5. **Emoji Usage**: Use emojis naturally in conversational text when they improve readability (e.g., 🐍 Python, 💡 Tip, ⚠️ Important). Do NOT use emojis inside code, technical identifiers, file names, or API names.\n6. **Visual Diagrams (Explicit Request Only)**: For normal questions (e.g., \"What is the architecture?\", \"Explain the flow\", \"How does this work?\"), answer naturally in text. ONLY output a ```mermaid diagram if the user EXPLICITLY asks to see a visual diagram, flowchart, pipeline, or architecture diagram (e.g. \"show me the architecture diagram\", \"flowchart banao\", \"draw a visual diagram\", \"workflow draw karo\"). When explicitly requested, generate a ```mermaid code block using REAL-LIFE FOUNDATIONAL TECHNOLOGY (e.g. 📱 Client Source, 🌐 Nginx API Gateway, ⚡ Real-time Processing Engine, 🧠 AI Pipeline, 🗄️ Database, 🚨 Alert Dispatcher) and VARIED GEOMETRIC SHAPES: curved rectangles id([\"⚡ Engine\"]), circles id((\"📱 Client\")), cylinders id[(\"🗄️ Database\")], diamonds id{\"⚠️ Condition?\"}, subroutines id[[\"🧠 Module\"]], and flags id>\"🚨 Alert\"]. Prefix node labels with standard UTF-8 emojis (no HTML tags, double-quoted plain text).\n7. **No Automatic Artifacts**: Normal chat should remain conversational. Do NOT automatically generate PDF, PPT, DOCX, XLSX, or SVG unless the user explicitly requests the artifact.";
+      let sysInstruction = "You are Clarity, an intelligent AI assistant grounded in the user's personal and organizational knowledge. \nYour goal is to provide crisp, well-structured, clear, and highly actionable answers with modern formatting. \n\nCHAT UX GUIDELINES:\n1. **Be Human-Like and Conversational**: Avoid robotic phrases like \"Here is your requested output.\" or \"Below is the response.\" Talk like a brilliant, helpful collaborator starting directly and naturally.\n2. **Natural Response Structure**: Do NOT respond like a documentation generator for normal conversation. If the user asks a conversational question (e.g. \"What is my project doing?\" or \"What does this do?\"), explain naturally in conversation. Avoid rigid \"PROJECT ANALYSIS REPORT: 1. Objective 2. Scope\" formats unless the user explicitly asks for a formal report.\n3. **Hinglish & Language Matching (CRITICAL)**: Always match the language used by the user. If the user asks in Hinglish (Hindi written in Roman/English characters, e.g. \"bhai ye batao\", \"ye code kaise run kare\", \"isme error kyu aa raha hai\"), you MUST reply in natural, fluent, friendly Hinglish while keeping technical terms accurate. If the user asks in English, reply in English. If in Hindi, reply in Hindi.\n4. **Use Markdown Effectively (CRITICAL UI FORMATTING)**: You MUST use well-structured Markdown. ALWAYS prefer ordered lists (1., 2.), bullet points (- or *), bold text (**bold**), and proper line spacing (double line breaks) so the text is extremely easy to read. DO NOT dump everything into a single large paragraph. Use whitespace generously to let the text breathe.\n5. **Emoji Usage**: Use emojis naturally in conversational text when they improve readability (e.g., 🐍 Python, 💡 Tip, ⚠️ Important). Do NOT use emojis inside code, technical identifiers, file names, or API names.\n6. **Visual Diagrams (Mermaid Guidelines)**: If the user explicitly asks for a diagram (or if a diagram vastly improves the explanation), output a ```mermaid diagram. IMPORTANT: You MUST generate visually appealing diagrams using VARIED COLORS, EMOJIS, and SYMBOLS. Use the style keyword in Mermaid to apply colors (e.g. style NodeA fill:#f9f,stroke:#333,stroke-width:2px;). Use varied geometric shapes: curved rectangles id([\"⚡ Engine\"]), circles id((\"📱 Client\")), cylinders id[(\"🗄️ Database\")], diamonds id{\"⚠️ Condition?\"}. Ensure the diagram size is moderate (visibly larger and clearer than standard text) by avoiding overly dense horizontal layouts; use TD (Top-Down) for better scaling on mobile and web.\n7. **No Automatic Artifacts**: Normal chat should remain conversational. Do NOT automatically generate PDF, PPT, DOCX, XLSX, or SVG unless the user explicitly requests the artifact.";
 
       if (think) {
         sysInstruction += "\n\nCRITICAL THINKING MODE ACTIVE:\n" +
@@ -2056,7 +2089,7 @@ ${params.textMsg}`;
       if (modelConfig.provider === "gemini") {
         const apiKey = modelConfig.apiKey;
         if (!apiKey) throw new Error(`Gemini API key is missing for model '${modelConfig.name}'. Please configure it in your model settings.`);
-        
+
         const contents = [
           ...history,
           {
@@ -2070,6 +2103,7 @@ ${params.textMsg}`;
           modelName: modelConfig.modelName,
           contents,
           systemInstruction: sysInstruction,
+          abortSignal: abortController?.signal,
           onChunk: (text) => {
             assistantText += text;
             sendSSE({ content: text });
@@ -2085,7 +2119,7 @@ ${params.textMsg}`;
         if (!modelConfig.apiKey && modelConfig.provider !== "ollama") {
           throw new Error(`API key is missing for model '${modelConfig.name}'. Please configure your API key in Model settings.`);
         }
-        
+
         const openAiHistory = history.map(h => ({
           role: h.role === "model" ? "assistant" : "user",
           content: h.parts[0].text
@@ -2094,7 +2128,7 @@ ${params.textMsg}`;
 
         const headers: Record<string, string> = { "Content-Type": "application/json" };
         if (modelConfig.apiKey) headers["Authorization"] = `Bearer ${modelConfig.apiKey}`;
-        
+
         const reqBody = {
           model: modelConfig.modelName || "gpt-3.5-turbo",
           messages: [
@@ -2103,17 +2137,18 @@ ${params.textMsg}`;
           ],
           stream: true
         };
-        
+
         const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
           method: "POST",
           headers,
-          body: JSON.stringify(reqBody)
+          body: JSON.stringify(reqBody),
+          signal: abortController?.signal
         });
-        
+
         if (!response.ok) {
            throw new Error(`HTTP ${response.status}: ${await response.text()}`);
         }
-        
+
         if (response.body) {
            // We use a simple read loop. In standard node environments stream reading uses async iterators, but we can use chunk reading here.
            // Since Node 18 fetch is supported.
@@ -2187,7 +2222,7 @@ ${params.textMsg}`;
   // -------------------------------------------------------------------------
   // Universal File & Asset Generation Engine Endpoints (Step 3)
   // -------------------------------------------------------------------------
-  
+
 
 
   app.get("/api/projects", (req, res) => {
@@ -2248,7 +2283,7 @@ ${params.textMsg}`;
     const user = resolveUser(req) || initialUser;
     const { name } = req.body || {};
     if (!name) return res.status(400).json({ error: "Name is required" });
-    
+
     const pid = "proj_" + Math.random().toString(36).substr(2, 9);
     const pItem = {
       id: pid,
@@ -2262,9 +2297,9 @@ ${params.textMsg}`;
       status: "ready",
       source: "upload"
     };
-    
+
     projects.set(pid, pItem);
-    
+
     // Save to DB
     try {
       dbCreateProject({
@@ -2279,18 +2314,18 @@ ${params.textMsg}`;
     } catch (e) {
       console.error(e);
     }
-    
+
     res.json(pItem);
   });
 
   app.delete("/api/projects/:pid", (req, res) => {
     const pid = req.params.pid;
     const user = resolveUser(req) || initialUser;
-    
+
     const proj = projects.get(pid);
     const dbP = dbGetProject(pid);
     if (!proj && !dbP) return res.status(404).json({ error: "Project not found" });
-    
+
     // In-memory cleanup
     projects.delete(pid);
     projectAnalyses.delete(pid);
@@ -2314,7 +2349,7 @@ ${params.textMsg}`;
         messages.delete(id);
       }
     }
-    
+
     // Stop any running process
     try {
       stopProject(pid);
@@ -2329,7 +2364,7 @@ ${params.textMsg}`;
     } catch (e) {
       console.error("Error cleaning up project from DB/disk:", e);
     }
-    
+
     return res.json({ success: true, deleted: true, pid });
   });
 
@@ -2339,10 +2374,10 @@ ${params.textMsg}`;
     const user = resolveUser(req) || initialUser;
     const proj = projects.get(pid);
     if (!proj) return res.status(404).json({ error: "Project not found", type: "not_found" });
-    
+
     const { message, model_id, file_ids, attachments, history } = req.body || {};
     let textMsg = String(message || "").trim();
-    
+
     // Extract document content from attachments
     let attachedDocsContext = "";
     if (Array.isArray(file_ids)) {
@@ -2371,7 +2406,14 @@ ${params.textMsg}`;
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
+
+    const abortController = new AbortController();
+    req.on("close", () => {
+      abortController.abort();
+    });
+
     const sendSSE = (payload: any) => {
+      if (abortController.signal.aborted) return;
       res.write(`data: ${JSON.stringify(payload)}\n\n`);
     };
 
@@ -2390,7 +2432,7 @@ ${params.textMsg}`;
       const targetFormat = req.body?.format || req.body?.explicitFormat || (req.body?.generation_mode === "file" ? undefined : req.body?.generation_mode);
       const targetFile = req.body?.targetFile || req.body?.filePath;
       const detectedIntent = detectGenerationIntent(textMsg, targetFile, targetFormat);
-      
+
       let analysis = projectAnalyses.get(pid);
       const extracted = Array.from(files.values())
         .filter((f) => f.project_id === pid)
@@ -2403,7 +2445,7 @@ ${params.textMsg}`;
           content: f.content,
           lineCount: f.content ? f.content.split(/\r?\n/).length : 0,
         }));
-        
+
       if (!analysis) {
         analysis = analyzeProject(proj.name, pid, extracted as any);
         projectAnalyses.set(pid, analysis);
@@ -2429,10 +2471,10 @@ ${params.textMsg}`;
 
         const humanoidGreeting = `🤖✨ **Arre bhai, bilkul tayyar hai!** Aapke **${proj.name}** project ka ye raha gorgeous **${diagramTypeLabel}**! 🚀⚡\n\nAbhi ke abhi inspect karo (zoom, pan, full-screen mode \`[ ]\`, zoom out \`-\`, fit, zoom in \`+\`) aur top buttons se direct **PNG** ya **JPG** format mein download bhi kar lo! Koi aur doubt ho toh bina hichkichahat ke batao dost! 💻🌟\n\n\`\`\`mermaid\n${mermaidCode}\n\`\`\``;
 
-        sendSSE({ 
-          content: humanoidGreeting, 
-          done: true, 
-          intent: "CODE_EXPLANATION" 
+        sendSSE({
+          content: humanoidGreeting,
+          done: true,
+          intent: "CODE_EXPLANATION"
         });
         return res.end();
       }
@@ -2546,6 +2588,7 @@ Provide a focused, controlled explanation of this file's purpose, main functions
             modelName: modelConfig.modelName,
             contents: geminiContents,
             systemInstruction,
+            abortSignal: abortController?.signal,
             onChunk: (chunkText) => {
               if (chunkText) sendSSE({ content: chunkText, intent: "CODE_EXPLANATION" });
             },
@@ -2556,7 +2599,7 @@ Provide a focused, controlled explanation of this file's purpose, main functions
           if (!baseUrl) throw new Error("Base URL is missing for this model.");
           const headers: Record<string, string> = { "Content-Type": "application/json" };
           if (modelConfig.apiKey) headers["Authorization"] = `Bearer ${modelConfig.apiKey}`;
-          
+
           const resOpenAi = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
             method: "POST",
             headers,
@@ -2568,6 +2611,7 @@ Provide a focused, controlled explanation of this file's purpose, main functions
               ],
               stream: true,
             }),
+            signal: abortController?.signal
           });
           if (!resOpenAi.ok) throw new Error(`HTTP ${resOpenAi.status}: ${await resOpenAi.text()}`);
           if (resOpenAi.body) {
@@ -2715,6 +2759,7 @@ HUMANOID CHAT, EXPLANATION & CRITICAL THINKING GUIDELINES:
             modelName: modelConfig.modelName,
             contents: geminiContents,
             systemInstruction,
+            abortSignal: abortController?.signal,
             onChunk: (chunkText) => {
               if (chunkText) {
                 sendSSE({ content: chunkText });
@@ -2727,7 +2772,7 @@ HUMANOID CHAT, EXPLANATION & CRITICAL THINKING GUIDELINES:
           if (!baseUrl) throw new Error("Base URL is missing for this model.");
           const headers: Record<string, string> = { "Content-Type": "application/json" };
           if (modelConfig.apiKey) headers["Authorization"] = `Bearer ${modelConfig.apiKey}`;
-          
+
           const resOpenAi = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
             method: "POST",
             headers,
@@ -2739,6 +2784,7 @@ HUMANOID CHAT, EXPLANATION & CRITICAL THINKING GUIDELINES:
               ],
               stream: true,
             }),
+            signal: abortController?.signal
           });
           if (!resOpenAi.ok) throw new Error(`HTTP ${resOpenAi.status}: ${await resOpenAi.text()}`);
           if (resOpenAi.body) {
@@ -2895,7 +2941,7 @@ HUMANOID CHAT, EXPLANATION & CRITICAL THINKING GUIDELINES:
     const pid = req.params.pid;
     const { path, content } = req.body || {};
     if (!path || typeof content !== "string") return res.status(400).json({ error: "Missing path or content" });
-    
+
     // We can call analyzeFileDiagnostics here
     const issues = analyzeFileDiagnostics(path, content, Array.from(files.values()).filter(f => f.project_id === pid));
     const summary = { errors: 0, warnings: 0, suggestions: 0 };
@@ -2909,19 +2955,25 @@ HUMANOID CHAT, EXPLANATION & CRITICAL THINKING GUIDELINES:
 
   app.post("/api/projects/:pid/diagnostics/ai-fix", async (req, res) => {
     const pid = req.params.pid;
-    const { path, line, issueId, issueMessage, issueExplanation, fixAll } = req.body || {};
-    
+    const { path, line, issueId, issueMessage, issueExplanation, fixAll, model_id } = req.body || {};
+
+    const user = resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+    const modelConfig = resolveModelConfig(model_id || user.active_model_id, user.id);
+    if (!modelConfig) return res.status(400).json({ error: "No model configured." });
+
     const projectFiles = Array.from(files.values()).filter(f => f.project_id === pid);
     const target = projectFiles.find(f => f.filename === path || f.filename.endsWith("/" + path));
     if (!target) return res.status(404).json({ error: "File not found" });
 
     const issues = analyzeFileDiagnostics(path, target.content || "", projectFiles);
     const issue = issues.find(i => i.id === issueId);
-    
+
     if (issue && issue.patchedContent) {
        return res.json({ fixedContent: issue.patchedContent });
     }
-    
+
     if (issue && issue.suggestedCode && issue.diff) {
        const newContent = (target.content || "").replace(issue.diff.before, issue.diff.after);
        return res.json({ fixedContent: newContent });
@@ -2931,11 +2983,11 @@ HUMANOID CHAT, EXPLANATION & CRITICAL THINKING GUIDELINES:
     }
 
     const sys = "You are a senior developer fixing code issues. Return ONLY the fully fixed file content. Do not include markdown codeblocks (```) wrapping the file, just the raw content. Do not explain anything.";
-    
-    let user = "";
+
+    let userPrompt = "";
     if (fixAll) {
        const allIssues = issues.map((iss, idx) => `${idx+1}. Line ${iss.line}: ${iss.message} - ${iss.explanation}`).join("\n");
-       user = `File: ${path}
+       userPrompt = `File: ${path}
 Issues to fix:
 ${allIssues}
 
@@ -2944,7 +2996,7 @@ ${target.content || ""}
 
 Fix all these issues and output the complete fixed file content:`;
     } else {
-       user = `File: ${path}
+       userPrompt = `File: ${path}
 Line: ${line}
 Issue: ${issueMessage}
 Explanation: ${issueExplanation}
@@ -2954,15 +3006,48 @@ ${target.content || ""}
 
 Fix the issue and output the complete fixed file content:`;
     }
-    
+
     try {
-      const resp = await generateGeminiWithResilience(sys, user);
-      if (resp && resp.text) {
-         let fixed = resp.text.trim();
-         if (fixed.startsWith("```")) {
-            fixed = fixed.replace(/^```[a-z]*\n/, "").replace(/\n```$/, "");
-         }
-         return res.json({ fixedContent: fixed });
+      if (modelConfig.provider === "gemini") {
+        const apiKey = modelConfig.apiKey || process.env.GEMINI_API_KEY;
+        if (!apiKey) throw new Error("API key is missing.");
+
+        const resp = await generateGeminiWithResilience({
+          apiKey,
+          modelName: modelConfig.modelName,
+          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+          systemInstruction: sys,
+        });
+
+        if (resp && resp.text) {
+           let fixed = resp.text.trim();
+           if (fixed.startsWith("```")) {
+              fixed = fixed.replace(/^```[a-z]*\n/, "").replace(/\n```$/, "");
+           }
+           return res.json({ fixedContent: fixed });
+        }
+      } else {
+        const baseUrl = getEffectiveBaseUrl(modelConfig);
+        if (!baseUrl) throw new Error("Base URL missing");
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (modelConfig.apiKey) headers["Authorization"] = `Bearer ${modelConfig.apiKey}`;
+
+        const resOpenAi = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: modelConfig.modelName || "gpt-3.5-turbo",
+            messages: [{ role: "system", content: sys }, { role: "user", content: userPrompt }]
+          })
+        });
+        if (resOpenAi.ok) {
+          const data = await resOpenAi.json();
+          let fixed = data.choices?.[0]?.message?.content?.trim() || "";
+          if (fixed.startsWith("```")) {
+              fixed = fixed.replace(/^```[a-z]*\n/, "").replace(/\n```$/, "");
+          }
+          return res.json({ fixedContent: fixed });
+        }
       }
     } catch (e) {
       console.error(e);
@@ -2975,7 +3060,7 @@ Fix the issue and output the complete fixed file content:`;
     const pid = req.params.pid;
     const { filename, content, bufferBase64, category, description, source } = req.body || {};
     if (!filename || !category) return res.status(400).json({ error: "filename and category are required" });
-    
+
     const art = {
       id: "art_" + Math.random().toString(36).substring(2, 9),
       projectId: pid,
@@ -4107,14 +4192,14 @@ ${vq.answer}
     try {
       const pid = req.params.pid;
       const { command, title } = req.body;
-      
+
       const dbFiles = dbListFiles(pid);
       const projFiles = dbFiles.map(f => ({ filename: f.path, content: f.content, project_id: f.project_id }));
       syncProjectFiles(pid, projFiles);
 
       const session = createTerminalSession(pid, command || "bash", title || "Terminal");
       await startTerminalSession(session.id);
-      
+
       res.json(sanitizeSession(session));
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -4149,7 +4234,7 @@ ${vq.answer}
       res.status(404).json({ error: err.message });
     }
   });
-  
+
   app.post("/api/terminals/:tid/restart", async (req, res) => {
     try {
       stopTerminalSession(req.params.tid);
@@ -4175,13 +4260,13 @@ ${vq.answer}
       const dbFiles = dbListFiles(pid);
       const projFiles = dbFiles.map(f => ({ filename: f.path, content: f.content, project_id: f.project_id }));
       syncProjectFiles(pid, projFiles);
-      
+
       let cmd = req.body?.command || "npm run dev";
       const session = createTerminalSession(pid, cmd, "Run Project");
       await startTerminalSession(session.id);
       res.json(sanitizeSession(session));
   });
-  
+
   app.get("/api/projects/:pid/run/status", (req, res) => {
       const pid = req.params.pid;
       const sessions = getProjectSessions(pid);

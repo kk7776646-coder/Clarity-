@@ -49,7 +49,7 @@ export function formatApiError(err: any): string {
     combined.includes("resource_exhausted") ||
     combined.includes("rate limit")
   ) {
-    return "API rate limit or quota exceeded. Please wait a moment before trying again.";
+    return "API rate limit or quota exceeded. Clarity automatically attempted model failover, but the provider rate limit was reached. Please wait 10-20 seconds before sending your message again, or switch to another configured model in Model Registry.";
   }
   if (
     combined.includes("401") ||
@@ -99,31 +99,20 @@ export function isRetryableError(err: any): boolean {
  */
 export function getGeminiModelCascade(primaryModel?: string): string[] {
   const norm = (primaryModel || "").trim().toLowerCase();
-  
-  // If requesting a deprecated or legacy model, directly cascade to modern supported models
-  if (
-    !norm ||
-    norm.includes("2.5") ||
-    norm.includes("2.0") ||
-    norm.includes("1.5") ||
-    norm === "gemini-pro" ||
-    norm === "gemini-flash"
-  ) {
-    return ["gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
-  }
 
-  if (norm === "gemini-3.6-flash") {
-    return ["gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
-  }
-  if (norm === "gemini-3.8-flash") {
-    return ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
-  }
-  if (norm === "gemini-3.5-flash-lite" || norm.includes("3.5")) {
-    return ["gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-3.8-flash"];
+  const defaults = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-flash", "gemini-pro", "gemini-3.6-flash"];
+
+  if (!norm || norm.includes("flash") || norm.includes("pro") || norm.includes("gemini")) {
+    const cascade = norm && !norm.includes("3.6") && !norm.includes("3.8") ? [norm] : [];
+    for (const d of defaults) {
+      if (!cascade.includes(d)) {
+        cascade.push(d);
+      }
+    }
+    return cascade;
   }
 
   const cascade = [primaryModel!];
-  const defaults = ["gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
   for (const m of defaults) {
     if (m !== primaryModel && !cascade.includes(m)) {
       cascade.push(m);
@@ -154,6 +143,7 @@ export interface GeminiStreamOptions {
   config?: Record<string, any>;
   onChunk: (text: string) => void;
   initialTimeoutMs?: number;
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -207,6 +197,9 @@ export async function streamGeminiWithResilience(options: GeminiStreamOptions): 
         );
 
         for await (const chunk of responseStream) {
+          if (options.abortSignal?.aborted) {
+            throw new Error("AbortError");
+          }
           const text = chunk.text || "";
           if (text) {
             hasStreamed = true;
@@ -219,6 +212,10 @@ export async function streamGeminiWithResilience(options: GeminiStreamOptions): 
       } catch (err: any) {
         lastError = err;
 
+        if (options.abortSignal?.aborted || err.message === "AbortError" || err.name === "AbortError") {
+          throw err;
+        }
+
         // If tokens were already sent to the client, cannot cleanly switch model mid-stream
         if (hasStreamed) {
           throw err;
@@ -226,13 +223,15 @@ export async function streamGeminiWithResilience(options: GeminiStreamOptions): 
 
         const retryable = isRetryableError(err);
         const hasMoreModels = mIdx < modelsToTry.length - 1;
+        const errStr = String(err?.message || err).toLowerCase();
+        const isRateLimit = errStr.includes("429") || errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("rate limit");
 
         if (retryable) {
           console.warn(
             `[Gemini Resilience] Model '${candidateModel}' attempt ${attempt}/${maxAttempts} encountered: ${err.status || err.code || err.message}`
           );
           if (attempt < maxAttempts) {
-            const delay = 350 * Math.pow(1.4, attempt);
+            const delay = isRateLimit ? 1200 * attempt : 350 * Math.pow(1.4, attempt);
             await new Promise((r) => setTimeout(r, delay));
             continue;
           }
@@ -260,6 +259,7 @@ export interface GeminiGenerateOptions {
   systemInstruction?: string;
   config?: Record<string, any>;
   timeoutMs?: number;
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -294,6 +294,10 @@ export async function generateGeminiWithResilience(
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
+        if (options.abortSignal?.aborted) {
+          throw new Error("AbortError");
+        }
+
         const genConfig: any = { ...config };
         if (systemInstruction) {
           genConfig.systemInstruction = systemInstruction;
@@ -311,6 +315,10 @@ export async function generateGeminiWithResilience(
           `Model '${candidateModel}' generation timed out after ${timeoutMs}ms`
         );
 
+        if (options.abortSignal?.aborted) {
+          throw new Error("AbortError");
+        }
+
         return {
           text: response.text || "",
           modelUsed: candidateModel,
@@ -318,15 +326,21 @@ export async function generateGeminiWithResilience(
         };
       } catch (err: any) {
         lastError = err;
+
+        if (options.abortSignal?.aborted || err.message === "AbortError" || err.name === "AbortError") {
+          throw err;
+        }
         const retryable = isRetryableError(err);
         const hasMoreModels = mIdx < modelsToTry.length - 1;
+        const errStr = String(err?.message || err).toLowerCase();
+        const isRateLimit = errStr.includes("429") || errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("rate limit");
 
         if (retryable) {
           console.warn(
             `[Gemini Resilience] Model '${candidateModel}' generate attempt ${attempt}/${maxAttempts} encountered: ${err.status || err.code || err.message}`
           );
           if (attempt < maxAttempts) {
-            const delay = 350 * Math.pow(1.4, attempt);
+            const delay = isRateLimit ? 1200 * attempt : 350 * Math.pow(1.4, attempt);
             await new Promise((r) => setTimeout(r, delay));
             continue;
           }

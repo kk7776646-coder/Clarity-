@@ -115,11 +115,11 @@ window.Clarity.uiChat = {
       this._updateComposer();
       this._isStreaming = false;
       this._syncComposerStreaming();
-      
+
       if (document.getElementById("clarityRobot")) {
         this.setRobotState("idle");
       }
-      
+
       if (list.length > 0) {
         this._userScrolledUp = false;
         this._scrollToBottom(true);
@@ -138,62 +138,62 @@ window.Clarity.uiChat = {
 
     // Clone the element and strip any emojis to prevent [X] box rendering on servers without emoji fonts
     const svgClone = svgElement.cloneNode(true);
-    
+
     // Icon map for replacing emojis/keywords with high-quality vector inline SVGs inside flowchart nodes
     const iconMap = [
-      { 
-        emojis: ["📱", "💬"], 
-        keywords: ["telegram", "channel", "group"], 
+      {
+        emojis: ["📱", "💬"],
+        keywords: ["telegram", "channel", "group"],
         svg: `<svg xmlns="http://www.w3.org/2000/svg" class="diag-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2.5" style="display:inline-block; vertical-align:middle; margin-right:5px; line-height:1;"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke-linecap="round" stroke-linejoin="round"/></svg>`
       },
-      { 
-        emojis: ["🤖", "⚙️"], 
-        keywords: ["ai detection", "detection engine", "ai processing"], 
+      {
+        emojis: ["🤖", "⚙️"],
+        keywords: ["ai detection", "detection engine", "ai processing"],
         svg: `<svg xmlns="http://www.w3.org/2000/svg" class="diag-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5" style="display:inline-block; vertical-align:middle; margin-right:5px; line-height:1;"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 6v12M6 12h12" stroke-linecap="round" stroke-linejoin="round"/></svg>`
       },
-      { 
-        emojis: ["🔍", "📝"], 
-        keywords: ["nlp", "pattern", "matching"], 
+      {
+        emojis: ["🔍", "📝"],
+        keywords: ["nlp", "pattern", "matching"],
         svg: `<svg xmlns="http://www.w3.org/2000/svg" class="diag-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5" style="display:inline-block; vertical-align:middle; margin-right:5px; line-height:1;"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35" stroke-linecap="round" stroke-linejoin="round"/></svg>`
       },
-      { 
-        emojis: ["📷", "🖼️"], 
-        keywords: ["image", "ocr", "scanner"], 
+      {
+        emojis: ["📷", "🖼️"],
+        keywords: ["image", "ocr", "scanner"],
         svg: `<svg xmlns="http://www.w3.org/2000/svg" class="diag-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" style="display:inline-block; vertical-align:middle; margin-right:5px; line-height:1;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`
       },
-      { 
-        emojis: ["👤", "👥"], 
-        keywords: ["suspicious", "profiling", "user profiling"], 
+      {
+        emojis: ["👤", "👥"],
+        keywords: ["suspicious", "profiling", "user profiling"],
         svg: `<svg xmlns="http://www.w3.org/2000/svg" class="diag-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2.5" style="display:inline-block; vertical-align:middle; margin-right:5px; line-height:1;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`
       },
-      { 
-        emojis: ["⚠️", "▲"], 
-        keywords: ["risk", "analysis", "risk analysis"], 
+      {
+        emojis: ["⚠️", "▲"],
+        keywords: ["risk", "analysis", "risk analysis"],
         svg: `<svg xmlns="http://www.w3.org/2000/svg" class="diag-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ea580c" stroke-width="2.5" style="display:inline-block; vertical-align:middle; margin-right:5px; line-height:1;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="9" x2="12" y2="13" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-linecap="round" stroke-linejoin="round"/></svg>`
       },
-      { 
-        emojis: ["🚨", "🔥"], 
-        keywords: ["alert & action", "action system", "alert and action"], 
+      {
+        emojis: ["🚨", "🔥"],
+        keywords: ["alert & action", "action system", "alert and action"],
         svg: `<svg xmlns="http://www.w3.org/2000/svg" class="diag-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" style="display:inline-block; vertical-align:middle; margin-right:5px; line-height:1;"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" stroke-linecap="round" stroke-linejoin="round"/></svg>`
       },
-      { 
-        emojis: ["📦", "🗄️"], 
-        keywords: ["log database", "database", "storage"], 
+      {
+        emojis: ["📦", "🗄️"],
+        keywords: ["log database", "database", "storage"],
         svg: `<svg xmlns="http://www.w3.org/2000/svg" class="diag-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5" style="display:inline-block; vertical-align:middle; margin-right:5px; line-height:1;"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>`
       },
-      { 
-        emojis: ["🖥️", "📊"], 
-        keywords: ["dashboard", "admin dashboard", "control panel"], 
+      {
+        emojis: ["🖥️", "📊"],
+        keywords: ["dashboard", "admin dashboard", "control panel"],
         svg: `<svg xmlns="http://www.w3.org/2000/svg" class="diag-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0891b2" stroke-width="2.5" style="display:inline-block; vertical-align:middle; margin-right:5px; line-height:1;"><rect x="2" y="3" width="20" height="14" rx="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="8" y1="21" x2="16" y2="21" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="17" x2="12" y2="21" stroke-linecap="round" stroke-linejoin="round"/></svg>`
       },
-      { 
-        emojis: ["🚫", "🔏"], 
-        keywords: ["auto-ban", "ban", "report user"], 
+      {
+        emojis: ["🚫", "🔏"],
+        keywords: ["auto-ban", "ban", "report user"],
         svg: `<svg xmlns="http://www.w3.org/2000/svg" class="diag-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2.5" style="display:inline-block; vertical-align:middle; margin-right:5px; line-height:1;"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>`
       },
-      { 
-        emojis: ["🔔", "📣"], 
-        keywords: ["immediate", "authority alert", "authority"], 
+      {
+        emojis: ["🔔", "📣"],
+        keywords: ["immediate", "authority alert", "authority"],
         svg: `<svg xmlns="http://www.w3.org/2000/svg" class="diag-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.5" style="display:inline-block; vertical-align:middle; margin-right:5px; line-height:1;"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/></svg>`
       }
     ];
@@ -202,14 +202,14 @@ window.Clarity.uiChat = {
       svgClone.querySelectorAll("foreignObject div, foreignObject span, .nodeLabel").forEach(el => {
         const text = (el.textContent || "").toLowerCase().trim();
         const html = el.innerHTML || "";
-        
+
         const match = iconMap.find(item => {
           const hasEmoji = item.emojis.some(em => html.includes(em));
           if (hasEmoji) return true;
           const hasKeyword = item.keywords.some(kw => text.includes(kw));
           return hasKeyword;
         });
-        
+
         if (match) {
           if (!el.querySelector(".diag-icon")) {
             el.innerHTML = match.svg + el.innerHTML;
@@ -221,7 +221,7 @@ window.Clarity.uiChat = {
     }
 
     const emojiRegex = /[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F191}-\u{1F251}\u{1F004}\u{1F0CF}\u{1F170}-\u{1F171}\u{1F17E}-\u{1F17F}\u{1F18E}\u{3030}\u{2B50}\u{2B55}\u{2934}-\u{2935}\u{2B05}-\u{2B07}\u{2b1b}\u{2b1c}\u{2b50}\u{2b55}\u{2194}-\u{2199}\u{21a9}-\u{21aa}\u{231a}-\u{231b}\u{23e9}-\u{23ec}\u{23f0}\u{23f3}\u{24c2}\u{25b6}\u{25c0}\u{2601}-\u{2604}\u{260e}\u{2611}\u{2614}-\u{2615}\u{2618}\u{261d}\u{2620}\u{2622}-\u{2623}\u{2626}\u{262a}\u{262e}-\u{262f}\u{2638}-\u{263a}\u{2640}\u{2642}\u{2648}-\u{2653}\u{265f}\u{2660}\u{2663}\u{2665}-\u{2666}\u{2668}\u{267b}\u{267f}\u{2692}-\u{2697}\u{2699}\u{269b}-\u{269c}\u{26a0}-\u{26a1}\u{26aa}-\u{26ab}\u{26b0}-\u{26b1}\u{26c4}-\u{26c5}\u{26c8}\u{26ce}-\u{26cf}\u{26d1}\u{26d3}-\u{26d4}\u{26e9}-\u{26ea}\u{26f0}-\u{26f5}\u{26f7}-\u{26fa}\u{26fd}\u{2702}\u{2705}\u{2708}-\u{270d}\u{270f}\u{2712}\u{2714}\u{2716}\u{271d}\u{2721}\u{2728}\u{2733}-\u{2734}\u{2744}\u{2747}\u{274c}\u{274e}\u{2753}-\u{2755}\u{2757}\u{2763}-\u{2764}\u{2795}-\u{2797}\u{27a1}\u{27b0}\u{27bf}\u{2934}-\u{2935}\u{2b05}-\u{2b07}\u{2b1b}-\u{2b1c}\u{2b50}\u{2b55}\u{303d}\u{3297}\u{3299}]/gu;
-    
+
     // Process text-containing nodes inside the SVG
     svgClone.querySelectorAll("text, desc, tspan, title, div, span, p").forEach(node => {
       if (node.childNodes && node.childNodes.length > 0) {
@@ -424,8 +424,8 @@ window.Clarity.uiChat = {
       #clarity-pdf-export-host .pdf-message-body {
         color: #0f172a !important;
       }
-      #clarity-pdf-export-host pre, 
-      #clarity-pdf-export-host .code-cell, 
+      #clarity-pdf-export-host pre,
+      #clarity-pdf-export-host .code-cell,
       #clarity-pdf-export-host .code-block {
         background-color: #f8fafc !important;
         border: 1px solid #e2e8f0 !important;
@@ -609,7 +609,7 @@ window.Clarity.uiChat = {
       // Define standard in-situ element capture via html2canvas (reads live styled DOM)
       const captureElementToPng = async (mc) => {
         if (!mc || !window.html2canvas) return null;
-        
+
         // Hide control layers and save styles
         const controls = mc.querySelectorAll(".mermaid-controls, .mermaid-fullscreen-header");
         const originalStyles = [];
@@ -780,7 +780,7 @@ window.Clarity.uiChat = {
 
         for (const mc of liveDiagrams) {
           let pngDataUrl = await captureElementToPng(mc);
-          
+
           if (!pngDataUrl) {
             const svg = mc.querySelector("svg");
             if (svg) {
@@ -858,7 +858,7 @@ window.Clarity.uiChat = {
 
           let w = 16;
           let h = 16;
-          
+
           const classes = Array.from(svg.classList || []);
           classes.forEach(c => {
             if (c === "w-3") { w = 12; }
@@ -885,7 +885,7 @@ window.Clarity.uiChat = {
           if (attrH && !attrH.includes("%") && attrH !== "auto") h = parseInt(attrH) || h;
 
           let color = svg.getAttribute("stroke") || svg.getAttribute("fill") || (isUser ? "#4f46e5" : "#0f172a");
-          
+
           svg.style.display = "inline-block";
           svg.style.verticalAlign = "middle";
           svg.style.width = `${w}px`;
@@ -1072,7 +1072,7 @@ window.Clarity.uiChat = {
         if (newBlock) {
           cardObj.body.appendChild(newBlock.cloneNode(true));
         }
-        
+
         testHost.innerHTML = "";
         testHost.appendChild(cardObj.card);
         const h = cardObj.card.getBoundingClientRect().height || cardObj.card.offsetHeight || 50;
@@ -1084,7 +1084,7 @@ window.Clarity.uiChat = {
       const pages = [];
       let currentPageObj = createNewPdfPage(1);
       pages.push(currentPageObj);
-      
+
       let completedCardHeights = [];
       let currentCardBlocks = [];
 
@@ -1097,18 +1097,18 @@ window.Clarity.uiChat = {
 
         for (let bIdx = 0; bIdx < blocks.length; bIdx++) {
           const block = blocks[bIdx];
-          
+
           // Measure potential height with the new block added
           const potentialCardHeight = measureCardHeightWithBlocks(isUser, currentCardBlocks, block);
-          
+
           // Calculate page layout occupied heights
           const totalCompletedHeight = completedCardHeights.reduce((a, b) => a + b, 0);
           const gapsCount = completedCardHeights.length;
           const totalHeightWithCurrentCard = totalCompletedHeight + (gapsCount * 10) + potentialCardHeight;
-          
+
           // Slightly less than page height to allow safe padding margins
           const maxPageContentHeight = pages.length === 1 ? 800 : 840;
-          
+
           if (totalHeightWithCurrentCard <= maxPageContentHeight) {
             currentCardBlocks.push(block);
           } else {
@@ -1119,11 +1119,11 @@ window.Clarity.uiChat = {
               currentCardBlocks.forEach(b => cardObj.body.appendChild(b));
               currentPageObj.contentArea.appendChild(cardObj.card);
               completedCardHeights.push(finalCardHeight);
-              
+
               currentPageObj = createNewPdfPage(pages.length + 1);
               pages.push(currentPageObj);
               completedCardHeights = [];
-              
+
               currentCardBlocks = [block];
             } else {
               if (completedCardHeights.length > 0) {
@@ -1138,7 +1138,7 @@ window.Clarity.uiChat = {
             }
           }
         }
-        
+
         // Finalize remaining blocks for message
         if (currentCardBlocks.length > 0) {
           const finalCardHeight = measureCardHeightWithBlocks(isUser, currentCardBlocks, null);
@@ -1159,7 +1159,7 @@ window.Clarity.uiChat = {
         const pageNum = idx + 1;
         const numEl = pObj.page.querySelector(".pdf-page-number");
         if (numEl) numEl.textContent = `Page ${pageNum} of ${totalPages}`;
-        
+
         // Turn off forced pagebreaks on the very last page to prevent blank trailing pages
         if (pageNum === totalPages) {
           pObj.page.style.setProperty("break-after", "avoid", "important");
@@ -1301,7 +1301,7 @@ window.Clarity.uiChat = {
           input.value = text;
           input.dispatchEvent(new Event("input", { bubbles: true }));
           input.focus();
-          
+
           // Optionally auto-send
           const sendBtn = document.getElementById("composerSend");
           if (sendBtn) {
@@ -1319,9 +1319,9 @@ window.Clarity.uiChat = {
     const dropdown = document.getElementById("exportChatMainDropdown");
     const cancelBtn = document.getElementById("exportChatMainCancelBtn");
     const pdfBtn = document.getElementById("exportChatMainPdfBtn");
-    
+
     if (!container || !menuBtn || !dropdown || !pdfBtn) return;
-    
+
     const messages = window.Clarity?.state?.activeConversation?.messages || [];
     if (messages.length > 0) {
         container.hidden = false;
@@ -1407,7 +1407,7 @@ window.Clarity.uiChat = {
     let projName = "";
     let hasProj = false;
     let projId = "";
-    
+
     let hasRag = false;
     let hasArch = false;
     let hasViva = false;
@@ -1420,7 +1420,7 @@ window.Clarity.uiChat = {
         if (proj) {
             projName = proj.name;
             hasProj = true;
-            
+
             const analysis = window.Clarity?.state?.projectAnalyses?.[projId];
             if (analysis) {
                 if (analysis.architecture && analysis.architecture.length > 0) hasArch = true;
@@ -1465,7 +1465,7 @@ window.Clarity.uiChat = {
       suggestionsHtml,
       '</div>',
       '</div>',
-      
+
     ].join("");
   },
 
@@ -1595,32 +1595,27 @@ window.Clarity.uiChat = {
   },
 
   _renderAssistantControls(msg, isStreaming, isError) {
-if (isStreaming) {
-      return `<div class="message__controls"><button class="message-control" data-action="stop" type="button" title="Stop generation" aria-label="Stop generation">
+    if (isStreaming) {
+      return `<div class="message__controls"><button class="message-control message-control--icon" data-action="stop" type="button" title="Stop generation" aria-label="Stop generation">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-        <span>Stop</span>
       </button></div>`;
     }
     if (isError) {
       return `<div class="message__controls message__controls--error">
-        <button class="message-control" data-action="regenerate" type="button" title="Regenerate response" aria-label="Regenerate response">
+        <button class="message-control message-control--icon" data-action="regenerate" type="button" title="Regenerate response" aria-label="Regenerate response">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
-          <span>Regenerate</span>
         </button>
-        <button class="message-control" data-action="change-model" type="button" title="Change model" aria-label="Change model">
+        <button class="message-control message-control--icon" data-action="change-model" type="button" title="Change model" aria-label="Change model">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
-          <span>Change model</span>
         </button>
       </div>`;
     }
     const buttons = [
-      `<button class="message-control" data-action="copy" type="button" title="Copy" aria-label="Copy">
+      `<button class="message-control message-control--icon" data-action="copy" type="button" title="Copy response" aria-label="Copy response">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
-        <span>Copy</span>
       </button>`,
-      `<button class="message-control" data-action="regenerate" type="button" title="Regenerate" aria-label="Regenerate">
+      `<button class="message-control message-control--icon" data-action="regenerate" type="button" title="Regenerate response" aria-label="Regenerate response">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
-        <span>Regenerate</span>
       </button>`,
     ];
     return `<div class="message__controls">${buttons.join("")}</div>`;
@@ -1629,20 +1624,18 @@ if (isStreaming) {
   _renderUserControls(msg) {
     if (!msg.id || msg.streaming) return "";
     const buttons = [
-      `<button class="message-control" data-action="edit" type="button" title="Edit" aria-label="Edit message">
+      `<button class="message-control message-control--icon" data-action="edit" type="button" title="Edit message" aria-label="Edit message">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-        <span>Edit</span>
       </button>`,
-      `<button class="message-control" data-action="copy" type="button" title="Copy" aria-label="Copy">
+      `<button class="message-control message-control--icon" data-action="copy" type="button" title="Copy message" aria-label="Copy message">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
-        <span>Copy</span>
       </button>`,
     ];
     return `<div class="message__controls">${buttons.join("")}</div>`;
   },
 
   _controlBtn(action, label, icon) {
-    return `<button class="message-control" data-action="${action}" type="button" title="${label}" aria-label="${label}"><span>${label}</span></button>`;
+    return `<button class="message-control" data-action="${action}" type="button" title="${label}" aria-label="${label}"></button>`;
   },
 
   _renderAttachment(att) {
@@ -1832,12 +1825,12 @@ if (isStreaming) {
   setRobotState(state) {
     const robot = document.getElementById("clarityRobot");
     if (!robot) return;
-    
+
     // Check if we're trying to set idle but we are currently streaming
     if (state === "idle" && this._isStreaming) return;
-    
+
     robot.setAttribute("data-state", state);
-    
+
     if (state === "responding") {
       setTimeout(() => {
         if (robot.getAttribute("data-state") === "responding") {
@@ -1845,22 +1838,22 @@ if (isStreaming) {
         }
       }, 1500);
     }
-    
+
     // Clear existing look intervals
     if (this._robotLookInterval) clearInterval(this._robotLookInterval);
     if (this._robotLookTimeout) clearTimeout(this._robotLookTimeout);
-    
+
     if (state === "idle" || state === "listening" || state === "thinking") {
       this._robotLookInterval = setInterval(() => {
         if (!document.getElementById("clarityRobot")) return clearInterval(this._robotLookInterval);
-        
+
         const r = Math.random();
         let look = "none";
         if (r > 0.78) look = "left";
         else if (r > 0.56) look = "right";
-        
+
         robot.setAttribute("data-look", look);
-        
+
         if (look !== "none") {
           this._robotLookTimeout = setTimeout(() => {
             if (robot.getAttribute("data-state") === state) {
@@ -3110,7 +3103,7 @@ if (isStreaming) {
 
   _postProcessMessage(messageEl) {
     if (!messageEl) return;
-    
+
     const contentEl = messageEl.querySelector(".message__content");
     if (!contentEl) return;
 
@@ -3119,7 +3112,7 @@ if (isStreaming) {
       if (pre.closest(".code-cell") || pre.closest(".code-block")) {
         return;
       }
-      
+
       if (pre.parentNode && pre.parentNode.classList.contains("pre-copy-container")) {
         return;
       }
@@ -3128,7 +3121,7 @@ if (isStreaming) {
 
       const wrapper = document.createElement("div");
       wrapper.className = "pre-copy-container";
-      
+
       pre.parentNode.insertBefore(wrapper, pre);
       wrapper.appendChild(pre);
 
@@ -3137,16 +3130,16 @@ if (isStreaming) {
       copyBtn.className = "pre-copy-btn";
       copyBtn.setAttribute("aria-label", "Copy code");
       copyBtn.title = "Copy code";
-      
+
       copyBtn.innerHTML = `
         <svg class="icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        <span>Copy</span>
+
       `;
 
       copyBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         e.preventDefault();
-        
+
         let text = pre.textContent || "";
         if (isMermaid && pre._rawMermaidCode) {
           text = pre._rawMermaidCode;
