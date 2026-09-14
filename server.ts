@@ -1216,7 +1216,10 @@ async function startServer() {
   });
 
   app.post("/api/conversations", (req, res) => {
-    const user = resolveUser(req) || initialUser;
+    const user = resolveUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
     const body = req.body || {};
     const id = `conv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const title = String(body.title || "New Chat").trim();
@@ -1238,7 +1241,10 @@ async function startServer() {
   });
 
   app.delete("/api/conversations", (req, res) => {
-    const user = resolveUser(req) || initialUser;
+    const user = resolveUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
     let count = 0;
     for (const [id, c] of conversations.entries()) {
       if (c.user_id === user.id) {
@@ -1475,7 +1481,10 @@ ${params.textMsg}`;
   app.post("/api/conversations/:cid/chat", async (req, res) => {
     const cid = req.params.cid;
     let conv = conversations.get(cid);
-    const user = resolveUser(req) || initialUser;
+    const user = resolveUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
 
     if (!conv) {
       // Auto-create conversation if not exists
