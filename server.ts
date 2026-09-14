@@ -5,10 +5,6 @@ import {
   ensureSupabaseTablesExist,
   isSupabaseConfigured,
   getSupabaseAdmin,
-  syncModelToSupabase,
-  fetchModelsFromSupabase,
-  deleteModelFromSupabase,
-  syncUserToSupabase,
 } from "./supabase.js";
 import { syncProjectFiles, createTerminalSession, startTerminalSession, stopTerminalSession, sendInputToSession, getProjectSessions, activeSessions, sanitizeSession, resolveProjectWorkspace, detectProject } from "./run-engine";
 import httpProxy from "http-proxy";
@@ -889,92 +885,54 @@ async function startServer() {
   // -------------------------------------------------------------------------
   // Models API
   // -------------------------------------------------------------------------
-  app.get("/api/models", async (req, res) => {
+  app.get("/api/models", (req, res) => {
     const user = resolveUser(req) || initialUser;
     
-    if (isSupabaseConfigured()) {
-      try {
-        const supModels = await fetchModelsFromSupabase(user.id);
-        models.clear();
-        for (const m of supModels) {
-          let caps = {};
-          if (m.capabilities) {
-            try { caps = typeof m.capabilities === "string" ? JSON.parse(m.capabilities) : m.capabilities; } catch {}
-          }
-          models.set(m.id, {
-            id: m.id,
-            name: m.name,
-            provider: m.provider,
-            baseUrl: m.base_url || "",
-            apiKey: m.api_key || "",
-            modelName: m.model_name || m.id,
-            modelType: m.model_type || "text",
-            capabilities: caps,
-            contextWindow: m.context_window || 16000,
-            maxOutputTokens: m.max_output_tokens || 4096,
-            defaultTemperature: m.default_temperature || 0.7,
-            defaultTopP: m.default_top_p || 1.0,
-            supportsStreaming: Boolean(m.supports_streaming),
-            enabled: Boolean(m.enabled),
-            status: m.status || "available",
-            isUser: Boolean(m.is_user),
-          });
+    // Refresh models map from SQLite database to guarantee consistency
+    try {
+      const dbM = dbGetModels();
+      models.clear();
+      for (const m of dbM) {
+        if (
+          m.id === "Gemini 3.5 Flash-Lite" ||
+          m.name === "Gemini 3.5 Flash-Lite" ||
+          m.model_name === "gemini-3.5-flash-lite"
+        ) {
+          try { dbDeleteModel(m.id); } catch {}
+          continue;
         }
-      } catch (err: any) {
-        console.error("Failed to fetch models from Supabase:", err);
-        return res.status(500).json({ error: err.message || "Failed to load models from Supabase", type: "supabase_error" });
-      }
-    } else {
-      // SQLite fallback for local development
-      try {
-        const dbM = dbGetModels();
-        models.clear();
-        for (const m of dbM) {
-          if (
-            m.id === "Gemini 3.5 Flash-Lite" ||
-            m.name === "Gemini 3.5 Flash-Lite" ||
-            m.model_name === "gemini-3.5-flash-lite"
-          ) {
-            try { dbDeleteModel(m.id); } catch {}
-            continue;
-          }
-          let caps = {};
-          if (m.capabilities) {
-            try { caps = typeof m.capabilities === "string" ? JSON.parse(m.capabilities) : m.capabilities; } catch {}
-          }
-          models.set(m.id, {
-            id: m.id,
-            name: m.name,
-            provider: m.provider,
-            baseUrl: m.base_url,
-            apiKey: m.api_key,
-            modelName: m.model_name,
-            modelType: m.model_type,
-            capabilities: caps,
-            contextWindow: m.context_window,
-            maxOutputTokens: m.max_output_tokens,
-            defaultTemperature: m.default_temperature,
-            defaultTopP: m.default_top_p,
-            supportsStreaming: Boolean(m.supports_streaming),
-            enabled: Boolean(m.enabled),
-            status: m.status,
-            isUser: Boolean(m.is_user),
-          });
+        let caps = {};
+        if (m.capabilities) {
+          try { caps = typeof m.capabilities === "string" ? JSON.parse(m.capabilities) : m.capabilities; } catch {}
         }
-      } catch (e) {
-        console.error("Failed to refresh models from DB:", e);
+        models.set(m.id, {
+          id: m.id,
+          name: m.name,
+          provider: m.provider,
+          baseUrl: m.base_url,
+          apiKey: m.api_key,
+          modelName: m.model_name,
+          modelType: m.model_type,
+          capabilities: caps,
+          contextWindow: m.context_window,
+          maxOutputTokens: m.max_output_tokens,
+          defaultTemperature: m.default_temperature,
+          defaultTopP: m.default_top_p,
+          supportsStreaming: Boolean(m.supports_streaming),
+          enabled: Boolean(m.enabled),
+          status: m.status,
+          isUser: Boolean(m.is_user),
+        });
       }
+    } catch (e) {
+      console.error("Failed to refresh models from DB:", e);
     }
 
     const resolvedActive = resolveModelConfig(user.active_model_id, user.id);
     const active = resolvedActive ? resolvedActive.id : "";
     if (user.active_model_id !== active) {
       user.active_model_id = active;
-      if (isSupabaseConfigured()) {
-        try { await syncUserToSupabase(user); } catch {}
-      } else {
-        try { dbSaveUser(user); } catch {}
-      }
+      try { dbSaveUser(user); } catch {}
     }
     
     const list = Array.from(models.values()).map((m) => {
@@ -987,8 +945,7 @@ async function startServer() {
     res.json({ models: list, active });
   });
 
-  app.post("/api/models", async (req, res) => {
-    const user = resolveUser(req) || initialUser;
+  app.post("/api/models", (req, res) => {
     const body = req.body || {};
     const id = String(body.id || `custom_${Date.now()}`).trim();
     if (models.has(id)) {
@@ -1020,16 +977,7 @@ async function startServer() {
       isUser: true,
     };
     models.set(id, newModel);
-    if (isSupabaseConfigured()) {
-      try {
-        await syncModelToSupabase(newModel, user.id);
-      } catch (err: any) {
-        console.error("Failed to sync new model to Supabase:", err);
-        return res.status(500).json({ error: err.message || "Failed to save model to Supabase", type: "supabase_error" });
-      }
-    } else {
-      try { dbSaveModel(newModel); } catch(err) { console.error(err); }
-    }
+    try { dbSaveModel(newModel); } catch(err) { console.error(err); }
     res.status(201).json(publicModel(newModel));
   });
 
@@ -1039,8 +987,7 @@ async function startServer() {
     res.json(publicModel(m));
   });
 
-  app.put("/api/models/:id", async (req, res) => {
-    const user = resolveUser(req) || initialUser;
+  app.put("/api/models/:id", (req, res) => {
     const id = req.params.id;
     const existing = models.get(id);
     if (!existing) return res.status(404).json({ error: "Model not found", type: "model_not_found" });
@@ -1070,45 +1017,24 @@ async function startServer() {
       status: "available",
     };
     models.set(id, updated);
-    if (isSupabaseConfigured()) {
-      try {
-        await syncModelToSupabase(updated, user.id);
-      } catch (err: any) {
-        console.error("Failed to update model in Supabase:", err);
-        return res.status(500).json({ error: err.message || "Failed to update model in Supabase", type: "supabase_error" });
-      }
-    } else {
-      try { dbSaveModel(updated); } catch(err) { console.error(err); }
-    }
+    try { dbSaveModel(updated); } catch(err) { console.error(err); }
     res.json(publicModel(updated));
   });
 
-  app.delete("/api/models/:id", async (req, res) => {
-    const user = resolveUser(req) || initialUser;
+  app.delete("/api/models/:id", (req, res) => {
     const id = req.params.id;
     if (models.has(id)) {
       models.delete(id);
       try {
-        if (isSupabaseConfigured()) {
-          await deleteModelFromSupabase(id, user.id);
-        } else {
-          dbDeleteModel(id);
-        }
+        dbDeleteModel(id);
         for (const u of users.values()) {
           if (u.active_model_id === id) {
             u.active_model_id = Array.from(models.keys())[0] || "";
-            if (isSupabaseConfigured()) {
-              await syncUserToSupabase(u);
-            } else {
-              dbSaveUser(u);
-            }
+            dbSaveUser(u);
           }
         }
-      } catch (err: any) {
+      } catch (err) {
         console.error("Error deleting model:", err);
-        if (isSupabaseConfigured()) {
-          return res.status(500).json({ error: err.message || "Failed to delete model from Supabase", type: "supabase_error" });
-        }
       }
       return res.json({ deleted: true, id });
     }
@@ -1134,22 +1060,14 @@ async function startServer() {
     return String(m.baseUrl || "").trim();
   }
 
-  app.post("/api/models/set-active", async (req, res) => {
+  app.post("/api/models/set-active", (req, res) => {
     const user = resolveUser(req) || initialUser;
     const { model_id } = req.body || {};
     if (!model_id || !models.has(model_id)) {
       return res.status(404).json({ error: `Model '${model_id}' not found`, type: "model_not_found" });
     }
     user.active_model_id = model_id;
-    if (isSupabaseConfigured()) {
-      try {
-        await syncUserToSupabase(user);
-      } catch (err: any) {
-        console.error("Failed to sync active model to Supabase user:", err);
-      }
-    } else {
-      try { dbSaveUser(user); } catch {}
-    }
+    try { dbSaveUser(user); } catch {}
     res.json({ ok: true, active: model_id, model: publicModel(models.get(model_id)!) });
   });
 
