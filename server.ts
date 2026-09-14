@@ -941,29 +941,23 @@ async function startServer() {
     }
     
     const client = getSupabaseAdmin();
-    if (client) {
-      let rows: any[] | null = null;
-      let dbError: any = null;
-      
-      try {
-        const resOr = await client.from("models").select("*").or(`user_id.eq.${user.id},user_id.eq.user_default,user_id.is.null`);
-        if (!resOr.error && resOr.data) {
-          rows = resOr.data;
-        } else {
-          dbError = resOr.error;
-        }
-      } catch (e) {
-        dbError = e;
+    if (!client) {
+      return res.status(503).json({ error: "Supabase database not configured in production" });
+    }
+
+    try {
+      console.log(`[Model Registry] GET user=${user.id}`);
+      const { data: rows, error } = await client
+        .from("models")
+        .select("*")
+        .eq("user_id", user.id);
+
+      if (error) {
+        console.error(`[Model Registry] PostgreSQL query failed code=${error.code}:`, error.message);
+        return res.status(500).json({ error: error.message || "Failed to query Supabase models" });
       }
 
-      if (!rows) {
-        const resEq = await client.from("models").select("*").eq("user_id", user.id);
-        if (resEq.error) {
-          console.error("GET /api/models Supabase error:", resEq.error || dbError);
-          return res.status(500).json({ error: resEq.error?.message || "Failed to query Supabase models" });
-        }
-        rows = resEq.data || [];
-      }
+      console.log(`[Model Registry] PostgreSQL query succeeded count=${rows?.length || 0}`);
 
       const mappedList = (rows || []).map((row: any) => {
         let caps = {};
@@ -997,69 +991,13 @@ async function startServer() {
         };
       });
 
-      // Merge in any active models in memory for this user if not already present
-      for (const [id, item] of models.entries()) {
-        if ((item.user_id === user.id || item.user_id === "user_default") && !mappedList.some(m => m.id === id)) {
-          const pub = publicModel(item);
-          mappedList.push({
-            ...pub,
-            is_active: pub.id === user.active_model_id,
-          });
-        }
-      }
-
       return res.json({ models: mappedList, active: user.active_model_id || "" });
+    } catch (err: any) {
+      console.error("[Model Registry] GET /api/models exception:", err);
+      return res.status(500).json({ error: err?.message || "Internal server error" });
     }
-    
-    // Refresh models map from SQLite database to guarantee consistency
-    try {
-      const dbM = dbGetModels(user.id);
-      models.clear();
-      for (const m of dbM) {
-        let caps = {};
-        if (m.capabilities) {
-          try { caps = typeof m.capabilities === "string" ? JSON.parse(m.capabilities) : m.capabilities; } catch {}
-        }
-        models.set(m.id, {
-          id: m.id,
-          name: m.name,
-          provider: m.provider,
-          baseUrl: m.base_url,
-          apiKey: m.api_key,
-          modelName: m.model_name,
-          modelType: m.model_type,
-          capabilities: caps,
-          contextWindow: m.context_window,
-          maxOutputTokens: m.max_output_tokens,
-          defaultTemperature: m.default_temperature,
-          defaultTopP: m.default_top_p,
-          supportsStreaming: Boolean(m.supports_streaming),
-          enabled: Boolean(m.enabled),
-          status: m.status,
-          isUser: Boolean(m.is_user),
-          user_id: user.id,
-        });
-      }
-    } catch (e) {
-      console.error("Failed to refresh models from DB:", e);
-    }
-
-    const resolvedActive = resolveModelConfig(user.active_model_id, user.id);
-    const active = resolvedActive ? resolvedActive.id : "";
-    if (user.active_model_id !== active) {
-      user.active_model_id = active;
-      try { dbSaveUser(user); } catch {}
-    }
-    
-    const list = Array.from(models.values()).map((m) => {
-      const pub = publicModel(m);
-      return {
-        ...pub,
-        is_active: pub.id === active,
-      };
-    });
-    res.json({ models: list, active });
   });
+
 
   app.post("/api/models", async (req, res) => {
     const user = resolveUser(req);
