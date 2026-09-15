@@ -638,3 +638,192 @@ export async function syncUserToSupabase(user: {
     console.warn("[Supabase Sync] User upsert error:", err);
   }
 }
+
+export async function hydrateAllFromSupabase(dbAdapters: {
+  dbSaveUser?: (user: any) => void;
+  dbSaveProject?: (proj: any) => void;
+  dbSaveFile?: (file: any) => void;
+  dbSaveModel?: (model: any) => void;
+  dbSaveConversation?: (cid: string, userId: string, title: string, modelId?: string) => void;
+  dbSaveMessage?: (msgId: string, cid: string, role: string, content: string, modelId?: string, attachments?: any) => void;
+  dbSaveArtifact?: (artifact: any) => void;
+  dbSaveWorkspaceFile?: (file: any) => void;
+  dbSaveSession?: (token: string, userId: string, expiresAt: number) => void;
+}): Promise<{
+  usersCount: number;
+  projectsCount: number;
+  modelsCount: number;
+  conversationsCount: number;
+  messagesCount: number;
+  artifactsCount: number;
+  filesCount: number;
+}> {
+  const client = getSupabaseAdmin();
+  if (!client) {
+    console.warn("[Supabase Hydration] Supabase client not configured. Skipping Supabase hydration.");
+    return { usersCount: 0, projectsCount: 0, modelsCount: 0, conversationsCount: 0, messagesCount: 0, artifactsCount: 0, filesCount: 0 };
+  }
+
+  console.log("[Supabase Hydration] Fetching full production state from Supabase PostgreSQL...");
+
+  let usersCount = 0;
+  let projectsCount = 0;
+  let modelsCount = 0;
+  let conversationsCount = 0;
+  let messagesCount = 0;
+  let artifactsCount = 0;
+  let filesCount = 0;
+
+  try {
+    // 1. Hydrate Users
+    const { data: dbUsers, error: uErr } = await client.from("users").select("*");
+    if (!uErr && dbUsers) {
+      usersCount = dbUsers.length;
+      for (const u of dbUsers) {
+        if (dbAdapters.dbSaveUser) {
+          dbAdapters.dbSaveUser({
+            id: u.id,
+            email: u.email,
+            name: u.name,
+            password: u.password || "",
+            active_model_id: u.active_model_id || "",
+            created_at: Number(u.created_at) || Date.now(),
+          });
+        }
+      }
+    }
+
+    // 2. Hydrate Projects
+    const { data: dbProjects, error: pErr } = await client.from("projects").select("*");
+    if (!pErr && dbProjects) {
+      projectsCount = dbProjects.length;
+      for (const p of dbProjects) {
+        if (dbAdapters.dbSaveProject) {
+          dbAdapters.dbSaveProject({
+            id: p.id,
+            user_id: p.user_id || "user_default",
+            name: p.name,
+            description: p.description || "",
+            source_type: p.source_type || "upload",
+            root_path: p.root_path || "",
+            status: p.status || "ready",
+            created_at: Number(p.created_at) || Date.now(),
+            updated_at: Number(p.updated_at) || Date.now(),
+            last_indexed_at: p.last_indexed_at ? Number(p.last_indexed_at) : null,
+            metadata: p.metadata,
+          });
+        }
+      }
+    }
+
+    // 3. Hydrate Models
+    const { data: dbModels, error: mErr } = await client.from("models").select("*");
+    if (!mErr && dbModels) {
+      modelsCount = dbModels.length;
+      for (const m of dbModels) {
+        if (dbAdapters.dbSaveModel) {
+          let caps = m.capabilities;
+          if (typeof caps === "string") {
+            try { caps = JSON.parse(caps); } catch {}
+          }
+          dbAdapters.dbSaveModel({
+            id: m.id.includes(":::") ? m.id.split(":::")[1] : m.id,
+            user_id: m.user_id || "user_default",
+            name: m.name,
+            provider: m.provider,
+            baseUrl: m.base_url || "",
+            apiKey: m.api_secret || m.api_key || "",
+            modelName: m.provider_model_id || m.model_name || m.id,
+            modelType: m.model_type || "text",
+            capabilities: caps || {},
+            contextWindow: Number(m.context_window) || 16000,
+            maxOutputTokens: Number(m.max_output_tokens) || 4096,
+            defaultTemperature: Number(m.temperature ?? m.default_temperature) || 0.7,
+            defaultTopP: Number(m.top_p ?? m.default_top_p) || 1.0,
+            supportsStreaming: m.supports_streaming !== 0,
+            enabled: m.enabled !== 0,
+            status: m.status || "available",
+            isUser: m.is_user !== 0,
+          });
+        }
+      }
+    }
+
+    // 4. Hydrate Conversations
+    const { data: dbConvs, error: cErr } = await client.from("conversations").select("*");
+    if (!cErr && dbConvs) {
+      conversationsCount = dbConvs.length;
+      for (const c of dbConvs) {
+        if (dbAdapters.dbSaveConversation) {
+          dbAdapters.dbSaveConversation(c.id, c.user_id || "user_default", c.title, c.model_id);
+        }
+      }
+    }
+
+    // 5. Hydrate Messages
+    const { data: dbMsgs, error: msgErr } = await client.from("messages").select("*");
+    if (!msgErr && dbMsgs) {
+      messagesCount = dbMsgs.length;
+      for (const msg of dbMsgs) {
+        if (dbAdapters.dbSaveMessage) {
+          dbAdapters.dbSaveMessage(msg.id, msg.conversation_id, msg.role, msg.content, msg.model_id, msg.attachments);
+        }
+      }
+    }
+
+    // 6. Hydrate Artifacts
+    const { data: dbArts, error: aErr } = await client.from("artifacts").select("*");
+    if (!aErr && dbArts) {
+      artifactsCount = dbArts.length;
+      for (const a of dbArts) {
+        if (dbAdapters.dbSaveArtifact) {
+          dbAdapters.dbSaveArtifact({
+            id: a.id,
+            project_id: a.project_id,
+            file_id: a.file_id || null,
+            name: a.name,
+            path: a.path || null,
+            mime_type: a.mime_type || null,
+            artifact_type: a.artifact_type || null,
+            version: Number(a.version) || 1,
+            hash: a.hash || null,
+            content: a.content || "",
+            created_at: Number(a.created_at) || Date.now(),
+            updated_at: Number(a.updated_at) || Date.now(),
+          });
+        }
+      }
+    }
+
+    // 7. Hydrate Project Files
+    const { data: dbFiles, error: fErr } = await client.from("project_files").select("*");
+    if (!fErr && dbFiles) {
+      filesCount = dbFiles.length;
+      for (const f of dbFiles) {
+        if (dbAdapters.dbSaveFile) {
+          dbAdapters.dbSaveFile({
+            id: f.id,
+            project_id: f.project_id,
+            path: f.path,
+            name: f.name,
+            extension: f.extension || "",
+            language: f.language || "",
+            size: Number(f.size) || 0,
+            hash: f.hash || "",
+            version: Number(f.version) || 1,
+            content: f.content || "",
+            is_binary: f.is_binary ? 1 : 0,
+            created_at: Number(f.created_at) || Date.now(),
+            updated_at: Number(f.updated_at) || Date.now(),
+          });
+        }
+      }
+    }
+
+    console.log(`[Supabase Hydration SUCCESS] Hydrated ${usersCount} users, ${projectsCount} projects, ${modelsCount} models, ${conversationsCount} conversations, ${messagesCount} messages, ${artifactsCount} artifacts, ${filesCount} files.`);
+  } catch (err: any) {
+    console.error("[Supabase Hydration ERROR] Failed to hydrate data from Supabase:", err?.message || err);
+  }
+
+  return { usersCount, projectsCount, modelsCount, conversationsCount, messagesCount, artifactsCount, filesCount };
+}

@@ -418,27 +418,29 @@ export function resolveModelConfig(requestedModelId?: string | null, userId?: st
     return null;
   }
 
-  if (requestedModelId) {
-    // 1. Direct match by exact ID for this user
+  if (requestedModelId && requestedModelId.trim() !== "") {
+    // 1. Direct match by exact ID for THIS user
     const exact = getUserModel(userId, requestedModelId);
     if (exact && exact.enabled) {
       return exact;
     }
-    // 2. Case-insensitive match on ID, name, or modelName strictly within this user's models
+    // 2. Case-insensitive match on ID, name, or modelName strictly within THIS user's models
     const norm = requestedModelId.toLowerCase().trim();
     for (const m of userModels) {
       if (
         (m.id.toLowerCase() === norm ||
          m.name.toLowerCase() === norm ||
-         m.modelName.toLowerCase() === norm) &&
+         (m.modelName && m.modelName.toLowerCase() === norm)) &&
         m.enabled
       ) {
         return m;
       }
     }
+    // Requested model was explicitly specified but does NOT belong to THIS user or is disabled (IDOR / unowned / disabled)
+    return null;
   }
 
-  // Check user active model
+  // Check user active model selection
   const u = users.get(userId);
   if (u && u.active_model_id) {
     const active = getUserModel(userId, u.active_model_id);
@@ -505,10 +507,26 @@ const welcomeMsg: MessageItem = {
 };
 messages.set(welcomeMsg.id, welcomeMsg);
 
-// Hydrate state from persistent SQLite database on boot
+// Hydrate state from persistent database on boot
 async function hydrateFromDatabase() {
   try {
     initDatabaseSchema();
+
+    if (isSupabaseConfigured()) {
+      console.log("[Boot] Supabase environment detected. Synchronizing production state...");
+      await ensureSupabaseBucketsExist();
+      await hydrateAllFromSupabase({
+        dbSaveUser,
+        dbSaveProject,
+        dbSaveFile,
+        dbSaveModel,
+        dbSaveConversation,
+        dbSaveMessage,
+        dbSaveArtifact,
+        dbSaveWorkspaceFile,
+      });
+    }
+
     const dbProjects = dbListProjects();
     for (const p of dbProjects) {
       const meta: any = parseMetadataSafely(p.metadata);
@@ -516,7 +534,7 @@ async function hydrateFromDatabase() {
       const effectiveCount = pFiles.length > 0 ? pFiles.length : (meta.file_count || countProjectFiles(p.id) || 0);
       const pItem: ProjectItem = {
         id: p.id,
-        user_id: meta.user_id || initialUser.id,
+        user_id: meta.user_id || p.user_id || initialUser.id,
         name: p.name,
         description: p.description || "",
         source: (p.source_type as any) || "upload",
@@ -670,21 +688,21 @@ async function hydrateFromDatabase() {
     if (dbModelsList && dbModelsList.length > 0) {
       for (const m of dbModelsList) {
         const item = mapDbRowToModelItem(m, m.user_id || initialUser.id);
-        if (item.provider === "gemini" && (item.modelName === "gemini-2.5-flash" || item.modelName === "gemini-2.0-flash" || item.modelName === "gemini-1.5-flash" || item.modelName === "gemini-pro" || item.modelName === "gemini-flash")) {
-          item.modelName = "gemini-3-flash-preview";
-          try { dbSaveModel(item); } catch {}
+        if (item.provider === "gemini" && !item.modelName) {
+          item.modelName = item.id;
         }
         setUserModel(item.user_id || initialUser.id, item);
       }
-    } else {
+    } else if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
+      const defaultApiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "").trim();
       const defaultGeminiModel: ModelItem = {
         id: "clarity-gemini",
         user_id: initialUser.id,
-        name: "Google Gemini (Default)",
+        name: "Google Gemini",
         provider: "gemini",
         baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
-        apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "",
-        modelName: "gemini-3-flash-preview",
+        apiKey: defaultApiKey,
+        modelName: "gemini-2.5-flash",
         modelType: "text",
         capabilities: {
           text: true,
@@ -998,7 +1016,7 @@ async function startServer() {
     res.status(201).json({ user: publicUser(newUser), token });
   });
 
-  app.post("/api/auth/login", (req, res) => {
+  app.post("/api/auth/login", async (req, res) => {
     console.log("[AUTH] Login started");
     const { email, password } = req.body || {};
     if (!email || !password) {
@@ -1025,7 +1043,30 @@ async function startServer() {
           created_at: dbU.created_at,
         };
         users.set(matched.id, matched);
-        console.log("[AUTH] Login user lookup succeeded");
+        console.log("[AUTH] Login user lookup succeeded from local cache");
+      } else if (isSupabaseConfigured()) {
+        const supaAdmin = getSupabaseAdmin();
+        if (supaAdmin) {
+          try {
+            const { data: supaUsers } = await supaAdmin.from("users").select("*").eq("email", cleanEmail).limit(1);
+            if (supaUsers && supaUsers.length > 0) {
+              const su = supaUsers[0];
+              matched = {
+                id: su.id,
+                email: su.email,
+                name: su.name,
+                password: su.password || "",
+                active_model_id: su.active_model_id || "",
+                created_at: Number(su.created_at) || Date.now(),
+              };
+              dbSaveUser(matched);
+              users.set(matched.id, matched);
+              console.log("[AUTH] Login user lookup succeeded from Supabase PostgreSQL");
+            }
+          } catch (e) {
+            console.warn("[AUTH] Supabase user login query error:", e);
+          }
+        }
       }
     }
 
@@ -1426,6 +1467,18 @@ async function startServer() {
     return "";
   }
 
+  function buildOpenAiHeaders(modelConfig: any): Record<string, string> {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "HTTP-Referer": "https://clarity.ai",
+      "X-Title": "Clarity AI Studio",
+    };
+    if (modelConfig?.apiKey) {
+      headers["Authorization"] = `Bearer ${modelConfig.apiKey}`;
+    }
+    return headers;
+  }
+
   app.post("/api/models/set-active", async (req, res) => {
     const user = resolveUser(req);
     if (!user) {
@@ -1492,7 +1545,7 @@ async function startServer() {
       try {
         const apiKey = m.apiKey;
         if (!apiKey) return res.status(400).json({ error: "API Key required for Gemini." });
-        const testModel = m.modelName || "gemini-3.6-flash";
+        const testModel = m.modelName || m.id;
         const testRes = await generateGeminiWithResilience({
           apiKey,
           modelName: testModel,
@@ -1513,9 +1566,9 @@ async function startServer() {
 
       let response = await fetch(`${effectiveBaseUrl.replace(/\/$/, "")}/models`, { method: "GET", headers });
       if (!response.ok) {
-        // Fallback: try a tiny chat completions request to verify API connection
+        // Fallback: try a tiny chat completions request to verify API connection using configured model name
         const testBody = {
-          model: m.modelName || "gpt-3.5-turbo",
+          model: m.modelName || m.id,
           messages: [{ role: "user", content: "ping" }],
           max_tokens: 5,
         };
@@ -2230,7 +2283,7 @@ Following the details block, provide your beautiful, structured final response.`
         if (modelConfig.apiKey) headers["Authorization"] = `Bearer ${modelConfig.apiKey}`;
 
         const reqBody: any = {
-          model: modelConfig.modelName || "gpt-3.5-turbo",
+          model: modelConfig.modelName || modelConfig.id,
           messages: [
             { role: "system", content: sysInstruction },
             ...openAiHistory
@@ -2254,14 +2307,19 @@ Following the details block, provide your beautiful, structured final response.`
 
         if (response.body) {
            const decoder = new TextDecoder("utf-8");
+           let sseBuffer = "";
            for await (const chunk of response.body) {
-             const decoded = decoder.decode(chunk, { stream: true });
-             const lines = decoded.split("\n");
+             sseBuffer += decoder.decode(chunk, { stream: true });
+             const lines = sseBuffer.split("\n");
+             sseBuffer = lines.pop() || "";
              for (const line of lines) {
-               if (line.trim().startsWith("data: ") && !line.includes("[DONE]")) {
+               const trimmed = line.trim();
+               if (trimmed.startsWith("data:") && !trimmed.includes("[DONE]")) {
+                 const dataStr = trimmed.slice(5).trim();
+                 if (!dataStr) continue;
                  try {
-                   const parsed = JSON.parse(line.trim().slice(6));
-                   const token = parsed.choices?.[0]?.delta?.content || "";
+                   const parsed = JSON.parse(dataStr);
+                   const token = parsed.choices?.[0]?.delta?.content || parsed.choices?.[0]?.text || "";
                    if (token) {
                      assistantText += token;
                      sendSSE({ content: token });
@@ -2269,6 +2327,17 @@ Following the details block, provide your beautiful, structured final response.`
                  } catch (e) {}
                }
              }
+           }
+           if (sseBuffer.trim().startsWith("data:") && !sseBuffer.includes("[DONE]")) {
+             try {
+               const dataStr = sseBuffer.trim().slice(5).trim();
+               const parsed = JSON.parse(dataStr);
+               const token = parsed.choices?.[0]?.delta?.content || parsed.choices?.[0]?.text || "";
+               if (token) {
+                 assistantText += token;
+                 sendSSE({ content: token });
+               }
+             } catch (e) {}
            }
         }
       }
@@ -2461,7 +2530,7 @@ Following the details block, provide your beautiful, structured final response.`
         if (modelConfig.apiKey) headers["Authorization"] = `Bearer ${modelConfig.apiKey}`;
 
         const reqBody: any = {
-          model: modelConfig.modelName || "gpt-3.5-turbo",
+          model: modelConfig.modelName || modelConfig.id,
           messages: [
             { role: "system", content: sysInstruction },
             ...openAiHistory
@@ -2484,17 +2553,20 @@ Following the details block, provide your beautiful, structured final response.`
         }
 
         if (response.body) {
-           // We use a simple read loop. In standard node environments stream reading uses async iterators, but we can use chunk reading here.
-           // Since Node 18 fetch is supported.
            const decoder = new TextDecoder("utf-8");
+           let sseBuffer = "";
            for await (const chunk of response.body) {
-             const decoded = decoder.decode(chunk, { stream: true });
-             const lines = decoded.split("\n");
+             sseBuffer += decoder.decode(chunk, { stream: true });
+             const lines = sseBuffer.split("\n");
+             sseBuffer = lines.pop() || "";
              for (const line of lines) {
-               if (line.trim().startsWith("data: ") && !line.includes("[DONE]")) {
+               const trimmed = line.trim();
+               if (trimmed.startsWith("data:") && !trimmed.includes("[DONE]")) {
+                 const dataStr = trimmed.slice(5).trim();
+                 if (!dataStr) continue;
                  try {
-                   const parsed = JSON.parse(line.trim().slice(6));
-                   const token = parsed.choices?.[0]?.delta?.content || "";
+                   const parsed = JSON.parse(dataStr);
+                   const token = parsed.choices?.[0]?.delta?.content || parsed.choices?.[0]?.text || "";
                    if (token) {
                      assistantText += token;
                      sendSSE({ content: token });
@@ -2502,6 +2574,17 @@ Following the details block, provide your beautiful, structured final response.`
                  } catch (e) {}
                }
              }
+           }
+           if (sseBuffer.trim().startsWith("data:") && !sseBuffer.includes("[DONE]")) {
+             try {
+               const dataStr = sseBuffer.trim().slice(5).trim();
+               const parsed = JSON.parse(dataStr);
+               const token = parsed.choices?.[0]?.delta?.content || parsed.choices?.[0]?.text || "";
+               if (token) {
+                 assistantText += token;
+                 sendSSE({ content: token });
+               }
+             } catch (e) {}
            }
         }
       }
@@ -2930,7 +3013,7 @@ Provide a focused, controlled explanation of this file's purpose, main functions
             method: "POST",
             headers,
             body: JSON.stringify({
-              model: modelConfig.modelName || "gpt-3.5-turbo",
+              model: modelConfig.modelName || modelConfig.id,
               messages: [
                 { role: "system", content: systemInstruction },
                 ...openAiContents,
@@ -2969,7 +3052,7 @@ At the end of your response, include this exact note:
 "\n\n💡 **Notice:** To generate and download the complete **.pptx** PowerPoint presentation file, please visit the dedicated **Assets & Deliverables** tab in your project workspace."`;
 
         const pptResult = await generateGeminiWithResilience({
-          model: modelConfig.modelName || "gemini-2.5-flash",
+          modelName: modelConfig.modelName || modelConfig.id,
           contents: [{ role: "user", parts: [{ text: pptPrompt }] }],
           apiKey: modelConfig.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
         });
@@ -3131,7 +3214,7 @@ HUMANOID CHAT, EXPLANATION & CRITICAL THINKING GUIDELINES:
             method: "POST",
             headers,
             body: JSON.stringify({
-              model: modelConfig.modelName || "gpt-3.5-turbo",
+              model: modelConfig.modelName || modelConfig.id,
               messages: [
                 { role: "system", content: systemInstruction },
                 ...openAiContents,
@@ -3390,7 +3473,7 @@ Fix the issue and output the complete fixed file content:`;
           method: "POST",
           headers,
           body: JSON.stringify({
-            model: modelConfig.modelName || "gpt-3.5-turbo",
+            model: modelConfig.modelName || modelConfig.id,
             messages: [{ role: "system", content: sys }, { role: "user", content: userPrompt }]
           })
         });

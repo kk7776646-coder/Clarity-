@@ -79,23 +79,31 @@ window.Clarity.app = {
 
     const setSidebarOpen = (open) => {
       if (!sidebar) return;
+      const isMobile = window.innerWidth < 1024;
+      if (!isMobile) {
+        sidebar.classList.add("is-open");
+        if (scrim) scrim.hidden = true;
+        const floatingBurger = document.getElementById("floatingBurger");
+        if (floatingBurger) floatingBurger.style.display = "none";
+        return;
+      }
       const isOpen = open === undefined ? !sidebar.classList.contains("is-open") : open;
       sidebar.classList.toggle("is-open", isOpen);
-      if (isOpen && window.innerWidth < 1024) {
-        sidebar.classList.remove("is-rail");
-      }
       if (scrim) scrim.hidden = !isOpen;
       if (window.Clarity.uiTooltip && typeof window.Clarity.uiTooltip.clear === "function") {
         window.Clarity.uiTooltip.clear();
       }
       const floatingBurger = document.getElementById("floatingBurger");
       if (floatingBurger) {
-        const isMobile = window.innerWidth < 1024;
-        floatingBurger.style.display = (isMobile && !isOpen) ? "inline-flex" : "none";
+        floatingBurger.style.display = !isOpen ? "inline-flex" : "none";
       }
     };
     window.Clarity.app.setSidebarOpen = setSidebarOpen;
-    window.Clarity.app.closeSidebar = () => setSidebarOpen(false);
+    window.Clarity.app.closeSidebar = () => {
+      if (window.innerWidth < 1024) {
+        setSidebarOpen(false);
+      }
+    };
 
     if (brand) {
       brand.addEventListener("click", (event) => {
@@ -234,8 +242,10 @@ window.Clarity.app = {
         window.Clarity.uiChat.startNewConversation();
       }
       window.location.hash = "#/chat";
-      // Auto close sidebar drawer
-      setSidebarOpen(false);
+      // Auto close sidebar drawer on mobile
+      if (window.innerWidth < 1024) {
+        setSidebarOpen(false);
+      };
     };
 
     const newChatBtn = document.getElementById("newChatBtn");

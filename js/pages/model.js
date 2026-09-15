@@ -388,7 +388,7 @@ function openModelModal(existing) {
         '<div class="model-form__row model-form__row--2">',
           '<div class="model-form__field">',
             '<label class="model-form__label" for="mf-id">Registry ID <span class="req">*</span></label>',
-            '<input class="input model-form__input" id="mf-id" type="text" name="id" required value="' + escapeAttr(m.id) + '" ' + (isEdit ? 'readonly style="background:var(--surface-muted);color:var(--ink-muted);"' : '') + ' placeholder="gemini-2.5-flash">',
+            '<input class="input model-form__input" id="mf-id" type="text" name="id" required value="' + escapeAttr(m.id) + '" placeholder="gemini-2.5-flash">',
             '<div class="muted">Local identifier; unique key in Clarity.</div>',
           '</div>',
           '<div class="model-form__field">',
