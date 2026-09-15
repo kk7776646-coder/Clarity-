@@ -439,6 +439,101 @@ window.Clarity = window.Clarity || {};
     return /^(\s*)([-*+]|\d+\.)\s+/.test(line);
   }
 
+  function renderList(lines, options) {
+    if (!lines || lines.length === 0) return "";
+
+    var listRegex = /^(\s*)([-*+]|\d+\.)\s+(.*)/;
+    var taskRegex = /^\[([ xX])\]\s*(.*)/;
+
+    var items = [];
+    var currentItem = null;
+
+    for (var i = 0; i < lines.length; i++) {
+      var rawLine = lines[i];
+      var match = rawLine.match(listRegex);
+      if (match) {
+        var indentStr = match[1] || "";
+        var indent = indentStr.replace(/\t/g, "  ").length;
+        var marker = match[2];
+        var isOrdered = /\d+\./.test(marker);
+        var rawContent = match[3] || "";
+        var isTask = false;
+        var isChecked = false;
+        var taskMatch = rawContent.match(taskRegex);
+        if (taskMatch) {
+          isTask = true;
+          isChecked = taskMatch[1].toLowerCase() === "x";
+          rawContent = taskMatch[2] || "";
+        }
+
+        currentItem = {
+          indent: indent,
+          isOrdered: isOrdered,
+          text: rawContent,
+          isTask: isTask,
+          isChecked: isChecked,
+          children: [],
+        };
+        items.push(currentItem);
+      } else if (rawLine.trim() !== "") {
+        if (currentItem) {
+          currentItem.text += " " + rawLine.trim();
+        } else {
+          items.push({
+            indent: 0,
+            isOrdered: false,
+            text: rawLine.trim(),
+            isTask: false,
+            isChecked: false,
+            children: [],
+          });
+        }
+      }
+    }
+
+    if (items.length === 0) return "";
+
+    // Build hierarchical tree
+    var root = { children: [], indent: -1 };
+    var stack = [root];
+
+    for (var j = 0; j < items.length; j++) {
+      var item = items[j];
+      while (stack.length > 1 && stack[stack.length - 1].indent >= item.indent) {
+        stack.pop();
+      }
+      var parent = stack[stack.length - 1];
+      parent.children.push(item);
+      stack.push(item);
+    }
+
+    function renderTree(nodeList) {
+      if (!nodeList || nodeList.length === 0) return "";
+      var isOrdered = nodeList[0].isOrdered;
+      var tag = isOrdered ? "ol" : "ul";
+      var html = "<" + tag + ">";
+
+      for (var k = 0; k < nodeList.length; k++) {
+        var n = nodeList[k];
+        var liClass = n.isTask ? ' class="task-list-item"' : "";
+        var itemPrefix = "";
+        if (n.isTask) {
+          itemPrefix = '<input type="checkbox" disabled ' + (n.isChecked ? 'checked ' : '') + '/> ';
+        }
+        html += "<li" + liClass + ">" + itemPrefix + parseInline(n.text, options);
+        if (n.children && n.children.length > 0) {
+          html += renderTree(n.children);
+        }
+        html += "</li>";
+      }
+
+      html += "</" + tag + ">";
+      return html;
+    }
+
+    return renderTree(root.children);
+  }
+
   function renderTable(rows, options) {
     if (!rows || rows.length < 2) return "";
     
@@ -475,57 +570,25 @@ window.Clarity = window.Clarity || {};
 
   function renderBlock(block, options) {
     var lines = block.lines || [];
-    var first = lines[0] || "";
+    var first = (lines[0] || "").trim();
 
     if (first.match(/^#{1,6}\s/)) {
       return renderHeading(first, first.match(/^#+/)[0].length, options);
+    }
+
+    if (first.match(/^(?:-{3,}|\*{3,}|_{3,})$/)) {
+      return "<hr />";
     }
 
     if (isTableLine(first) && lines.length > 1 && isTableSeparator(lines[1])) {
       return renderTable(lines, options);
     }
 
-    if (isListStart(first)) {
-      var isOrdered = /^\s*\d+\.\s+/.test(first);
-      var tag = isOrdered ? "ol" : "ul";
-      var items = [];
-      var currentItem = [];
-      var lastIndent = 0;
-      for (var i = 0; i < lines.length; i++) {
-        var line = lines[i];
-        var indent = line.match(/^(\s*)/)[1].length;
-        if (isListStart(line)) {
-          if (currentItem.length > 0) {
-            items.push(currentItem.join("\n"));
-            currentItem = [];
-          }
-          var itemContent = line.replace(/^\s*([-*+]|\d+\.)\s+/, "");
-          currentItem.push(itemContent);
-        } else if (line.trim() === "") {
-          if (currentItem.length > 0) {
-            items.push(currentItem.join("\n"));
-            currentItem = [];
-          }
-        } else {
-          if (currentItem.length > 0) {
-            currentItem.push(line);
-          } else {
-            currentItem.push(line);
-          }
-        }
-      }
-      if (currentItem.length > 0) {
-        items.push(currentItem.join("\n"));
-      }
-      var html = "<" + tag + ">";
-      for (var j = 0; j < items.length; j++) {
-        html += "<li>" + parseInline(items[j], options) + "</li>";
-      }
-      html += "</" + tag + ">";
-      return html;
+    if (isListStart(lines[0] || "")) {
+      return renderList(lines, options);
     }
 
-    if (first.trim().startsWith("> ")) {
+    if (first.startsWith("> ")) {
       var content = lines.map(function (l) {
         if (l.trim().startsWith("> ")) return l.replace(/^> /, "");
         if (l.trim() === ">") return "";
@@ -1115,19 +1178,24 @@ window.Clarity = window.Clarity || {};
       }
       viewport.appendChild(svg);
     }
+    viewport.style.touchAction = 'none';
 
     // Controls toolbar with Fullscreen + Zoom + PNG & JPG Download options
     var controls = document.createElement('div');
     controls.className = 'mermaid-controls mermaid-controls-inline';
     controls.innerHTML = [
-      '<button type="button" class="m-fullscreen-btn" title="View in Full Screen (Only Diagram)" style="display:inline-flex; align-items:center; gap:5px; font-size:11.5px; padding:3px 8px; font-weight:600; color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:4px;"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>Full Screen</button>',
-      '<span style="width:1px; height:12px; background:var(--line); margin:auto 2px; opacity:0.8;"></span>',
-      '<button type="button" class="m-zoom-out" title="Zoom Out">−</button>',
-      '<button type="button" class="m-zoom-reset" title="Reset Fit">Fit</button>',
-      '<button type="button" class="m-zoom-in" title="Zoom In">+</button>',
-      '<span style="width:1px; height:12px; background:var(--line); margin:auto 2px; opacity:0.8;"></span>',
-      '<button type="button" class="m-download-png" title="Download High-Res PNG" style="display:inline-flex; align-items:center; gap:4px; font-size:11px; padding:3px 8px; font-weight:600; color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:4px;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>PNG</button>',
-      '<button type="button" class="m-download-jpg" title="Download High-Quality JPG" style="display:inline-flex; align-items:center; gap:4px; font-size:11px; padding:3px 8px; font-weight:600; color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:4px;"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>JPG</button>'
+      '<button type="button" class="m-fullscreen-btn" title="View Full Screen (Esc to exit)" style="display:inline-flex; align-items:center; gap:4px; font-size:11.5px; padding:3px 7px; font-weight:600; color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:5px; white-space:nowrap; flex-shrink:0;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg><span class="m-btn-label">Full Screen</span></button>',
+      '<span style="width:1px; height:12px; background:var(--line); margin:auto 1px; opacity:0.8; flex-shrink:0;"></span>',
+      '<div style="display:inline-flex; align-items:center; gap:2px; flex-shrink:0;">',
+      '  <button type="button" class="m-zoom-out" title="Zoom Out" style="white-space:nowrap; flex-shrink:0;">−</button>',
+      '  <button type="button" class="m-zoom-reset" title="Fit Diagram to View" style="white-space:nowrap; flex-shrink:0;">Fit</button>',
+      '  <button type="button" class="m-zoom-in" title="Zoom In" style="white-space:nowrap; flex-shrink:0;">+</button>',
+      '</div>',
+      '<span style="width:1px; height:12px; background:var(--line); margin:auto 1px; opacity:0.8; flex-shrink:0;"></span>',
+      '<div style="display:inline-flex; align-items:center; gap:3px; flex-shrink:0;">',
+      '  <button type="button" class="m-download-png" title="Download High-Res PNG" style="display:inline-flex; align-items:center; gap:3px; font-size:11px; padding:3px 6px; font-weight:600; color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:5px; white-space:nowrap; flex-shrink:0;"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span class="m-btn-label">PNG</span></button>',
+      '  <button type="button" class="m-download-jpg" title="Download High-Quality JPG" style="display:inline-flex; align-items:center; gap:3px; font-size:11px; padding:3px 6px; font-weight:600; color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:5px; white-space:nowrap; flex-shrink:0;"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span class="m-btn-label">JPG</span></button>',
+      '</div>'
     ].join('');
     container.appendChild(controls);
 
@@ -1329,40 +1397,59 @@ window.Clarity = window.Clarity || {};
     });
 
     var initialPinchDist = null;
-    viewport.addEventListener('touchstart', function(e) {
-      if (e.target.closest('.mermaid-controls')) return;
+    var initialPinchZoom = 1;
+    var isTouchDragging = false;
+
+    viewport.addEventListener('touchstart', function (e) {
+      if (e.target.closest('.mermaid-controls') || e.target.closest('button')) return;
       if (e.touches.length === 1) {
-        isDragging = true;
+        isTouchDragging = true;
         startX = e.touches[0].clientX - panX;
         startY = e.touches[0].clientY - panY;
       } else if (e.touches.length === 2) {
-        isDragging = false;
+        isTouchDragging = false;
+        initialPinchZoom = currentZoom;
         initialPinchDist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
         );
       }
-    }, { passive: true });
+    }, { passive: false });
 
-    viewport.addEventListener('touchmove', function(e) {
-      if (e.touches.length === 1 && isDragging) {
+    viewport.addEventListener('touchmove', function (e) {
+      if (e.touches.length === 1 && isTouchDragging) {
+        e.preventDefault();
         panX = e.touches[0].clientX - startX;
         panY = e.touches[0].clientY - startY;
         applyTransform();
       } else if (e.touches.length === 2 && initialPinchDist) {
+        e.preventDefault();
         var dist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
         );
-        var factor = dist / initialPinchDist;
-        currentZoom = Math.max(0.4, Math.min(4.0, Number((currentZoom * factor).toFixed(2))));
-        initialPinchDist = dist;
-        applyTransform();
+        if (initialPinchDist > 0) {
+          var factor = dist / initialPinchDist;
+          currentZoom = Math.max(0.3, Math.min(5.0, Number((initialPinchZoom * factor).toFixed(2))));
+          applyTransform();
+        }
       }
-    }, { passive: true });
+    }, { passive: false });
 
-    viewport.addEventListener('touchend', function() {
-      isDragging = false;
+    viewport.addEventListener('touchend', function (e) {
+      if (e.touches.length === 1) {
+        isTouchDragging = true;
+        startX = e.touches[0].clientX - panX;
+        startY = e.touches[0].clientY - panY;
+        initialPinchDist = null;
+      } else if (e.touches.length === 0) {
+        isTouchDragging = false;
+        initialPinchDist = null;
+      }
+    });
+
+    viewport.addEventListener('touchcancel', function () {
+      isTouchDragging = false;
       initialPinchDist = null;
     });
   }

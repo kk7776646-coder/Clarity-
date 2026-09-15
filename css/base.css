@@ -187,14 +187,26 @@ table {
 
 /* Scrollbars -------------------------------------------------- */
 
+/* Hide visual scrollbars globally; mouse wheel & finger touch gesture scrolling work seamlessly */
+*, *::before, *::after {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
 .scroll-slim {
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-width: none;
 }
 
 .scroll-slim::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .scroll-slim::-webkit-scrollbar-thumb {
@@ -208,12 +220,24 @@ table {
   background: transparent;
 }
 
+/* Scrollbars: Hide all visual scrollbars while preserving full smooth touch and wheel scrolling */
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
 .no-scrollbar {
-  scrollbar-width: none;
+  scrollbar-width: none !important;
 }
 
 .no-scrollbar::-webkit-scrollbar {
-  display: none;
+  display: none !important;
 }
 
 /* Modern thin scrollbar used in sidebar and other narrow panels.

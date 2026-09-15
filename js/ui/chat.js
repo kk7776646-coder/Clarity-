@@ -64,6 +64,10 @@ window.Clarity.uiChat = {
     if (window.Clarity.composer && typeof window.Clarity.composer.clearAttachments === "function") {
       window.Clarity.composer.clearAttachments();
     }
+    // Auto-close sidebar on mobile/drawer when starting a new chat
+    if (window.Clarity.app && typeof window.Clarity.app.closeSidebar === "function") {
+      window.Clarity.app.closeSidebar();
+    }
     this.renderChat();
     setTimeout(() => {
       const input = document.getElementById("composerInput");
@@ -113,6 +117,7 @@ window.Clarity.uiChat = {
       this._bindChatHeaderMenu();
       this._updateNewChatButton();
       this._updateComposer();
+      this._updateExportVisibility();
       this._isStreaming = false;
       this._syncComposerStreaming();
 
@@ -331,7 +336,6 @@ window.Clarity.uiChat = {
   },
 
   async exportChatToPdf(options = {}) {
-    const debugExport = true;
     const feed = options.feed || document.getElementById("conversationList") || document.getElementById("projectChatFeed");
     if (!feed) {
       if (window.Clarity && window.Clarity.toast) window.Clarity.toast.show("No chat to export.", "info");
@@ -343,14 +347,22 @@ window.Clarity.uiChat = {
       return;
     }
 
-    let rawMsgs = Array.from(feed.querySelectorAll(".message, .project-chat-msg, .msg"));
+    let rawMsgs = Array.from(feed.querySelectorAll(".message, .project-chat-msg"));
+    if (rawMsgs.length === 0) {
+      rawMsgs = Array.from(feed.querySelectorAll(".msg"));
+    }
+    // Strict deduplication: remove duplicates and child elements contained inside other matched elements
+    rawMsgs = rawMsgs.filter((el, idx, self) => {
+      if (!el || self.indexOf(el) !== idx) return false;
+      return !self.some(other => other !== el && other.contains(el));
+    });
     const stateMsgs = window.Clarity?.state?.activeConversation?.messages;
     if (rawMsgs.length === 0 && (!stateMsgs || stateMsgs.length === 0)) {
       if (window.Clarity && window.Clarity.toast) window.Clarity.toast.show("No chat to export.", "info");
       return;
     }
 
-    // Ensure PDF and html2canvas libraries are fully loaded
+    // Ensure PDF library is loaded
     if (!window.html2pdf) {
       try {
         await new Promise((resolve, reject) => {
@@ -367,10 +379,10 @@ window.Clarity.uiChat = {
     }
 
     if (window.Clarity && window.Clarity.toast) {
-      window.Clarity.toast.show("Preparing pixel-perfect PDF export...", "info");
+      window.Clarity.toast.show("Exporting Chat to PDF...", "info");
     }
 
-    // Capture current brand & project metadata
+    // Capture project metadata
     let projectName = options.projectName || "";
     if (!projectName) {
       const cid = window.Clarity?.state?.activeConversation?.id;
@@ -383,162 +395,381 @@ window.Clarity.uiChat = {
       }
     }
 
-    // Create a beautiful, modal loading layer
+    // Loading overlay
     const loadingModal = document.createElement("div");
     loadingModal.id = "clarity-pdf-export-loading";
     loadingModal.style.cssText = "position:fixed; inset:0; background:rgba(15,23,42,0.7); backdrop-filter:blur(4px); z-index:100002; display:flex; align-items:center; justify-content:center; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;";
     loadingModal.innerHTML = `
-      <div style="background:var(--surface, #ffffff); border:1px solid var(--line, #e2e8f0); padding:28px 36px; border-radius:12px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); display:flex; flex-direction:column; align-items:center; gap:14px; min-width:300px; text-align:center; color:var(--ink, #0f172a);">
-        <div class="spinner" style="width:32px; height:32px; border-width:3.5px; border-color:var(--primary, #4f46e5); border-top-color:transparent; border-radius:50%; animation:spin 1s linear infinite;"></div>
-        <div style="font-weight:700; font-size:16px; margin-top:4px;">Generating Export Document</div>
-        <div style="font-size:12.5px; color:var(--ink-muted, #64748b); line-height:1.4;">Capturing live visual diagrams & paging conversation history...</div>
+      <div style="background:#ffffff; border:1px solid #e2e8f0; padding:28px 36px; border-radius:12px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); display:flex; flex-direction:column; align-items:center; gap:14px; min-width:300px; text-align:center; color:#0f172a;">
+        <div class="spinner" style="width:32px; height:32px; border:3.5px solid #4f46e5; border-top-color:transparent; border-radius:50%; animation:spin 1s linear infinite;"></div>
+        <div style="font-weight:700; font-size:16px; margin-top:4px;">Exporting Chat to PDF</div>
+        <div style="font-size:12.5px; color:#64748b; line-height:1.4;">Rendering exact chat layout, markdown, syntax & diagrams...</div>
       </div>
     `;
     document.body.appendChild(loadingModal);
 
-    // Create controlled, offscreen rendering viewport host
-    const activeTheme = document.documentElement.getAttribute("data-theme") || "light";
+    // Controlled offscreen rendering host
     const host = document.createElement("div");
     host.id = "clarity-pdf-export-host";
-    host.setAttribute("data-theme", activeTheme);
-    host.className = "chat-panel chat-shell";
     host.style.cssText = "position:fixed !important; top:0 !important; left:-9999px !important; width:794px !important; min-width:794px !important; max-width:794px !important; margin:0 !important; padding:0 !important; background:#ffffff !important; z-index:100001 !important; box-sizing:border-box !important; overflow:visible !important; pointer-events:none !important;";
 
-    // Inject print-safe styles matching professional report design
+    // High-fidelity print styles that strictly match the Chat UI presentation
     const styleTag = document.createElement("style");
     styleTag.textContent = `
+      #clarity-pdf-export-host, #clarity-pdf-export-host * {
+        box-sizing: border-box !important;
+      }
       #clarity-pdf-export-host {
         background-color: #ffffff !important;
         color: #0f172a !important;
-        font-family: "Georgia", "Times New Roman", serif !important; /* Elegant report-grade typeface */
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+        font-size: 13.5px !important;
+        line-height: 1.65 !important;
       }
       #clarity-pdf-export-host .pdf-page {
         box-sizing: border-box !important;
         background-color: #ffffff !important;
       }
-      #clarity-pdf-export-host .pdf-message-card {
-        background-color: #ffffff !important;
-        border: 1px solid #e2e8f0 !important;
-        box-shadow: none !important;
-      }
-      #clarity-pdf-export-host .pdf-message-body {
-        color: #0f172a !important;
-      }
-      #clarity-pdf-export-host pre,
-      #clarity-pdf-export-host .code-cell,
-      #clarity-pdf-export-host .code-block {
-        background-color: #f8fafc !important;
-        border: 1px solid #e2e8f0 !important;
-        color: #0f172a !important;
-        font-family: var(--font-mono, monospace) !important;
-        font-size: 11.5px !important;
-        padding: 10px !important;
-        border-radius: 6px !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
-      }
-      #clarity-pdf-export-host code {
-        font-family: var(--font-mono, monospace) !important;
-      }
-      #clarity-pdf-export-host .pdf-diagram-wrapper {
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
+      
+      /* Chat Message Structure */
+      #clarity-pdf-export-host .message {
         width: 100% !important;
-        margin: 16px 0 !important;
-        text-align: center !important;
+        display: flex !important;
+        flex-direction: column !important;
+        margin-bottom: 14px !important;
+        page-break-inside: auto !important;
+        break-inside: auto !important;
       }
-      #clarity-pdf-export-host table {
-        page-break-inside: avoid !important;
-        border-color: #e2e8f0 !important;
+      #clarity-pdf-export-host .message--user {
+        align-items: flex-end !important;
       }
-      #clarity-pdf-export-host th, #clarity-pdf-export-host td {
-        border-color: #e2e8f0 !important;
+      #clarity-pdf-export-host .message--assistant {
+        align-items: flex-start !important;
       }
-      #clarity-pdf-export-host h1,
-      #clarity-pdf-export-host h2,
-      #clarity-pdf-export-host h3,
-      #clarity-pdf-export-host h4 {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+      #clarity-pdf-export-host .message__row {
+        display: flex !important;
+        width: 100% !important;
+      }
+      #clarity-pdf-export-host .message--user .message__row {
+        justify-content: flex-end !important;
+      }
+      #clarity-pdf-export-host .message__body {
+        display: flex !important;
+        flex-direction: column !important;
+        min-width: 0 !important;
+        width: 100% !important;
+      }
+      #clarity-pdf-export-host .message--user .message__body {
+        align-items: flex-end !important;
+        max-width: 88% !important;
+      }
+      #clarity-pdf-export-host .message--assistant .message__body {
+        align-items: flex-start !important;
+        max-width: 100% !important;
+      }
+      
+      /* Message Author Header */
+      #clarity-pdf-export-host .message__author-tag {
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        font-size: 11px !important;
         font-weight: 700 !important;
-        color: #0f172a !important;
-        margin-top: 18px !important;
-        margin-bottom: 10px !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.04em !important;
+        margin-bottom: 5px !important;
         page-break-after: avoid !important;
         break-after: avoid !important;
       }
-      #clarity-pdf-export-host p {
+      #clarity-pdf-export-host .message--user .message__author-tag {
+        color: #475569 !important;
+        justify-content: flex-end !important;
+      }
+      #clarity-pdf-export-host .message--assistant .message__author-tag {
+        color: #4f46e5 !important;
+        justify-content: flex-start !important;
+      }
+      #clarity-pdf-export-host .message__author-dot {
+        width: 6px !important;
+        height: 6px !important;
+        border-radius: 50% !important;
+        display: inline-block !important;
+      }
+      #clarity-pdf-export-host .message--user .message__author-dot {
+        background-color: #64748b !important;
+      }
+      #clarity-pdf-export-host .message--assistant .message__author-dot {
+        background-color: #4f46e5 !important;
+      }
+
+      /* Chat Bubbles */
+      #clarity-pdf-export-host .message__bubble {
+        border-radius: 12px !important;
+        padding: 14px 18px !important;
+        line-height: 1.65 !important;
         font-size: 13.5px !important;
-        line-height: 1.6 !important;
-        margin-bottom: 12px !important;
+        word-break: break-word !important;
+        box-sizing: border-box !important;
+        page-break-inside: auto !important;
+        break-inside: auto !important;
+      }
+      #clarity-pdf-export-host .message--user .message__bubble {
+        background-color: #eef2ff !important;
+        color: #1e1b4b !important;
+        border: 1px solid #c7d2fe !important;
+        border-bottom-right-radius: 4px !important;
+        display: inline-block !important;
+        max-width: 100% !important;
+      }
+      #clarity-pdf-export-host .message--assistant .message__bubble {
+        background-color: #ffffff !important;
         color: #0f172a !important;
+        border: 1px solid #e2e8f0 !important;
+        border-bottom-left-radius: 4px !important;
+        width: 100% !important;
       }
-      #clarity-pdf-export-host ul {
-        margin-bottom: 14px !important;
-        padding-left: 24px !important;
-      }
-      #clarity-pdf-export-host ol {
-        margin-bottom: 14px !important;
-        padding-left: 24px !important;
-      }
-      #clarity-pdf-export-host li {
+
+      /* Markdown & Chat Typography Hierarchy */
+      #clarity-pdf-export-host .message__content {
+        color: inherit !important;
         font-size: 13.5px !important;
-        line-height: 1.6 !important;
-        margin-bottom: 6px !important;
+        line-height: 1.65 !important;
+        word-break: break-word !important;
+      }
+      #clarity-pdf-export-host .message--user .message__content {
+        white-space: pre-wrap !important;
+        color: #1e1b4b !important;
+      }
+      #clarity-pdf-export-host .message__content h1,
+      #clarity-pdf-export-host .message__content h2,
+      #clarity-pdf-export-host .message__content h3,
+      #clarity-pdf-export-host .message__content h4,
+      #clarity-pdf-export-host .message__content h5,
+      #clarity-pdf-export-host .message__content h6 {
+        margin: 14px 0 8px !important;
+        font-weight: 600 !important;
         color: #0f172a !important;
-        list-style-type: disc !important;
-        display: list-item !important;
+        letter-spacing: -0.01em !important;
+        line-height: 1.3 !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
       }
-      #clarity-pdf-export-host ol li {
-        list-style-type: decimal !important;
+      #clarity-pdf-export-host .message__content h1:first-child,
+      #clarity-pdf-export-host .message__content h2:first-child,
+      #clarity-pdf-export-host .message__content h3:first-child {
+        margin-top: 0 !important;
       }
-      #clarity-pdf-export-host strong, #clarity-pdf-export-host b {
+      #clarity-pdf-export-host .message__content h1 { font-size: 18px !important; font-weight: 700 !important; }
+      #clarity-pdf-export-host .message__content h2 { font-size: 15.5px !important; font-weight: 700 !important; }
+      #clarity-pdf-export-host .message__content h3 { font-size: 14px !important; font-weight: 600 !important; }
+      #clarity-pdf-export-host .message__content h4 { font-size: 13px !important; font-weight: 600 !important; }
+      #clarity-pdf-export-host .message__content h5 { font-size: 12px !important; font-weight: 600 !important; }
+      #clarity-pdf-export-host .message__content h6 { font-size: 11.5px !important; color: #64748b !important; }
+      
+      #clarity-pdf-export-host .message__content p {
+        margin: 8px 0 !important;
+        color: #1e293b !important;
+        line-height: 1.65 !important;
+      }
+      #clarity-pdf-export-host .message__content p:first-child { margin-top: 0 !important; }
+      #clarity-pdf-export-host .message__content p:last-child { margin-bottom: 0 !important; }
+      
+      #clarity-pdf-export-host .message__content ul,
+      #clarity-pdf-export-host .message__content ol {
+        margin: 8px 0 8px 24px !important;
+        padding: 0 !important;
+        color: #1e293b !important;
+        line-height: 1.65 !important;
+      }
+      #clarity-pdf-export-host .message__content li {
+        margin: 3px 0 !important;
+      }
+      #clarity-pdf-export-host .message__content strong {
         font-weight: 700 !important;
         color: #0f172a !important;
       }
-      #clarity-pdf-export-host .attachment {
-        border: none !important;
-        background: transparent !important;
-        box-shadow: none !important;
-        max-width: 100% !important;
-        width: auto !important;
-        height: auto !important;
-        overflow: visible !important;
-        display: block !important;
-        margin: 12px 0 !important;
-        padding: 0 !important;
+      #clarity-pdf-export-host .message__content em {
+        font-style: italic !important;
       }
-      #clarity-pdf-export-host .attachment-image {
-        max-width: 100% !important;
-        width: 100% !important;
-        height: auto !important;
-        display: block !important;
+      #clarity-pdf-export-host .message__content blockquote {
+        margin: 10px 0 !important;
+        padding: 8px 14px !important;
+        border-left: 3px solid #6366f1 !important;
+        background: #f8fafc !important;
+        border-radius: 0 6px 6px 0 !important;
+        color: #334155 !important;
+        font-style: normal !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
       }
-      #clarity-pdf-export-host .attachment-image img,
-      #clarity-pdf-export-host .attachment-preview,
-      #clarity-pdf-export-host .attachment-preview-img,
-      #clarity-pdf-export-host .preview-image {
+      #clarity-pdf-export-host .message__content a {
+        color: #2563eb !important;
+        text-decoration: underline !important;
+      }
+      
+      /* Tables */
+      #clarity-pdf-export-host .table-wrapper {
+        margin: 12px 0 !important;
+        border-radius: 6px !important;
+        border: 1px solid #cbd5e1 !important;
+        overflow: hidden !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      #clarity-pdf-export-host table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        font-size: 12px !important;
+      }
+      #clarity-pdf-export-host th,
+      #clarity-pdf-export-host td {
+        border: 1px solid #cbd5e1 !important;
+        padding: 7px 12px !important;
+        text-align: left !important;
+      }
+      #clarity-pdf-export-host th {
+        background: #f1f5f9 !important;
+        font-weight: 600 !important;
+        color: #0f172a !important;
+      }
+      #clarity-pdf-export-host td {
+        color: #334155 !important;
+        background: #ffffff !important;
+      }
+      #clarity-pdf-export-host tr:nth-child(even) td {
+        background: #f8fafc !important;
+      }
+
+      /* Inline Code */
+      #clarity-pdf-export-host code:not(.pdf-code-content) {
+        display: inline !important;
+        padding: 2px 6px !important;
+        background: #f1f5f9 !important;
+        border-radius: 4px !important;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+        font-size: 11.5px !important;
+        color: #be185d !important;
+        border: 1px solid #e2e8f0 !important;
+      }
+
+      /* Code Blocks */
+      #clarity-pdf-export-host .pdf-code-block {
+        margin: 12px 0 !important;
+        border-radius: 8px !important;
+        background: #f8fafc !important;
+        border: 1px solid #e2e8f0 !important;
+        overflow: hidden !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        page-break-inside: auto !important;
+        break-inside: auto !important;
+      }
+      #clarity-pdf-export-host .pdf-code-header {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        padding: 6px 12px !important;
+        background: #f1f5f9 !important;
+        border-bottom: 1px solid #e2e8f0 !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        color: #475569 !important;
+      }
+      #clarity-pdf-export-host .pdf-code-badge {
+        background: #e2e8f0 !important;
+        color: #0f172a !important;
+        padding: 2px 6px !important;
+        border-radius: 4px !important;
+        font-size: 10px !important;
+        text-transform: uppercase !important;
+        font-family: ui-monospace, monospace !important;
+        font-weight: 700 !important;
+      }
+      #clarity-pdf-export-host .pdf-code-body {
+        padding: 6px 0 !important;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+        font-size: 11.5px !important;
+        line-height: 1.55 !important;
+        color: #0f172a !important;
+        background: #f8fafc !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+      }
+      #clarity-pdf-export-host .pdf-code-line {
+        display: flex !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        padding: 0 10px !important;
+        line-height: 1.55 !important;
+      }
+      #clarity-pdf-export-host .pdf-code-num {
+        width: 32px !important;
+        min-width: 32px !important;
+        text-align: right !important;
+        padding-right: 12px !important;
+        color: #94a3b8 !important;
+        user-select: none !important;
+        box-sizing: border-box !important;
+        font-size: 10.5px !important;
+      }
+      #clarity-pdf-export-host .pdf-code-content {
+        flex: 1 !important;
+        white-space: pre-wrap !important;
+        word-break: break-all !important;
+        color: #0f172a !important;
+      }
+
+      /* Syntax Tokens */
+      #clarity-pdf-export-host .tk-comment { color: #64748b !important; font-style: italic !important; }
+      #clarity-pdf-export-host .tk-string { color: #059669 !important; }
+      #clarity-pdf-export-host .tk-keyword { color: #7c3aed !important; font-weight: 600 !important; }
+      #clarity-pdf-export-host .tk-function { color: #2563eb !important; font-weight: 600 !important; }
+      #clarity-pdf-export-host .tk-number { color: #d97706 !important; }
+      #clarity-pdf-export-host .tk-operator { color: #0284c7 !important; }
+
+      /* Images & Diagrams */
+      #clarity-pdf-export-host .pdf-image-block {
+        width: 100% !important;
+        margin: 12px 0 !important;
+        text-align: center !important;
+        box-sizing: border-box !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      #clarity-pdf-export-host .pdf-image-block img {
         max-width: 100% !important;
-        max-height: 550px !important;
-        width: auto !important;
         height: auto !important;
         object-fit: contain !important;
-        border-radius: 8px !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
         display: block !important;
-        margin: 12px auto !important;
+        margin: 0 auto !important;
+        border-radius: 8px !important;
+        border: 1px solid #e2e8f0 !important;
+      }
+      #clarity-pdf-export-host .pdf-diagram-block {
+        width: 100% !important;
+        margin: 12px 0 !important;
+        text-align: center !important;
+        box-sizing: border-box !important;
+        background: #ffffff !important;
+        border-radius: 8px !important;
+        border: 1px solid #e2e8f0 !important;
+        padding: 8px !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
+      }
+      #clarity-pdf-export-host .pdf-diagram-block img {
+        max-width: 100% !important;
+        height: auto !important;
+        object-fit: contain !important;
+        display: block !important;
+        margin: 0 auto !important;
       }
     `;
     host.appendChild(styleTag);
 
     const measurer = document.createElement("div");
     measurer.id = "clarity-pdf-measurer";
-    measurer.setAttribute("data-theme", activeTheme);
-    measurer.className = "chat-panel chat-shell";
-    measurer.style.cssText = "position:fixed !important; left:-9999px !important; top:0 !important; width:850px !important; min-width:850px !important; max-width:850px !important; visibility:hidden !important; pointer-events:none !important; box-sizing:border-box !important; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif !important;";
+    measurer.style.cssText = "position:fixed !important; left:-9999px !important; top:0 !important; width:794px !important; min-width:794px !important; max-width:794px !important; visibility:hidden !important; pointer-events:none !important; box-sizing:border-box !important; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif !important;";
     document.body.appendChild(measurer);
 
     try {
@@ -546,25 +777,23 @@ window.Clarity.uiChat = {
       const dateStr = now.toLocaleDateString() + " " + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const escapeHtml = (str) => String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-      // Explicitly await document.fonts.ready and ensure that all web fonts are fully loaded
+      // Await fonts readiness
       if (document.fonts && typeof document.fonts.ready !== "undefined") {
         await document.fonts.ready;
         await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
       }
 
-      // Settle active generations/animations
+      // Settle active generations
       if (feed.querySelector(".is-generating, .loading, .spinner")) {
         for (let j = 0; j < 50; j++) {
-          if (!feed.querySelector(".is-generating, .loading, .spinner")) {
-            break;
-          }
+          if (!feed.querySelector(".is-generating, .loading, .spinner")) break;
           await new Promise(r => setTimeout(r, 100));
         }
       }
 
-      // Settle lazy loaded images
-      const images = Array.from(feed.querySelectorAll("img"));
-      await Promise.all(images.map(img => {
+      // Settle images
+      const feedImages = Array.from(feed.querySelectorAll("img"));
+      await Promise.all(feedImages.map(img => {
         if (img.complete) return Promise.resolve();
         return new Promise(resolve => {
           img.onload = resolve;
@@ -572,14 +801,9 @@ window.Clarity.uiChat = {
         });
       }));
 
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
-      if (debugExport) {
-        console.log("[Clarity Export Debug] Active Theme:", activeTheme);
-        console.log("[Clarity Export Debug] devicePixelRatio:", window.devicePixelRatio);
-      }
-
-      // Handle fallback if DOM messages are empty
+      // Handle fallback if DOM messages are empty but state exists
       if (rawMsgs.length === 0 && stateMsgs && stateMsgs.length > 0) {
         const dummyFeed = document.createElement("div");
         dummyFeed.style.display = "none";
@@ -606,19 +830,13 @@ window.Clarity.uiChat = {
         setTimeout(() => dummyFeed.remove(), 1000);
       }
 
-      // Define standard in-situ element capture via html2canvas (reads live styled DOM)
+      // High-res element capture
       const captureElementToPng = async (mc) => {
         if (!mc || !window.html2canvas) return null;
 
-        // Hide control layers and save styles
         const controls = mc.querySelectorAll(".mermaid-controls, .mermaid-fullscreen-header");
-        const originalStyles = [];
-        controls.forEach(ctrl => {
-          originalStyles.push({ el: ctrl, display: ctrl.style.display });
-          ctrl.style.setProperty("display", "none", "important");
-        });
+        controls.forEach(ctrl => ctrl.style.setProperty("display", "none", "important"));
 
-        // Save original styles for mc and all inner descendants (like .mermaid-viewport, pre.mermaid)
         const childNodes = Array.from(mc.querySelectorAll("*"));
         const savedChildStyles = childNodes.map(el => ({
           el,
@@ -637,7 +855,6 @@ window.Clarity.uiChat = {
         const originalMcMaxWidth = mc.style.maxWidth;
         const originalMcTransform = mc.style.transform;
 
-        // Force full height, width, and unclipped expansion on mc and all inner containers
         mc.style.setProperty("height", "auto", "important");
         mc.style.setProperty("max-height", "none", "important");
         mc.style.setProperty("overflow", "visible", "important");
@@ -658,7 +875,6 @@ window.Clarity.uiChat = {
           }
         });
 
-        // If there's an SVG inside, calculate true getBBox dimensions + safety padding
         const svg = mc.querySelector("svg");
         let origSvgW = "";
         let origSvgH = "";
@@ -719,7 +935,7 @@ window.Clarity.uiChat = {
 
         try {
           const canvas = await window.html2canvas(mc, {
-            scale: 3, // High scale for crisp text and line art
+            scale: 2.5,
             backgroundColor: "#ffffff",
             useCORS: true,
             allowTaint: true,
@@ -728,10 +944,9 @@ window.Clarity.uiChat = {
           });
           return canvas.toDataURL("image/png");
         } catch (err) {
-          console.warn("[Clarity Export Debug] html2canvas live element capture failed, falling back:", err);
+          console.warn("[Clarity Export] html2canvas live element capture fallback:", err);
           return null;
         } finally {
-          // Revert all temporary style changes cleanly
           mc.style.height = originalMcHeight;
           mc.style.maxHeight = originalMcMaxHeight;
           mc.style.overflow = originalMcOverflow;
@@ -758,159 +973,168 @@ window.Clarity.uiChat = {
             svg.style.overflow = origSvgOverflow;
           }
 
-          originalStyles.forEach(item => {
-            if (item.el && item.el.style) {
-              item.el.style.display = item.display;
-            }
-          });
+          controls.forEach(ctrl => ctrl.style.removeProperty("display"));
         }
       };
 
-      // Step 1: Pre-process messages & rasterize all live diagrams/visuals directly from current view
-      const preparedMessages = [];
+      // Transform raw code block elements into expanded syntax-highlighted blocks
+      const renderExpandedCodeBlock = (block) => {
+        let rawCode = "";
+        const rawTa = block.querySelector(".code-cell__raw");
+        if (rawTa && typeof rawTa.value === "string" && rawTa.value.length > 0) {
+          rawCode = rawTa.value;
+        } else if (block._rawCode) {
+          rawCode = block._rawCode;
+        } else {
+          const cellId = block.getAttribute("data-cell-id") || block.id;
+          const snip = window.Clarity?.codeViewer?.getSnippet ? window.Clarity.codeViewer.getSnippet(cellId, block) : null;
+          if (snip && typeof snip.code === "string" && snip.code.length > 0) {
+            rawCode = snip.code;
+          } else {
+            const lineEls = block.querySelectorAll(".code-line__code");
+            if (lineEls && lineEls.length > 0) {
+              rawCode = Array.from(lineEls).map(el => el.textContent).join("\n");
+            } else {
+              const codeEl = block.querySelector("code, pre");
+              rawCode = codeEl ? codeEl.textContent : block.textContent;
+            }
+          }
+        }
+
+        const lang = block.getAttribute("data-lang") ||
+          block.querySelector(".code-cell__badge")?.textContent?.trim().toLowerCase() ||
+          "plaintext";
+
+        const filename = block.getAttribute("data-filename") ||
+          block.querySelector(".code-cell__filename")?.textContent?.trim() ||
+          "";
+
+        const highlighter = window.Clarity?.highlighter;
+        const langInfo = highlighter?.getLanguageInfo ? highlighter.getLanguageInfo(lang || filename) : { id: lang, name: (lang || "TEXT").toUpperCase() };
+
+        const lines = rawCode.split("\n");
+        const highlightedLines = (highlighter?.highlightLines)
+          ? highlighter.highlightLines(rawCode, langInfo.id || lang)
+          : lines.map(l => escapeHtml(l));
+
+        const container = document.createElement("div");
+        container.className = "pdf-code-block";
+
+        const header = document.createElement("div");
+        header.className = "pdf-code-header";
+        header.innerHTML = `
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="pdf-code-badge">${escapeHtml(langInfo.name || lang)}</span>
+            ${filename ? `<span style="font-weight:600; color:#1e293b;">${escapeHtml(filename)}</span>` : ""}
+          </div>
+          <span style="color:#64748b; font-size:10.5px;">${lines.length} line${lines.length === 1 ? '' : 's'}</span>
+        `;
+
+        const body = document.createElement("div");
+        body.className = "pdf-code-body";
+
+        highlightedLines.forEach((lineHtml, idx) => {
+          const lineNum = idx + 1;
+          const lineEl = document.createElement("div");
+          lineEl.className = "pdf-code-line";
+          lineEl.innerHTML = `
+            <span class="pdf-code-num">${lineNum}</span>
+            <span class="pdf-code-content">${lineHtml || "&nbsp;"}</span>
+          `;
+          body.appendChild(lineEl);
+        });
+
+        container.appendChild(header);
+        container.appendChild(body);
+        return container;
+      };
+
+      // Step 1: Pre-process each Chat Message into its exact Chat presentation
+      const processedMessages = [];
 
       for (let i = 0; i < rawMsgs.length; i++) {
         const origEl = rawMsgs[i];
         const isUser = origEl.classList.contains("message--user") || origEl.classList.contains("project-chat-msg--user") || origEl.getAttribute("data-role") === "user";
 
-        // Target diagram/chart/interactive SVG elements inside the visible message, filtering out nested elements to prevent duplicated rasterizations
+        // Pre-rasterize live diagrams in this message
         let liveDiagrams = Array.from(origEl.querySelectorAll(".mermaid-container, pre.mermaid, .diagram-container, .recharts-wrapper, .chart-container, .d3-container"));
         liveDiagrams = liveDiagrams.filter(el => !liveDiagrams.some(other => other !== el && other.contains(el)));
         const rasterizedDiagrams = [];
 
         for (const mc of liveDiagrams) {
           let pngDataUrl = await captureElementToPng(mc);
-
           if (!pngDataUrl) {
             const svg = mc.querySelector("svg");
-            if (svg) {
-              pngDataUrl = await this._convertSvgToPngDataUrl(svg);
-            }
+            if (svg) pngDataUrl = await this._convertSvgToPngDataUrl(svg);
           }
-
-          if (pngDataUrl) {
-            rasterizedDiagrams.push({ original: mc, pngDataUrl });
-          }
+          if (pngDataUrl) rasterizedDiagrams.push({ original: mc, pngDataUrl });
         }
 
-        // Clone the content body directly from screen
         let bodyClone = null;
+        let userRawText = "";
+
         if (origEl.classList.contains("project-chat-msg")) {
           if (isUser) {
-            const raw = origEl.getAttribute("data-raw") || origEl.textContent.trim();
-            const p = document.createElement("p");
-            p.textContent = raw;
-            p.style.cssText = "margin:0; font-size:12.5px; line-height:1.6;";
+            userRawText = origEl.getAttribute("data-raw") || origEl.textContent.trim();
             bodyClone = document.createElement("div");
-            bodyClone.appendChild(p);
+            bodyClone.className = "message__content";
+            bodyClone.innerHTML = `<p>${escapeHtml(userRawText)}</p>`;
           } else {
-            bodyClone = origEl.cloneNode(true);
-            bodyClone.querySelectorAll(".file-jump-link").forEach(link => {
+            bodyClone = document.createElement("div");
+            bodyClone.className = "message__content";
+            const clonedInner = origEl.cloneNode(true);
+            clonedInner.querySelectorAll(".file-jump-link").forEach(link => {
               const span = document.createElement("span");
               span.textContent = link.textContent;
-              span.style.cssText = "color:var(--primary); font-weight:600;";
+              span.style.cssText = "color:#4f46e5; font-weight:600;";
               link.replaceWith(span);
             });
+            bodyClone.innerHTML = clonedInner.innerHTML;
           }
         } else {
-          const innerBody = origEl.querySelector(".message__content") || origEl.querySelector(".message__bubble") || origEl;
-          bodyClone = innerBody.cloneNode(true);
+          const innerContent = origEl.querySelector(".message__content") || origEl.querySelector(".message__bubble") || origEl;
+          bodyClone = innerContent.cloneNode(true);
         }
 
-        // Strip UI actions, copy/speak buttons, action bars
+        // Clean out interactive-only UI controls
         bodyClone.querySelectorAll("button, .spinner, .message__controls, .message__status, .dropdown, .dropdown-menu, .explanation-badge, .copy-btn, .speaker-btn, .msg__actions, form, .mermaid-controls, .mermaid-fullscreen-header, .m-fullscreen-btn, .review-changes-btn, .apply-all-artifacts-btn, .download-all-artifacts-btn, .proj-att-remove, .code-cell__btn, .code-copy-btn, .code-cell__header div").forEach(el => el.remove());
 
-        // Transform attachment-file-card containing images into full high-resolution images for the PDF
+        // Process attachments into high-res images
         bodyClone.querySelectorAll(".attachment-file-card").forEach(card => {
           const img = card.querySelector(".attachment-preview-img");
           if (img) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "pdf-image-block";
             const newImg = document.createElement("img");
             newImg.src = img.src;
             newImg.alt = img.alt || "Uploaded Image";
-            newImg.className = "preview-image";
-            newImg.style.cssText = "max-width:100% !important; max-height:550px !important; height:auto !important; width:auto !important; object-fit:contain !important; border-radius:8px !important; box-shadow:0 4px 12px rgba(0,0,0,0.08) !important; display:block !important; margin:12px auto !important; page-break-inside:avoid !important; break-inside:avoid !important;";
-            card.replaceWith(newImg);
+            wrapper.appendChild(newImg);
+            card.replaceWith(wrapper);
           }
         });
 
-        // Make sure all standard images inside the body fit perfectly in the PDF bounds and never overflow
+        // Process standard images
         bodyClone.querySelectorAll("img").forEach(img => {
-          if (!img.classList.contains("user-menu__avatar") && !img.closest(".pdf-diagram-wrapper")) {
-            img.style.setProperty("max-width", "100%", "important");
-            img.style.setProperty("max-height", "550px", "important");
-            img.style.setProperty("width", "auto", "important");
-            img.style.setProperty("height", "auto", "important");
-            img.style.setProperty("object-fit", "contain", "important");
-            img.style.setProperty("border-radius", "8px", "important");
-            img.style.setProperty("display", "block", "important");
-            img.style.setProperty("margin", "12px auto", "important");
-            img.style.setProperty("box-shadow", "0 4px 12px rgba(0,0,0,0.08)", "important");
-            img.style.setProperty("page-break-inside", "avoid", "important");
-            img.style.setProperty("break-inside", "avoid", "important");
+          if (!img.classList.contains("user-menu__avatar") && !img.closest(".pdf-image-block") && !img.closest(".pdf-diagram-block")) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "pdf-image-block";
+            const newImg = img.cloneNode(true);
+            wrapper.appendChild(newImg);
+            img.replaceWith(wrapper);
           }
         });
 
-        // Process standard inline SVG icons and Lucide icons to align perfectly
-        bodyClone.querySelectorAll("svg").forEach(svg => {
-          if (svg.closest(".pdf-diagram-wrapper") || svg.classList.contains("mermaid-viewport") || svg.id?.startsWith("mermaid_") || svg.closest(".diagram-container") || svg.closest(".recharts-wrapper")) {
-            return;
-          }
-
-          let w = 16;
-          let h = 16;
-
-          const classes = Array.from(svg.classList || []);
-          classes.forEach(c => {
-            if (c === "w-3") { w = 12; }
-            else if (c === "w-3.5") { w = 14; }
-            else if (c === "w-4") { w = 16; }
-            else if (c === "w-4.5") { w = 18; }
-            else if (c === "w-5") { w = 20; }
-            else if (c === "w-6") { w = 24; }
-            else if (c === "w-7") { w = 28; }
-            else if (c === "w-8") { w = 32; }
-            else if (c === "h-3") { h = 12; }
-            else if (c === "h-3.5") { h = 14; }
-            else if (c === "h-4") { h = 16; }
-            else if (c === "h-4.5") { h = 18; }
-            else if (c === "h-5") { h = 20; }
-            else if (c === "h-6") { h = 24; }
-            else if (c === "h-7") { h = 28; }
-            else if (c === "h-8") { h = 32; }
-          });
-
-          const attrW = svg.getAttribute("width");
-          const attrH = svg.getAttribute("height");
-          if (attrW && !attrW.includes("%") && attrW !== "auto") w = parseInt(attrW) || w;
-          if (attrH && !attrH.includes("%") && attrH !== "auto") h = parseInt(attrH) || h;
-
-          let color = svg.getAttribute("stroke") || svg.getAttribute("fill") || (isUser ? "#4f46e5" : "#0f172a");
-
-          svg.style.display = "inline-block";
-          svg.style.verticalAlign = "middle";
-          svg.style.width = `${w}px`;
-          svg.style.height = `${h}px`;
-          if (!svg.style.color && color) {
-            svg.style.color = color;
-          }
-          svg.setAttribute("width", `${w}`);
-          svg.setAttribute("height", `${h}`);
-        });
-
-        // Replace diagram containers with captured pixel-perfect images, filtering out nested duplicate diagram nodes
+        // Replace diagrams with high-res rasterized images
         let cloneDiagramList = Array.from(bodyClone.querySelectorAll(".mermaid-container, pre.mermaid, .diagram-container, .recharts-wrapper, .chart-container, .d3-container"));
         cloneDiagramList = cloneDiagramList.filter(el => !cloneDiagramList.some(other => other !== el && other.contains(el)));
         cloneDiagramList.forEach((cloneMc, idx) => {
           const match = rasterizedDiagrams[idx];
-          const originalMc = liveDiagrams[idx];
           const wrapper = document.createElement("div");
-          wrapper.className = "pdf-diagram-wrapper";
-          wrapper.style.cssText = "width:100% !important; margin:14px 0 !important; text-align:center !important; box-sizing:border-box !important; page-break-inside:avoid !important; break-inside:avoid !important;";
+          wrapper.className = "pdf-diagram-block";
 
           if (match && match.pngDataUrl) {
             const img = document.createElement("img");
             img.src = match.pngDataUrl;
-            img.style.cssText = "max-width:100% !important; width:auto !important; height:auto !important; max-height:750px !important; object-fit:contain !important; border-radius:8px !important; border:1px solid #e2e8f0 !important; background:#ffffff !important; display:block !important; margin:12px auto !important; padding:6px !important; box-sizing:border-box !important; box-shadow:0 1px 3px rgba(0,0,0,0.05) !important; page-break-inside:avoid !important; break-inside:avoid !important;";
             img.alt = "Clarity Diagram";
             wrapper.appendChild(img);
           } else {
@@ -920,56 +1144,88 @@ window.Clarity.uiChat = {
               svgInClone.style.width = "auto";
               svgInClone.style.height = "auto";
               svgInClone.style.display = "block";
-              svgInClone.style.margin = "10px auto";
+              svgInClone.style.margin = "0 auto";
               wrapper.appendChild(svgInClone);
             }
           }
           cloneMc.replaceWith(wrapper);
         });
 
-        // Parse top-level blocks from the body
-        let blocks = [];
-        if (bodyClone.children.length === 0) {
-          const p = document.createElement("p");
-          p.innerHTML = bodyClone.innerHTML;
-          p.className = bodyClone.className;
-          blocks.push(p);
-        } else {
-          blocks = Array.from(bodyClone.children);
-        }
+        // Replace any code cells with full-expanded syntax-highlighted code blocks
+        const innerCodeCells = bodyClone.querySelectorAll(".code-cell, .code-block, pre:not(.mermaid)");
+        innerCodeCells.forEach(cell => {
+          const exp = renderExpandedCodeBlock(cell);
+          cell.replaceWith(exp);
+        });
 
-        preparedMessages.push({ isUser, blocks });
+        // Collect child elements of the message content
+        let contentElements = bodyClone.children.length === 0 ? [bodyClone] : Array.from(bodyClone.children);
+
+        processedMessages.push({
+          role: isUser ? "user" : "assistant",
+          authorName: isUser ? "You" : "Clarity AI",
+          elements: contentElements
+        });
       }
 
-      // Ensure all cloned images are fully loaded and have correct aspect ratios before starting calculations
-      const allClonedImages = [];
-      preparedMessages.forEach(msg => {
-        msg.blocks.forEach(block => {
-          if (block.tagName === "IMG") {
-            allClonedImages.push(block);
-          }
-          block.querySelectorAll("img").forEach(img => allClonedImages.push(img));
+      // Ensure all images are loaded
+      const allImages = [];
+      processedMessages.forEach(msg => {
+        msg.elements.forEach(el => {
+          if (el.tagName === "IMG") allImages.push(el);
+          el.querySelectorAll("img").forEach(img => allImages.push(img));
         });
       });
 
-      await Promise.all(allClonedImages.map(img => {
+      await Promise.all(allImages.map(img => {
         if (img.complete && img.naturalWidth > 0) {
-          img.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
+          const natW = img.naturalWidth || 800;
+          const natH = img.naturalHeight || 600;
+          const aspect = natW / natH;
+          let renderW = Math.min(natW, 710);
+          let renderH = renderW / aspect;
+          if (renderH > 780) {
+            renderH = 780;
+            renderW = renderH * aspect;
+          }
+          img.style.setProperty("width", `${Math.round(renderW)}px`, "important");
+          img.style.setProperty("height", `${Math.round(renderH)}px`, "important");
+          img.style.setProperty("max-width", "100%", "important");
           return Promise.resolve();
         }
         return new Promise(resolve => {
           img.onload = () => {
-            img.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
+            const natW = img.naturalWidth || 800;
+            const natH = img.naturalHeight || 600;
+            const aspect = natW / natH;
+            let renderW = Math.min(natW, 710);
+            let renderH = renderW / aspect;
+            if (renderH > 780) {
+              renderH = 780;
+              renderW = renderH * aspect;
+            }
+            img.style.setProperty("width", `${Math.round(renderW)}px`, "important");
+            img.style.setProperty("height", `${Math.round(renderH)}px`, "important");
+            img.style.setProperty("max-width", "100%", "important");
             resolve();
           };
           img.onerror = resolve;
         });
       }));
 
-      // Create a pixel-perfect wrapping container for card measurement to ensure wrapped sizes match final output exactly
-      const testHost = document.createElement("div");
-      testHost.style.cssText = "width:746px !important; min-width:746px !important; max-width:746px !important; box-sizing:border-box !important; padding:0 !important; margin:0 !important; border:none !important; background:transparent !important;";
-      measurer.appendChild(testHost);
+      // Measurer container for accurate height budget calculation
+      const testContainer = document.createElement("div");
+      testContainer.style.cssText = "width:730px !important; min-width:730px !important; max-width:730px !important; box-sizing:border-box !important; padding:0 !important; margin:0 !important;";
+      measurer.appendChild(testContainer);
+
+      function measureElementHeight(el) {
+        testContainer.innerHTML = "";
+        const clone = el.cloneNode(true);
+        testContainer.appendChild(clone);
+        const h = clone.getBoundingClientRect().height || clone.offsetHeight || 30;
+        testContainer.innerHTML = "";
+        return h;
+      }
 
       function createNewPdfPage(pageNum) {
         const page = document.createElement("div");
@@ -978,12 +1234,12 @@ window.Clarity.uiChat = {
           "width: 794px !important",
           "min-width: 794px !important",
           "max-width: 794px !important",
-          "height: 1115px !important", // Slightly smaller than 1122.5px to completely prevent subpixel pagebreak loops
+          "height: 1115px !important",
           "min-height: 1115px !important",
           "max-height: 1115px !important",
           "overflow: hidden !important",
           "box-sizing: border-box !important",
-          "padding: 24px !important",
+          "padding: 24px 32px !important",
           "background: #ffffff !important",
           "display: flex !important",
           "flex-direction: column !important",
@@ -998,13 +1254,13 @@ window.Clarity.uiChat = {
 
         if (pageNum === 1) {
           topSection.innerHTML = `
-            <div style="border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 14px; width: 100%; box-sizing: border-box;">
+            <div style="border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 16px; width: 100%; box-sizing: border-box;">
               <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                 <div>
-                  <h1 style="margin: 0; font-size: 20px; font-weight: 700; color: #0f172a; letter-spacing: -0.02em; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Clarity Knowledge Report</h1>
-                  <p style="margin: 3px 0 0 0; font-size: 11.5px; color: #64748b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${projectName ? 'Project: ' + escapeHtml(projectName) + ' • ' : ''}Exported on ${dateStr}</p>
+                  <h1 style="margin: 0; font-size: 20px; font-weight: 700; color: #0f172a; letter-spacing: -0.02em;">Clarity Conversation Report</h1>
+                  <p style="margin: 3px 0 0 0; font-size: 11.5px; color: #64748b;">${projectName ? 'Project: ' + escapeHtml(projectName) + ' • ' : ''}Exported on ${dateStr}</p>
                 </div>
-                <div style="font-size: 11.5px; font-weight: 700; color: #4f46e5; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 6px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                <div style="font-size: 11.5px; font-weight: 700; color: #4f46e5; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 6px;">
                   <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4f46e5;"></span> Clarity AI
                 </div>
               </div>
@@ -1012,8 +1268,8 @@ window.Clarity.uiChat = {
           `;
         } else {
           topSection.innerHTML = `
-            <div style="border-bottom: 1px solid #e2e8f0; padding-bottom: 7px; margin-bottom: 12px; width: 100%; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #64748b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-              <span><strong>Clarity AI</strong> &bull; ${projectName ? escapeHtml(projectName) + ' &bull; ' : ''}Knowledge Report</span>
+            <div style="border-bottom: 1px solid #e2e8f0; padding-bottom: 7px; margin-bottom: 14px; width: 100%; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #64748b;">
+              <span><strong>Clarity AI</strong> &bull; ${projectName ? escapeHtml(projectName) + ' &bull; ' : ''}Conversation Export</span>
               <span>${dateStr}</span>
             </div>
           `;
@@ -1021,11 +1277,11 @@ window.Clarity.uiChat = {
 
         const contentArea = document.createElement("div");
         contentArea.className = "pdf-page-content";
-        contentArea.style.cssText = "width: 100% !important; flex: 1 !important; display: flex !important; flex-direction: column !important; gap: 10px !important; overflow: hidden !important; box-sizing: border-box !important;";
+        contentArea.style.cssText = "width: 100% !important; flex: 1 !important; display: flex !important; flex-direction: column !important; gap: 0 !important; overflow: hidden !important; box-sizing: border-box !important;";
 
         const footer = document.createElement("div");
         footer.className = "pdf-page-footer";
-        footer.style.cssText = "border-top: 1px solid #e2e8f0; padding-top: 8px; margin-top: 10px; width: 100%; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; color: #64748b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;";
+        footer.style.cssText = "border-top: 1px solid #e2e8f0; padding-top: 8px; margin-top: auto; width: 100%; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; color: #64748b;";
         footer.innerHTML = `
           <span>Confidential &bull; Generated by Clarity Knowledge Engine</span>
           <span class="pdf-page-number">Page ${pageNum}</span>
@@ -1038,114 +1294,193 @@ window.Clarity.uiChat = {
         return { page, contentArea, pageNum };
       }
 
-      function createMessageCard(isUser, isContinuation = false) {
-        const card = document.createElement("div");
-        card.className = "pdf-message-card";
-        card.style.cssText = [
-          "width: 100% !important",
-          "box-sizing: border-box !important",
-          "padding: 14px 18px !important",
-          "border-radius: 8px !important",
-          "overflow: hidden !important",
-          isUser
-            ? "background: #f8fafc !important; border: 1px solid #e2e8f0 !important;"
-            : "background: #ffffff !important; border: 1px solid #e2e8f0 !important;"
-        ].join(";");
+      function buildMessageElement(role, authorName, innerContentElements, isContinuation = false) {
+        const isUser = role === "user";
+        const msgEl = document.createElement("div");
+        msgEl.className = `message ${isUser ? 'message--user' : 'message--assistant'} ${isContinuation ? 'message--continuation' : ''}`;
 
-        const senderBadge = document.createElement("div");
-        senderBadge.style.cssText = `display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:12px; font-weight:700; color:#1e293b; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;`;
-        const continuationText = isContinuation ? ' <span style="font-size:11px; font-weight:400; color:#64748b;">(continued)</span>' : '';
-        senderBadge.innerHTML = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${isUser ? '#64748b' : '#4f46e5'};"></span> ${isUser ? 'You' : 'Clarity AI'}${continuationText}`;
-        card.appendChild(senderBadge);
+        const row = document.createElement("div");
+        row.className = "message__row";
 
         const body = document.createElement("div");
-        body.className = "pdf-message-body";
-        body.style.cssText = "width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px;";
-        card.appendChild(body);
+        body.className = "message__body";
 
-        return { card, body };
+        const authorTag = document.createElement("div");
+        authorTag.className = "message__author-tag";
+        authorTag.innerHTML = `
+          <span class="message__author-dot"></span>
+          <span>${escapeHtml(authorName)}${isContinuation ? ' (cont.)' : ''}</span>
+        `;
+        body.appendChild(authorTag);
+
+        const bubble = document.createElement("div");
+        bubble.className = "message__bubble";
+
+        const contentDiv = document.createElement("div");
+        contentDiv.className = "message__content";
+
+        innerContentElements.forEach(el => contentDiv.appendChild(el));
+        bubble.appendChild(contentDiv);
+        body.appendChild(bubble);
+        row.appendChild(body);
+        msgEl.appendChild(row);
+
+        return msgEl;
       }
 
-      function measureCardHeightWithBlocks(isUser, existingBlocks, newBlock) {
-        const cardObj = createMessageCard(isUser, existingBlocks.length > 0);
-        existingBlocks.forEach(b => cardObj.body.appendChild(b.cloneNode(true)));
-        if (newBlock) {
-          cardObj.body.appendChild(newBlock.cloneNode(true));
-        }
-
-        testHost.innerHTML = "";
-        testHost.appendChild(cardObj.card);
-        const h = cardObj.card.getBoundingClientRect().height || cardObj.card.offsetHeight || 50;
-        testHost.innerHTML = "";
-        return h;
-      }
-
-      // Step 2: Accurate Page Pagination and Card Splitting
+      // Step 2: Accurate Chat-Flow Pagination
       const pages = [];
       let currentPageObj = createNewPdfPage(1);
       pages.push(currentPageObj);
 
-      let completedCardHeights = [];
-      let currentCardBlocks = [];
+      let currentPageUsedHeight = 0;
 
-      for (let mIdx = 0; mIdx < preparedMessages.length; mIdx++) {
-        const msg = preparedMessages[mIdx];
-        const isUser = msg.isUser;
-        const blocks = msg.blocks;
+      for (let mIdx = 0; mIdx < processedMessages.length; mIdx++) {
+        const msg = processedMessages[mIdx];
+        const isUser = msg.role === "user";
+        const elements = msg.elements;
 
-        currentCardBlocks = [];
+        const maxPageContentHeight = pages.length === 1 ? 860 : 920;
 
-        for (let bIdx = 0; bIdx < blocks.length; bIdx++) {
-          const block = blocks[bIdx];
+        // For single-element or short user messages, measure whole bubble
+        const fullMsgEl = buildMessageElement(msg.role, msg.authorName, elements.map(e => e.cloneNode(true)));
+        const fullMsgHeight = measureElementHeight(fullMsgEl) + 12;
 
-          // Measure potential height with the new block added
-          const potentialCardHeight = measureCardHeightWithBlocks(isUser, currentCardBlocks, block);
+        if (currentPageUsedHeight + fullMsgHeight <= maxPageContentHeight) {
+          currentPageObj.contentArea.appendChild(fullMsgEl);
+          currentPageUsedHeight += fullMsgHeight;
+        } else if (isUser || elements.length <= 1) {
+          // If a short message doesn't fit on this page, start a fresh page
+          if (currentPageUsedHeight > 0) {
+            currentPageObj = createNewPdfPage(pages.length + 1);
+            pages.push(currentPageObj);
+            currentPageUsedHeight = 0;
+          }
+          currentPageObj.contentArea.appendChild(fullMsgEl);
+          currentPageUsedHeight += fullMsgHeight;
+        } else {
+          // Multi-element assistant message: flow elements across pages
+          let currentElementsChunk = [];
+          let isCont = false;
 
-          // Calculate page layout occupied heights
-          const totalCompletedHeight = completedCardHeights.reduce((a, b) => a + b, 0);
-          const gapsCount = completedCardHeights.length;
-          const totalHeightWithCurrentCard = totalCompletedHeight + (gapsCount * 10) + potentialCardHeight;
+          for (let eIdx = 0; eIdx < elements.length; eIdx++) {
+            const el = elements[eIdx];
 
-          // Slightly less than page height to allow safe padding margins
-          const maxPageContentHeight = pages.length === 1 ? 800 : 840;
+            // Check if this is a large code block that can be chunked across pages
+            if (el.classList.contains("pdf-code-block") && el.querySelector(".pdf-code-body")) {
+              const codeLines = Array.from(el.querySelectorAll(".pdf-code-line"));
+              if (codeLines.length > 8) {
+                // If there were previous elements in chunk, flush them first
+                if (currentElementsChunk.length > 0) {
+                  const partMsg = buildMessageElement(msg.role, msg.authorName, currentElementsChunk, isCont);
+                  const partHeight = measureElementHeight(partMsg) + 12;
+                  currentPageObj.contentArea.appendChild(partMsg);
+                  currentPageUsedHeight += partHeight;
+                  currentElementsChunk = [];
+                  isCont = true;
+                }
 
-          if (totalHeightWithCurrentCard <= maxPageContentHeight) {
-            currentCardBlocks.push(block);
-          } else {
-            // Push to new page
-            if (currentCardBlocks.length > 0) {
-              const finalCardHeight = measureCardHeightWithBlocks(isUser, currentCardBlocks, null);
-              const cardObj = createMessageCard(isUser, false);
-              currentCardBlocks.forEach(b => cardObj.body.appendChild(b));
-              currentPageObj.contentArea.appendChild(cardObj.card);
-              completedCardHeights.push(finalCardHeight);
+                const codeHeader = el.querySelector(".pdf-code-header");
+                let lineChunk = [];
+                let currentChunkHeight = 45; // code block header & padding overhead
 
-              currentPageObj = createNewPdfPage(pages.length + 1);
-              pages.push(currentPageObj);
-              completedCardHeights = [];
+                for (let lIdx = 0; lIdx < codeLines.length; lIdx++) {
+                  const line = codeLines[lIdx];
+                  const lineH = 19; // px per line
 
-              currentCardBlocks = [block];
-            } else {
-              if (completedCardHeights.length > 0) {
-                currentPageObj = createNewPdfPage(pages.length + 1);
-                pages.push(currentPageObj);
-                completedCardHeights = [];
-                currentCardBlocks = [block];
-              } else {
-                // Already on fresh empty page; force it to fit
-                currentCardBlocks.push(block);
+                  if (currentPageUsedHeight + currentChunkHeight + lineH <= maxPageContentHeight) {
+                    lineChunk.push(line);
+                    currentChunkHeight += lineH;
+                  } else {
+                    if (lineChunk.length > 0) {
+                      const partCodeBlock = document.createElement("div");
+                      partCodeBlock.className = "pdf-code-block";
+                      if (codeHeader) partCodeBlock.appendChild(codeHeader.cloneNode(true));
+                      const partCodeBody = document.createElement("div");
+                      partCodeBody.className = "pdf-code-body";
+                      lineChunk.forEach(l => partCodeBody.appendChild(l));
+                      partCodeBlock.appendChild(partCodeBody);
+
+                      const partMsg = buildMessageElement(msg.role, msg.authorName, [partCodeBlock], isCont);
+                      currentPageObj.contentArea.appendChild(partMsg);
+                      isCont = true;
+                    }
+
+                    // Start new page
+                    currentPageObj = createNewPdfPage(pages.length + 1);
+                    pages.push(currentPageObj);
+                    currentPageUsedHeight = 0;
+
+                    const contHeader = codeHeader ? codeHeader.cloneNode(true) : document.createElement("div");
+                    if (contHeader) {
+                      const badge = contHeader.querySelector(".pdf-code-badge");
+                      if (badge && !badge.textContent.includes("(cont.)")) badge.textContent += " (cont.)";
+                    }
+
+                    lineChunk = [line];
+                    currentChunkHeight = 45 + lineH;
+                  }
+                }
+
+                if (lineChunk.length > 0) {
+                  const partCodeBlock = document.createElement("div");
+                  partCodeBlock.className = "pdf-code-block";
+                  if (codeHeader) {
+                    const contHeader = codeHeader.cloneNode(true);
+                    if (pages.length > 1) {
+                      const badge = contHeader.querySelector(".pdf-code-badge");
+                      if (badge && !badge.textContent.includes("(cont.)")) badge.textContent += " (cont.)";
+                    }
+                    partCodeBlock.appendChild(contHeader);
+                  }
+                  const partCodeBody = document.createElement("div");
+                  partCodeBody.className = "pdf-code-body";
+                  lineChunk.forEach(l => partCodeBody.appendChild(l));
+                  partCodeBlock.appendChild(partCodeBody);
+
+                  const partMsg = buildMessageElement(msg.role, msg.authorName, [partCodeBlock], isCont);
+                  const partHeight = measureElementHeight(partMsg) + 12;
+                  currentPageObj.contentArea.appendChild(partMsg);
+                  currentPageUsedHeight += partHeight;
+                  isCont = true;
+                }
+                continue;
               }
             }
-          }
-        }
 
-        // Finalize remaining blocks for message
-        if (currentCardBlocks.length > 0) {
-          const finalCardHeight = measureCardHeightWithBlocks(isUser, currentCardBlocks, null);
-          const cardObj = createMessageCard(isUser, false);
-          currentCardBlocks.forEach(b => cardObj.body.appendChild(b));
-          currentPageObj.contentArea.appendChild(cardObj.card);
-          completedCardHeights.push(finalCardHeight);
+            // Normal element measurement
+            const testMsg = buildMessageElement(msg.role, msg.authorName, [...currentElementsChunk, el.cloneNode(true)], isCont);
+            const testHeight = measureElementHeight(testMsg) + 12;
+
+            if (currentPageUsedHeight + testHeight <= maxPageContentHeight) {
+              currentElementsChunk.push(el);
+            } else {
+              if (currentElementsChunk.length > 0) {
+                const partMsg = buildMessageElement(msg.role, msg.authorName, currentElementsChunk, isCont);
+                const partHeight = measureElementHeight(partMsg) + 12;
+                currentPageObj.contentArea.appendChild(partMsg);
+                currentPageUsedHeight += partHeight;
+                isCont = true;
+                currentElementsChunk = [];
+              }
+
+              // Start new page if there's already content on current page
+              if (currentPageUsedHeight > 0) {
+                currentPageObj = createNewPdfPage(pages.length + 1);
+                pages.push(currentPageObj);
+                currentPageUsedHeight = 0;
+              }
+
+              currentElementsChunk.push(el);
+            }
+          }
+
+          if (currentElementsChunk.length > 0) {
+            const partMsg = buildMessageElement(msg.role, msg.authorName, currentElementsChunk, isCont);
+            const partHeight = measureElementHeight(partMsg) + 12;
+            currentPageObj.contentArea.appendChild(partMsg);
+            currentPageUsedHeight += partHeight;
+          }
         }
       }
 
@@ -1160,7 +1495,6 @@ window.Clarity.uiChat = {
         const numEl = pObj.page.querySelector(".pdf-page-number");
         if (numEl) numEl.textContent = `Page ${pageNum} of ${totalPages}`;
 
-        // Turn off forced pagebreaks on the very last page to prevent blank trailing pages
         if (pageNum === totalPages) {
           pObj.page.style.setProperty("break-after", "avoid", "important");
           pObj.page.style.setProperty("page-break-after", "avoid", "important");
@@ -1179,14 +1513,14 @@ window.Clarity.uiChat = {
       }
 
       // Step 4: Run html2pdf render pipeline
-      const safeName = (projectName || "Clarity").replace(/[^a-zA-Z0-9_-]/g, '_') + "_report_" + now.toISOString().split('T')[0] + ".pdf";
+      const safeName = (projectName || "Clarity").replace(/[^a-zA-Z0-9_-]/g, '_') + "_chat_" + now.toISOString().split('T')[0] + ".pdf";
 
       const opt = {
         margin: 0,
         filename: safeName,
         image: { type: 'png' },
         html2canvas: {
-          scale: 3,
+          scale: 2.5,
           useCORS: true,
           allowTaint: true,
           letterRendering: true,
@@ -1207,22 +1541,20 @@ window.Clarity.uiChat = {
         pagebreak: { mode: 'css' }
       };
 
-      // Ensure absolutely only one generation run for file saving to prevent state corruption blank pages
       await window.html2pdf().set(opt).from(wrapper).save();
 
       if (window.Clarity && window.Clarity.toast) {
-        window.Clarity.toast.show("Export successful", "success");
+        window.Clarity.toast.show("PDF export completed successfully", "success");
       }
 
-      // Save PDF as an artifact to project context if available
+      // Save PDF artifact to project context if available
       const pId = options.projectId || window.Clarity?.state?.activeConversation?.project_id;
       if (pId && window.Clarity?.api?.request) {
         try {
-          // Generate artifact string using a separate html2pdf instance
           const dataUriWorker = window.html2pdf().set(opt).from(wrapper);
           const pdfDataUri = await dataUriWorker.outputPdf('datauristring');
           const base64Data = pdfDataUri ? pdfDataUri.split(',')[1] : null;
-          if (base64Data) {
+          if (base64Data && pdfDataUri.startsWith("data:application/pdf")) {
             await window.Clarity.api.request('/api/projects/' + pId + '/artifacts', {
               method: 'POST',
               body: JSON.stringify({
@@ -1256,6 +1588,7 @@ window.Clarity.uiChat = {
     const exportBtn = document.getElementById("mainChatExportMenuBtn");
     const exportDropdown = document.getElementById("mainChatExportDropdown");
     const exportPdfBtn = document.getElementById("mainChatExportPdfBtn");
+    const exportTextBtn = document.getElementById("mainChatExportTextBtn");
     const exportCancelBtn = document.getElementById("mainChatExportCancelBtn");
 
     if (exportBtn && exportDropdown) {
@@ -1287,8 +1620,46 @@ window.Clarity.uiChat = {
 
       exportPdfBtn?.addEventListener("click", async () => {
         exportDropdown.style.display = "none";
-        await this.exportChatToPdf({ feed: document.getElementById("conversationList") });
+        await this.exportChatToPdf({ feed: document.getElementById("conversationList") || document.getElementById("projectChatFeed") });
       });
+
+      exportTextBtn?.addEventListener("click", () => {
+        exportDropdown.style.display = "none";
+        const feed = document.getElementById("conversationList") || document.getElementById("projectChatFeed");
+        if (!feed) return;
+        const msgs = feed.querySelectorAll(".message, .project-chat-msg");
+        let text = "";
+        msgs.forEach(m => {
+          const isUser = m.classList.contains("message--user") || m.classList.contains("project-chat-msg--user");
+          const role = isUser ? "User" : "Clarity Assistant";
+          const body = m.querySelector(".message__body, .project-chat-msg-body")?.innerText || "";
+          if (body.trim()) {
+            text += `### ${role}\n\n${body.trim()}\n\n---\n\n`;
+          }
+        });
+        if (text) {
+          navigator.clipboard.writeText(text).then(() => {
+            if (window.Clarity?.toast) window.Clarity.toast.show("Conversation copied as Markdown", "success");
+          }).catch(() => {
+            if (window.Clarity?.toast) window.Clarity.toast.show("Failed to copy conversation", "danger");
+          });
+        }
+      });
+    }
+  },
+
+  _updateExportVisibility() {
+    const feed = document.getElementById("conversationList");
+    const container = document.getElementById("mainChatExportContainer");
+    const topContainer = document.getElementById("mainExportContainer");
+    
+    const hasMessages = feed && (feed.querySelectorAll(".message").length > 0 || !feed.classList.contains("conversation--empty"));
+    
+    if (container) {
+      container.style.display = hasMessages ? "flex" : "none";
+    }
+    if (topContainer) {
+      topContainer.hidden = !hasMessages;
     }
   },
 
@@ -1366,22 +1737,26 @@ window.Clarity.uiChat = {
     const parts = ['<div class="chat-shell">'];
     parts.push('<section class="chat-panel">');
     parts.push(`
-      <div id="mainChatExportContainer" style="position: absolute; top: 18px; right: 20px; z-index: 100; ${isEmpty ? 'display:none;' : ''}">
+      <div id="mainChatExportContainer" class="main-chat-export-bar" style="position: absolute; top: 12px; right: 14px; z-index: 100; display: ${isEmpty ? 'none' : 'flex'}; align-items: center;">
         <div style="position: relative;">
-          <button class="btn btn--icon-sm btn--ghost" id="mainChatExportMenuBtn" title="More options" aria-label="More options">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="1.5"></circle>
-              <circle cx="12" cy="6" r="1.5"></circle>
-              <circle cx="12" cy="18" r="1.5"></circle>
+          <button class="btn btn--icon-sm btn--outline main-chat-export-btn" id="mainChatExportMenuBtn" type="button" title="Export conversation" aria-label="Export conversation" style="width:32px; height:32px; min-width:32px; padding:0; display:inline-flex; align-items:center; justify-content:center; background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow-sm); border-radius:var(--r-md); cursor:pointer; color:var(--ink-muted);">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
             </svg>
           </button>
-          <div id="mainChatExportDropdown" class="dropdown-menu" style="display:none; position:absolute; right:0; top:calc(100% + 4px); background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md); box-shadow:var(--shadow-float); z-index:100; min-width:140px; padding:4px;">
-            <div style="padding:6px 10px; font-size:11px; font-weight:600; color:var(--ink-muted); text-transform:uppercase; border-bottom:1px solid var(--line); margin-bottom:4px;">Chat options</div>
-            <button class="dropdown-item" id="mainChatExportPdfBtn" style="width:100%; text-align:left; padding:8px 10px; background:transparent; border:none; color:var(--ink); font-size:13px; cursor:pointer; border-radius:var(--r-sm); display:flex; align-items:center; gap:6px;">
+          <div id="mainChatExportDropdown" class="dropdown-menu" style="display:none; position:absolute; right:0; top:calc(100% + 4px); background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md); box-shadow:var(--shadow-float); z-index:1000; min-width:165px; padding:4px;">
+            <div style="padding:6px 10px; font-size:11px; font-weight:600; color:var(--ink-muted); text-transform:uppercase; border-bottom:1px solid var(--line); margin-bottom:4px;">Export conversation</div>
+            <button class="dropdown-item" id="mainChatExportPdfBtn" type="button" style="width:100%; text-align:left; padding:8px 10px; background:transparent; border:none; color:var(--ink); font-size:13px; cursor:pointer; border-radius:var(--r-sm); display:flex; align-items:center; gap:8px;">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               <span>Export as PDF</span>
             </button>
-            <button class="dropdown-item" id="mainChatExportCancelBtn" style="width:100%; text-align:left; padding:8px 10px; background:transparent; border:none; color:var(--ink-muted); font-size:13px; cursor:pointer; border-radius:var(--r-sm);">Cancel</button>
+            <button class="dropdown-item" id="mainChatExportTextBtn" type="button" style="width:100%; text-align:left; padding:8px 10px; background:transparent; border:none; color:var(--ink); font-size:13px; cursor:pointer; border-radius:var(--r-sm); display:flex; align-items:center; gap:8px;">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+              <span>Copy Markdown</span>
+            </button>
+            <button class="dropdown-item" id="mainChatExportCancelBtn" type="button" style="width:100%; text-align:left; padding:8px 10px; background:transparent; border:none; color:var(--ink-muted); font-size:13px; cursor:pointer; border-radius:var(--r-sm);">Cancel</button>
           </div>
         </div>
       </div>
@@ -1473,7 +1848,7 @@ window.Clarity.uiChat = {
     const role = msg.role === "user" ? "user" : "assistant";
     const isStreaming = msg.streaming;
     const isError = msg.error;
-    const isEmpty = role === "assistant" && !msg.content && !isStreaming;
+    const isEmpty = role === "assistant" && !msg.content && !isStreaming && !isError;
     const bubbleClass = role === "assistant"
       ? (isError ? "message--assistant message--error" : "message--assistant")
       : "message--user";
@@ -1486,7 +1861,9 @@ window.Clarity.uiChat = {
     );
 
     let contentHtml;
-    if (isEmpty) {
+    if (isError) {
+      contentHtml = '<div class="message__content message__content--error">' + this._renderErrorBlock(isError) + '</div>';
+    } else if (isEmpty) {
       contentHtml = '<div class="message__content message__content--empty">No response generated.</div>';
     } else {
       try {
@@ -1923,6 +2300,7 @@ window.Clarity.uiChat = {
       const empty = convEl.querySelector(".chat-empty");
       if (empty) empty.remove();
       this._bindScrollListener(convEl);
+      this._updateExportVisibility();
     }
     if (!convEl) return;
 
@@ -2635,16 +3013,23 @@ window.Clarity.uiChat = {
     const bubble = msgEl.querySelector(".message__bubble");
     if (!bubble) return;
 
+    if (msgEl.classList.contains("message--editing")) return;
+
     const originalAttachments = msg.attachments || [];
     const originalContent = (msgEl.querySelector(".message__content")?.textContent || "").trim();
+
+    msgEl.classList.add("message--editing");
 
     const wrapper = document.createElement("div");
     wrapper.className = "edit-wrapper";
     wrapper.innerHTML = `
-      <textarea class="edit-textarea" rows="3" aria-label="Edit message"></textarea>
+      <textarea class="edit-textarea" rows="1" aria-label="Edit message" placeholder="Edit your message..."></textarea>
       <div class="edit-buttons">
-        <button class="btn btn--primary btn--sm" type="button" data-edit-action="save">Save & Resend</button>
-        <button class="btn btn--ghost btn--sm" type="button" data-edit-action="cancel">Cancel</button>
+        <button class="btn btn--ghost btn--sm edit-btn-cancel" type="button" data-edit-action="cancel">Cancel</button>
+        <button class="btn btn--primary btn--sm edit-btn-save" type="button" data-edit-action="save">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          Save &amp; Resend
+        </button>
       </div>
     `;
     const textarea = wrapper.querySelector("textarea");
@@ -2653,22 +3038,41 @@ window.Clarity.uiChat = {
     const originalContentHtml = bubble.innerHTML;
     bubble.innerHTML = "";
     bubble.appendChild(wrapper);
-    textarea.focus();
-    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+    const autoResize = () => {
+      textarea.style.height = "auto";
+      textarea.style.height = Math.max(42, Math.min(textarea.scrollHeight, 400)) + "px";
+    };
+
+    textarea.addEventListener("input", autoResize);
+    requestAnimationFrame(() => {
+      autoResize();
+      textarea.focus();
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    });
 
     const cleanup = () => {
+      msgEl.classList.remove("message--editing");
       bubble.innerHTML = originalContentHtml;
     };
 
-    wrapper.querySelector('[data-edit-action="cancel"]').addEventListener("click", cleanup);
-    wrapper.querySelector('[data-edit-action="save"]').addEventListener("click", async () => {
+    const saveAndResend = async () => {
       const newValue = textarea.value.trim();
       if (!newValue) return;
-      bubble.innerHTML = window.Clarity.markdown.render(newValue);
+      msgEl.classList.remove("message--editing");
+      bubble.innerHTML = window.Clarity.markdown ? window.Clarity.markdown.render(newValue) : `<div class="message__content">${newValue}</div>`;
       if (window.Clarity && window.Clarity.renderMermaid) {
         window.Clarity.renderMermaid(bubble);
       } else if (window.mermaid) {
         try { window.mermaid.run({ querySelector: '.mermaid' }).catch(()=>{}); } catch(e) {}
+      }
+
+      // Remove all subsequent downstream messages in DOM
+      let nextEl = msgEl.nextElementSibling;
+      while (nextEl) {
+        const toRemove = nextEl;
+        nextEl = nextEl.nextElementSibling;
+        toRemove.remove();
       }
 
       const cid = this._activeConversation;
@@ -2678,23 +3082,53 @@ window.Clarity.uiChat = {
         } catch (e) { /* best effort */ }
       }
 
-      this._regenerateAfterEdit(newValue, originalAttachments);
+      this._regenerateAfterEdit(newValue, originalAttachments, msgEl);
+    };
+
+    wrapper.querySelector('[data-edit-action="cancel"]').addEventListener("click", cleanup);
+    wrapper.querySelector('[data-edit-action="save"]').addEventListener("click", saveAndResend);
+
+    textarea.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        cleanup();
+      } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        saveAndResend();
+      }
     });
   },
 
-  async _regenerateAfterEdit(newValue, attachments) {
+  async _regenerateAfterEdit(newValue, attachments, msgEl) {
     const cid = this._activeConversation;
     if (!cid) return;
 
     const convEl = document.getElementById("conversationList");
     if (!convEl) return;
+
+    if (msgEl) {
+      let nextEl = msgEl.nextElementSibling;
+      while (nextEl) {
+        const toRemove = nextEl;
+        nextEl = nextEl.nextElementSibling;
+        toRemove.remove();
+      }
+    }
+
     const botMsg = {
       role: "assistant",
       content: "",
       id: "bot_" + Date.now(),
       streaming: true,
     };
-    convEl.innerHTML += this._renderMessage(botMsg);
+
+    const botHtml = this._renderMessage(botMsg);
+    if (msgEl && msgEl.parentNode) {
+      msgEl.insertAdjacentHTML("afterend", botHtml);
+    } else {
+      convEl.innerHTML += botHtml;
+    }
+
     this._bindMessageControls();
     this._scrollToBottom();
 
@@ -2714,13 +3148,19 @@ window.Clarity.uiChat = {
     }
 
     this._isStreaming = true;
+    this._syncComposerStreaming();
     this._abortController = new AbortController();
 
     try {
-      const response = await fetch(window.Clarity.api.base + `/api/conversations/${cid}/chat`, {
+      const response = await fetch(window.Clarity.api.base + `/api/conversations/${cid}/regenerate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: newValue, model_id: this._resolveModelId(), file_ids, project_id: projectId }),
+        body: JSON.stringify({
+          model_id: this._resolveModelId(),
+          file_ids,
+          project_id: projectId,
+          think: this._thinkModeActive || false,
+        }),
         signal: this._abortController.signal,
         credentials: "include",
       });

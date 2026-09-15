@@ -1042,51 +1042,109 @@ async function renderProjectList(main) {
     });
   }
 
-  async function handleBatchUpload(files) {
+  const IGNORED_PATH_SEGMENTS = new Set([
+    "node_modules", ".git", ".svn", ".hg", "__pycache__", ".venv", "venv", "env",
+    ".idea", ".vscode", "dist", "build", "target", ".next", ".nuxt", "coverage", ".pytest_cache",
+    ".turbo", ".cache", ".output", ".gradle", "bin", "obj", "vendor", "bower_components", "pods",
+    "deriveddata", ".yarn", ".pnpm-store", ".parcel-cache"
+  ]);
+
+  function filterProjectFiles(fileList) {
+    return (fileList || []).filter(f => {
+      const rawPath = (f.webkitRelativePath || f.name || "").replace(/\\/g, "/");
+      if (!rawPath) return false;
+      const baseName = rawPath.split("/").pop() || "";
+      if (baseName === ".DS_Store" || baseName.endsWith("Thumbs.db") || baseName === "desktop.ini") {
+        return false;
+      }
+      const segments = rawPath.split("/").filter(Boolean);
+      for (let i = 0; i < segments.length - 1; i++) {
+        if (IGNORED_PATH_SEGMENTS.has(segments[i].toLowerCase())) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+
+  async function handleBatchUpload(rawFiles) {
+    const files = filterProjectFiles(Array.from(rawFiles || []));
+    if (files.length === 0) {
+      window.Clarity.toast.show("No valid project files found (system and build directories were filtered).", "info");
+      return;
+    }
+
     const progCont = document.getElementById("uploadProgressContainer");
     if (progCont) {
       progCont.style.display = "block";
+      const filteredMsg = rawFiles.length > files.length ? ` (filtered ${rawFiles.length - files.length} build/dependency files)` : '';
       progCont.innerHTML = [
-        '<div class="card" style="padding:16px 20px;">',
-        '<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">',
-        '<strong style="font-size:14px;">Uploading and analyzing ' + files.length + ' files...</strong>',
-        '<span class="spinner" style="width:16px; height:16px;"></span>',
-        '</div>',
-        '<div class="progress" style="height:6px; background:var(--surface-muted); border-radius:999px; overflow:hidden;">',
-        '<div style="width:65%; height:100%; background:var(--accent); border-radius:999px; animation: pulse 1.5s infinite;"></div>',
-        '</div>',
-        '<div class="muted" style="font-size:12px; margin-top:8px;">Extracting files safely, scanning dependencies, tracing architecture, and cataloging APIs...</div>',
+        '<div class="card" style="padding:18px 20px; border:1px solid var(--accent); background:var(--surface); display:flex; flex-direction:column; gap:12px;">',
+        '  <div style="display:flex; align-items:center; justify-content:space-between;">',
+        '    <strong style="font-size:14px; display:flex; align-items:center; gap:8px;">',
+        '      <span class="spinner" style="width:15px; height:15px; border:2px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite;"></span>',
+        '      <span>Uploading ' + files.length + ' project files' + filteredMsg + '</span>',
+        '    </strong>',
+        '    <span id="batchPercentBadge" class="font-mono" style="font-size:12px; font-weight:700; color:var(--accent);">0%</span>',
+        '  </div>',
+        '  <div class="progress" style="height:6px; background:var(--surface-muted); border-radius:999px; overflow:hidden;">',
+        '    <div id="batchProgressBar" style="width:5%; height:100%; background:var(--accent); border-radius:999px; transition:width 0.2s ease;"></div>',
+        '  </div>',
+        '  <div id="batchProgressStatus" class="muted" style="font-size:12px;">Transferring code and generating project intelligence...</div>',
         '</div>'
       ].join("");
     }
 
     try {
-      const fd = new FormData();
-      const paths = [];
-      for (const f of files) {
-        fd.append("files", f, f.name);
-        paths.push(f.webkitRelativePath || f.name);
-      }
-      fd.append("paths", JSON.stringify(paths));
+      const progressBar = document.getElementById("batchProgressBar");
+      const percentBadge = document.getElementById("batchPercentBadge");
+      const statusText = document.getElementById("batchProgressStatus");
 
-      let resData;
-      if (window.Clarity?.api?.upload) {
-        resData = await window.Clarity.api.upload("/api/projects/upload-files", fd);
-      } else {
+      const BATCH_SIZE = 75;
+      let resData = null;
+      let uploadedCount = 0;
+
+      for (let i = 0; i < files.length; i += BATCH_SIZE) {
+        const batch = files.slice(i, i + BATCH_SIZE);
+        const fd = new FormData();
+        const paths = [];
+        for (const f of batch) {
+          fd.append("files", f, f.name);
+          paths.push(f.webkitRelativePath || f.name);
+        }
+        fd.append("paths", JSON.stringify(paths));
+        if (resData && resData.project && resData.project.id) {
+          fd.append("projectId", resData.project.id);
+        }
+
+        const pct = Math.min(95, Math.round(((i + batch.length) / files.length) * 100));
+        if (progressBar) progressBar.style.width = pct + "%";
+        if (percentBadge) percentBadge.innerText = pct + "%";
+        if (statusText) statusText.innerText = `Uploading batch ${Math.floor(i / BATCH_SIZE) + 1} of ${Math.ceil(files.length / BATCH_SIZE)} (${uploadedCount + batch.length}/${files.length} files)...`;
+
         const resp = await fetch("/api/projects/upload-files", {
           method: "POST",
           body: fd,
           credentials: "include",
         });
         const text = await resp.text();
-        try { resData = JSON.parse(text); } catch { resData = { error: text }; }
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch { parsed = { error: text }; }
         if (!resp.ok) {
-          throw new Error((resData && resData.error) || "Failed to upload and analyze project files.");
+          throw new Error((parsed && parsed.error) || "Batch upload failed with status " + resp.status);
         }
+        resData = parsed;
+        uploadedCount += batch.length;
       }
 
+      if (progressBar) progressBar.style.width = "100%";
+      if (percentBadge) percentBadge.innerText = "100%";
+      if (statusText) statusText.innerText = "Project analyzed and indexed!";
+
       window.Clarity.toast.show("Project created and analyzed successfully! " + (resData.filesCount || files.length) + " files indexed.", "success");
-      window.location.hash = "#/project/" + resData.project.id;
+      if (resData && resData.project && resData.project.id) {
+        window.location.hash = "#/project/" + resData.project.id;
+      }
     } catch (err) {
       console.error("Batch upload error:", err);
       window.Clarity.toast.show("Upload failed: " + (err.message || "Unknown error"), "danger");
@@ -1385,11 +1443,6 @@ function openGithubImportModal(mainContainer) {
    ZIP Upload Pipeline & Chunked Engine
    ============================================================ */
 async function uploadZipInChunks(file, projectIdToMerge, onProgress) {
-  const chunkSize = 1.5 * 1024 * 1024; // 1.5MB chunks for speed & reliability
-  const totalChunks = Math.ceil(file.size / chunkSize);
-  const uploadId = "up_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
-
-  let resData = null;
   const startTime = Date.now();
 
   const formatBytes = (bytes) => {
@@ -1420,6 +1473,68 @@ async function uploadZipInChunks(file, projectIdToMerge, onProgress) {
     return `${mins}m ${secs}s remaining`;
   };
 
+  // Direct upload for ZIP files <= 15MB (vast majority of projects) for near-instant transfer
+  if (file.size <= 15 * 1024 * 1024) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      if (projectIdToMerge) {
+        fd.append("projectId", projectIdToMerge);
+      } else {
+        fd.append("name", file.name.replace(/\.zip$/i, ""));
+      }
+
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.min(99, Math.round((e.loaded / e.total) * 100));
+          const elapsed = (Date.now() - startTime) / 1000;
+          const speed = elapsed > 0 ? e.loaded / elapsed : 0;
+          const remaining = e.total - e.loaded;
+          const eta = speed > 0 ? Math.ceil(remaining / speed) : undefined;
+          if (onProgress) {
+            onProgress(
+              percent,
+              `Uploading ${file.name}`,
+              `Transferred ${formatBytes(e.loaded)} of ${formatBytes(e.total)} • Speed: ${formatSpeed(speed)} • ETA: ${formatETA(eta)}`
+            );
+          }
+        }
+      });
+
+      xhr.addEventListener("load", () => {
+        if (onProgress) onProgress(100, "Extracting & Analyzing Project...", "Scanning dependencies and building intelligence graphs...");
+        try {
+          const res = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(res);
+          } else {
+            reject(new Error(res.error || "Upload failed with status " + xhr.status));
+          }
+        } catch (err) {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve({ success: true, project: {} });
+          } else {
+            reject(new Error("Upload failed: " + xhr.responseText));
+          }
+        }
+      });
+
+      xhr.addEventListener("error", () => reject(new Error("Network transfer error")));
+      xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
+
+      xhr.open("POST", "/api/projects/upload-zip");
+      xhr.withCredentials = true;
+      xhr.send(fd);
+    });
+  }
+
+  // Chunked upload for large archives > 15MB with 8MB chunks
+  const chunkSize = 8 * 1024 * 1024;
+  const totalChunks = Math.ceil(file.size / chunkSize);
+  const uploadId = "up_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+  let resData = null;
+
   for (let i = 0; i < totalChunks; i++) {
     const start = i * chunkSize;
     const end = Math.min(file.size, start + chunkSize);
@@ -1436,7 +1551,6 @@ async function uploadZipInChunks(file, projectIdToMerge, onProgress) {
       fd.append("name", file.name.replace(/\.zip$/i, ""));
     }
 
-    // 1. Calculate progress before uploading this chunk
     const uploadedBefore = i * chunkSize;
     const percent = Math.min(99, Math.round((uploadedBefore / file.size) * 100));
     const elapsedMs = Date.now() - startTime;
@@ -1463,7 +1577,6 @@ async function uploadZipInChunks(file, projectIdToMerge, onProgress) {
       throw new Error((resData && resData.error) || "Chunk upload failed");
     }
 
-    // 2. Calculate progress immediately after this chunk succeeds
     const uploadedAfter = Math.min(file.size, (i + 1) * chunkSize);
     const percentAfter = Math.min(99, Math.round((uploadedAfter / file.size) * 100));
     const elapsedMsAfter = Date.now() - startTime;
@@ -1612,18 +1725,14 @@ async function renderProjectDetail(main, projectId) {
     '<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:1px;"><polyline points="6 9 12 15 18 9"/></svg>',
     '</button>',
     '<div class="dropdown-menu" id="headerProjectActionsMenu" style="display:none; position:absolute; right:0; top:100%; margin-top:4px; background:var(--surface); border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.18); z-index:1000; min-width:230px; padding:6px; flex-direction:column; gap:2px;">',
+    '<a href="' + window.Clarity.api.base + '/api/projects/' + projectId + '/export/pdf" download class="menu__item" id="exportPdfReportLink" style="display:flex; align-items:center; gap:8px; padding:8px 10px; font-size:12.5px; text-decoration:none; color:var(--ink); border-radius:6px; cursor:pointer;">',
+    '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
+    '<div style="flex:1;"><div style="font-weight:500;">Export PDF Report</div><div style="font-size:10.5px; color:var(--ink-muted);">Complete Executive PDF document</div></div>',
+    '</a>',
     '<button type="button" class="menu__item" id="exportReportBtn" style="width:100%; border:none; background:transparent; cursor:pointer; text-align:left; display:flex; align-items:center; gap:8px; padding:8px 10px; font-size:12.5px; color:var(--ink); border-radius:6px;">',
     '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
     '<span>Export Markdown Report</span>',
     '</button>',
-    '<a href="' + window.Clarity.api.base + '/api/projects/' + projectId + '/export/png" download class="menu__item" id="exportDiagramPngLink" style="display:flex; align-items:center; gap:8px; padding:8px 10px; font-size:12.5px; text-decoration:none; color:var(--ink); border-radius:6px; cursor:pointer;">',
-    '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>',
-    '<div style="flex:1;"><div style="font-weight:500;">Export Diagram (PNG)</div><div style="font-size:10.5px; color:var(--ink-muted);">High-res 1920px image</div></div>',
-    '</a>',
-    '<a href="' + window.Clarity.api.base + '/api/projects/' + projectId + '/export/jpg" download class="menu__item" id="exportDiagramJpgLink" style="display:flex; align-items:center; gap:8px; padding:8px 10px; font-size:12.5px; text-decoration:none; color:var(--ink); border-radius:6px; cursor:pointer;">',
-    '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>',
-    '<div style="flex:1;"><div style="font-weight:500;">Export Diagram (JPG)</div><div style="font-size:10.5px; color:var(--ink-muted);">Universal compressed image</div></div>',
-    '</a>',
     '<button type="button" class="menu__item" id="reAnalyzeBtn" style="width:100%; border:none; background:transparent; cursor:pointer; text-align:left; display:flex; align-items:center; gap:8px; padding:8px 10px; font-size:12.5px; color:var(--ink); border-radius:6px;">',
     '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>',
     '<span>Re-Analyze Project</span>',
@@ -1766,6 +1875,9 @@ async function renderProjectDetail(main, projectId) {
       window.Clarity.modal.close();
       try {
         await window.Clarity.api.del("/api/projects/" + projectId);
+        try {
+          localStorage.removeItem("clarity_proj_chat_" + projectId);
+        } catch (e) {}
         window.Clarity.toast.show("Project deleted successfully", "success");
         window.location.hash = "#/project";
       } catch (err) {
@@ -4176,21 +4288,29 @@ function renderFilesTab(container, treeData, projectId, initialSelectPath, initi
 
   // Upload Handlers
   async function handleUploadFiles(fileList) {
-    const fd = new FormData();
-    fd.append("projectId", projectId);
-    const paths = [];
-
-    for (const f of fileList) {
-      fd.append("files", f, f.name);
-      paths.push(f.webkitRelativePath || f.name);
+    const validFiles = filterProjectFiles(Array.from(fileList || []));
+    if (validFiles.length === 0) {
+      window.Clarity.toast.show("No valid files to upload (system/build files were skipped).", "info");
+      return;
     }
-    fd.append("paths", JSON.stringify(paths));
 
-    window.Clarity.toast.show("Uploading " + fileList.length + " files...", "info");
+    const filteredNote = fileList.length > validFiles.length ? ` (filtered ${fileList.length - validFiles.length} build files)` : '';
+    window.Clarity.toast.show("Uploading " + validFiles.length + " files" + filteredNote + "...", "info");
+
     try {
-      if (window.Clarity?.api?.upload) {
-        await window.Clarity.api.upload("/api/projects/upload-files", fd);
-      } else {
+      const BATCH_SIZE = 75;
+      for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
+        const batch = validFiles.slice(i, i + BATCH_SIZE);
+        const fd = new FormData();
+        fd.append("projectId", projectId);
+        const paths = [];
+
+        for (const f of batch) {
+          fd.append("files", f, f.name);
+          paths.push(f.webkitRelativePath || f.name);
+        }
+        fd.append("paths", JSON.stringify(paths));
+
         const res = await fetch("/api/projects/upload-files", {
           method: "POST",
           body: fd,
@@ -4201,7 +4321,7 @@ function renderFilesTab(container, treeData, projectId, initialSelectPath, initi
         try { parsed = JSON.parse(text); } catch { parsed = { error: text }; }
         if (!res.ok) throw new Error((parsed && parsed.error) || "Upload failed with status " + res.status);
       }
-      window.Clarity.toast.show("Successfully uploaded " + fileList.length + " files!", "success");
+      window.Clarity.toast.show("Successfully uploaded " + validFiles.length + " files!", "success");
       await refreshTree();
     } catch (err) {
       window.Clarity.toast.show("File upload failed: " + (err.message || ""), "danger");
@@ -9331,13 +9451,61 @@ async function renderArtifactsTab(t, e, n, r) {
    ============================================================ */
 function renderProjectChatTab(container, projectId, analysis) {
   let projectChatAttachments = [];
+  const storageKey = 'clarity_proj_chats_' + projectId;
+
+  function getStoredChats() {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveStoredChats(chats) {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(chats));
+    } catch (e) {}
+  }
+
+  let projectChats = getStoredChats();
+  let currentSessionId = projectChats.length > 0 ? projectChats[0].id : ("sess_" + Date.now());
+
+  if (projectChats.length === 0) {
+    projectChats = [{
+      id: currentSessionId,
+      title: "Initial Chat",
+      updatedAt: Date.now(),
+      messages: []
+    }];
+    saveStoredChats(projectChats);
+  }
 
   container.innerHTML = [
     '<div class="project-chat-container">',
+    '<div class="project-chat-history-sidebar" id="projectChatHistorySidebar" style="width:200px; border-right:1px solid var(--line); background:var(--surface-muted); display:flex; flex-direction:column; flex-shrink:0; transition:all 0.2s ease;">',
+    '<div style="padding:10px 12px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:4px;">',
+    '<strong style="font-size:11px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:0.04em;">History</strong>',
+    '<button class="btn btn--xs btn--primary" id="projNewChatBtn" type="button" style="font-size:11px; padding:3px 8px; border-radius:6px;">+ New</button>',
+    '</div>',
+    '<div id="projChatHistoryList" style="flex:1; overflow-y:auto; padding:6px; display:flex; flex-direction:column; gap:4px;"></div>',
+    '<div style="padding:8px 10px; border-top:1px solid var(--line);">',
+    '<button class="btn btn--xs btn--outline" id="projClearHistoryBtn" type="button" style="width:100%; font-size:11px; color:var(--danger, #ef4444); border-color:var(--line);">Clear History</button>',
+    '</div>',
+    '</div>',
+
+    '<div class="project-chat-main" style="flex:1; display:flex; flex-direction:column; min-width:0;">',
     '<div class="project-chat-head">',
+    '<div style="display:flex; align-items:center; gap:8px;">',
+    '<button class="btn btn--icon-sm btn--ghost" id="projToggleHistoryBtn" type="button" title="Toggle Chat History Sidebar" style="display:inline-flex; align-items:center; justify-content:center; cursor:pointer; padding:4px 6px; border-radius:6px; background:var(--surface); border:1px solid var(--line); color:var(--ink);" aria-label="Toggle History"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg></button>',
     '<div><strong style="font-size:14px; color:var(--ink);">AI Assistant — ' + window.Clarity.utils.escapeHtml(analysis.projectName) + '</strong><span class="muted" style="font-size:12px; margin-left:8px;">Grounded exclusively in this codebase</span></div>',
-    '<div style="display:flex; align-items:center; gap:12px;">',
+    '</div>',
+    '<div style="display:flex; align-items:center; gap:10px;">',
     '<span class="tag tag--xs" style="background:var(--accent-soft); color:var(--accent); font-weight:600;">Isolated Context</span>',
+    '<button class="btn btn--xs btn--outline" id="openFullChatBtn" type="button" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:4px 10px; border-radius:6px; background:var(--surface); border:1px solid var(--line-strong); color:var(--ink); cursor:pointer;" title="Open Chat in Full Screen mode">',
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>',
+    '<span id="openFullChatTxt">Open Chat</span>',
+    '</button>',
     '<div style="position:relative;">',
     '<button class="btn btn--icon-sm btn--ghost" id="exportChatMenuBtn" title="More options" aria-label="More options" tabindex="0"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.5"></circle><circle cx="12" cy="6" r="1.5"></circle><circle cx="12" cy="18" r="1.5"></circle></svg></button>',
     '<div id="exportChatDropdown" class="dropdown-menu" style="display:none; position:absolute; right:0; top:calc(100% + 4px); background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md); box-shadow:var(--shadow-float); z-index:100; min-width:140px; padding:4px;">',
@@ -9349,11 +9517,7 @@ function renderProjectChatTab(container, projectId, analysis) {
     '</div>',
     '</div>',
 
-    '<div class="project-chat-feed" id="projectChatFeed">',
-    '<div class="project-chat-msg project-chat-msg--ai">',
-    '<p>Welcome, how can I help you?</p>',
-    '</div>',
-    '</div>',
+    '<div class="project-chat-feed" id="projectChatFeed"></div>',
 
     '<div class="project-chat-attachments" id="projectChatAttachments" style="display:none; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--surface-muted);"></div>',
 
@@ -9366,6 +9530,7 @@ function renderProjectChatTab(container, projectId, analysis) {
     '<input type="text" id="projectChatInput" placeholder="Message AI Assistant for ' + window.Clarity.utils.escapeHtml(analysis.projectName) + '..." autocomplete="off" style="flex:1;">',
     '<button class="btn btn--primary" type="submit">Send</button>',
     '</form>',
+    '</div>',
     '</div>'
   ].join("");
 
@@ -9375,6 +9540,119 @@ function renderProjectChatTab(container, projectId, analysis) {
   const attachBtn = document.getElementById("projectChatAttachBtn");
   const fileInput = document.getElementById("projectChatFileInput");
   const attachmentsCont = document.getElementById("projectChatAttachments");
+  const historyListEl = document.getElementById("projChatHistoryList");
+
+  function saveCurrentChatState() {
+    if (!feed) return;
+    const msgs = [];
+    feed.querySelectorAll(".project-chat-msg").forEach(el => {
+      const raw = el.getAttribute("data-raw") || el.innerText || "";
+      const isUser = el.classList.contains("project-chat-msg--user");
+      msgs.push({
+        role: isUser ? "user" : "assistant",
+        raw: raw,
+        html: el.innerHTML
+      });
+    });
+
+    let activeSess = projectChats.find(c => c.id === currentSessionId);
+    if (!activeSess) {
+      activeSess = { id: currentSessionId, title: "Chat", updatedAt: Date.now(), messages: [] };
+      projectChats.unshift(activeSess);
+    }
+    activeSess.messages = msgs;
+    activeSess.updatedAt = Date.now();
+
+    const firstUserMsg = msgs.find(m => m.role === "user");
+    if (firstUserMsg && (activeSess.title === "Initial Chat" || activeSess.title === "New Chat" || activeSess.title === "Chat")) {
+      activeSess.title = firstUserMsg.raw.slice(0, 22) + (firstUserMsg.raw.length > 22 ? "..." : "");
+    }
+    saveStoredChats(projectChats);
+    renderHistorySidebar();
+  }
+
+  function renderHistorySidebar() {
+    if (!historyListEl) return;
+    historyListEl.innerHTML = projectChats.map(c => {
+      const isActive = c.id === currentSessionId;
+      const title = window.Clarity.utils.escapeHtml(c.title || "Chat");
+      return `
+        <div class="proj-hist-item ${isActive ? 'is-active' : ''}" data-id="${c.id}" style="display:flex; align-items:center; justify-content:space-between; padding:6px 8px; border-radius:6px; font-size:12px; cursor:pointer; background:${isActive ? 'var(--surface-hover, #e2e8f0)' : 'transparent'}; font-weight:${isActive ? '600' : '400'}; color:var(--ink);">
+          <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;">${title}</span>
+          <button type="button" class="proj-hist-del" data-id="${c.id}" title="Delete chat" style="border:none; background:transparent; color:var(--ink-muted); cursor:pointer; padding:2px; font-size:11px; opacity:0.6;">✕</button>
+        </div>
+      `;
+    }).join("");
+
+    historyListEl.querySelectorAll(".proj-hist-item").forEach(item => {
+      item.onclick = (e) => {
+        if (e.target.classList.contains("proj-hist-del")) return;
+        const id = item.getAttribute("data-id");
+        if (id && id !== currentSessionId) {
+          currentSessionId = id;
+          loadSession(id);
+        }
+      };
+    });
+
+    historyListEl.querySelectorAll(".proj-hist-del").forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const delId = btn.getAttribute("data-id");
+        projectChats = projectChats.filter(c => c.id !== delId);
+        if (projectChats.length === 0) {
+          const newId = "sess_" + Date.now();
+          projectChats = [{ id: newId, title: "New Chat", updatedAt: Date.now(), messages: [] }];
+          currentSessionId = newId;
+        } else if (delId === currentSessionId) {
+          currentSessionId = projectChats[0].id;
+        }
+        saveStoredChats(projectChats);
+        loadSession(currentSessionId);
+      };
+    });
+  }
+
+  function loadSession(id) {
+    if (!feed) return;
+    const sess = projectChats.find(c => c.id === id);
+    feed.innerHTML = "";
+    if (sess && sess.messages && sess.messages.length > 0) {
+      sess.messages.forEach(m => {
+        const msgEl = document.createElement("div");
+        msgEl.className = "project-chat-msg " + (m.role === "user" ? "project-chat-msg--user" : "project-chat-msg--ai");
+        if (m.role === "user") {
+          msgEl.style.position = "relative";
+          msgEl.style.paddingRight = "36px";
+        }
+        msgEl.setAttribute("data-raw", m.raw || "");
+        msgEl.innerHTML = m.html || window.Clarity.utils.escapeHtml(m.raw || "");
+        feed.appendChild(msgEl);
+      });
+    } else {
+      feed.innerHTML = '<div class="project-chat-msg project-chat-msg--ai"><p>Welcome, how can I help you?</p></div>';
+    }
+    feed.scrollTop = feed.scrollHeight;
+    renderHistorySidebar();
+  }
+
+  document.getElementById("projNewChatBtn")?.addEventListener("click", () => {
+    const newId = "sess_" + Date.now();
+    projectChats.unshift({ id: newId, title: "New Chat", updatedAt: Date.now(), messages: [] });
+    currentSessionId = newId;
+    saveStoredChats(projectChats);
+    loadSession(newId);
+  });
+
+  document.getElementById("projClearHistoryBtn")?.addEventListener("click", () => {
+    const newId = "sess_" + Date.now();
+    projectChats = [{ id: newId, title: "New Chat", updatedAt: Date.now(), messages: [] }];
+    currentSessionId = newId;
+    saveStoredChats(projectChats);
+    loadSession(newId);
+  });
+
+  loadSession(currentSessionId);
 
   function renderProjectChatAttachments() {
     if (!attachmentsCont) return;
@@ -9719,6 +9997,7 @@ function renderProjectChatTab(container, projectId, analysis) {
       if (window.Clarity && window.Clarity.renderMermaid) {
         window.Clarity.renderMermaid(aiEl);
       }
+      saveCurrentChatState();
     } catch (err) {
       aiEl.innerHTML = '<span style="color:var(--danger)">Error: ' + window.Clarity.utils.escapeHtml(err.message || "Failed to communicate with AI") + '</span>';
     }
@@ -9730,6 +10009,51 @@ function renderProjectChatTab(container, projectId, analysis) {
     input.value = "";
     sendProjectMsg(val);
   });
+
+  const historySidebar = document.getElementById("projectChatHistorySidebar");
+  const closeHistoryBtn = document.getElementById("projCloseHistoryBtn");
+  const toggleHistoryBtn = document.getElementById("projToggleHistoryBtn");
+
+  function toggleHistorySidebar(show) {
+    if (!historySidebar) return;
+    const isVisible = historySidebar.style.display !== "none";
+    const shouldShow = show !== undefined ? show : !isVisible;
+    historySidebar.style.display = shouldShow ? "flex" : "none";
+    if (toggleHistoryBtn) {
+      toggleHistoryBtn.style.background = shouldShow ? "var(--accent-soft)" : "var(--surface)";
+      toggleHistoryBtn.style.color = shouldShow ? "var(--accent)" : "var(--ink)";
+      toggleHistoryBtn.style.borderColor = shouldShow ? "var(--accent)" : "var(--line)";
+    }
+  }
+
+  closeHistoryBtn?.addEventListener("click", () => toggleHistorySidebar(false));
+  toggleHistoryBtn?.addEventListener("click", () => toggleHistorySidebar());
+
+  const openFullChatBtn = document.getElementById("openFullChatBtn");
+  const openFullChatTxt = document.getElementById("openFullChatTxt");
+  const mainChatContainer = container.querySelector(".project-chat-container");
+
+  if (openFullChatBtn && mainChatContainer) {
+    openFullChatBtn.addEventListener("click", () => {
+      const isFull = mainChatContainer.classList.toggle("is-fullscreen");
+      if (openFullChatTxt) {
+        openFullChatTxt.textContent = isFull ? "Exit Full Chat" : "Open Chat";
+      }
+      openFullChatBtn.style.background = isFull ? "var(--accent)" : "var(--surface)";
+      openFullChatBtn.style.color = isFull ? "#ffffff" : "var(--ink)";
+      openFullChatBtn.style.borderColor = isFull ? "var(--accent)" : "var(--line-strong)";
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && mainChatContainer.classList.contains("is-fullscreen")) {
+        mainChatContainer.classList.remove("is-fullscreen");
+        if (openFullChatTxt) openFullChatTxt.textContent = "Open Chat";
+        openFullChatBtn.style.background = "var(--surface)";
+        openFullChatBtn.style.color = "var(--ink)";
+        openFullChatBtn.style.borderColor = "var(--line-strong)";
+      }
+    });
+  }
 
   const exportBtn = document.getElementById("exportChatMenuBtn");
   const exportDropdown = document.getElementById("exportChatDropdown");

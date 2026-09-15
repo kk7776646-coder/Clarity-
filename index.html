@@ -80,40 +80,21 @@
         <div class="sidebar__foot">
           <nav class="nav" id="secondaryNav" aria-label="Secondary" style="margin-bottom: 8px;"></nav>
 
-          <div class="sidebar-profile-container" style="position: relative; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 8px;">
-            <!-- Authenticated user: circular avatar profile dropdown -->
-            <button class="user-chip" id="userMenuBtn" type="button" aria-haspopup="menu" aria-expanded="false" title="Profile & Models" style="width: 100%; display: flex; align-items: center; gap: 10px; background: transparent; border: none; padding: 6px 8px; border-radius: var(--r-md); cursor: pointer; text-align: left; color: var(--ink);">
-              <span class="avatar avatar--sm user-chip__avatar" id="userMenuAvatar" aria-hidden="true" style="border-radius: 50%; width: 32px; height: 32px; min-width: 32px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: var(--primary-faint); border: 1px solid var(--line);">
+          <div class="sidebar-profile-container" style="position: relative; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 8px; display: flex; align-items: center;">
+            <!-- Authenticated user: profile chip dropdown trigger -->
+            <button class="user-chip" id="userMenuBtn" type="button" aria-haspopup="menu" aria-expanded="false" title="Account Details & Sign Out" style="width: 100%; display: flex; align-items: center; gap: 10px; background: transparent; border: 1px solid var(--line); padding: 8px 10px; border-radius: var(--r-md); cursor: pointer; text-align: left; color: var(--ink); transition: background 0.15s ease;">
+              <span class="avatar avatar--sm user-chip__avatar" id="userMenuAvatar" aria-hidden="true" style="border-radius: 50%; width: 34px; height: 34px; min-width: 34px; min-height: 34px; aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; overflow: hidden; background: var(--accent-soft); border: 1px solid var(--line); flex-shrink: 0;">
                 <img id="userMenuAvatarImg" src="" alt="" style="display:none; width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" onerror="if(this.parentElement){this.parentElement.classList.add('avatar--fallback');const ini=this.parentElement.querySelector('.avatar__initials');if(ini)ini.style.display='flex';}" />
-                <span class="avatar__initials" id="userMenuInitial" style="font-weight: 600; font-size: 13px; color: var(--primary);"></span>
+                <span class="avatar__initials" id="userMenuInitial" style="font-weight: 700; font-size: 13px; color: var(--accent); display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border-radius: 50%;"></span>
               </span>
               <div class="sidebar-profile-text" style="display: flex; flex-direction: column; min-width: 0; flex: 1;">
                 <span id="sidebarProfileName" style="font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink);">Profile</span>
-                <span id="sidebarProfileEmail" style="font-size: 11px; color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">User Settings</span>
+                <span id="sidebarProfileEmail" style="font-size: 11px; color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">User Email</span>
               </div>
             </button>
 
-            <div class="dropdown-menu user-menu" id="userMenu" role="menu" hidden style="position: absolute; bottom: calc(100% + 8px); left: 0; right: auto; width: 240px; min-width: 240px; max-width: 240px; z-index: 10000; box-shadow: var(--shadow-float); border: 1px solid var(--line); background: var(--surface);">
-              <div class="user-menu__head">
-                <div class="user-menu__profile">
-                  <span class="avatar avatar--md user-menu__avatar" id="userMenuAvatarDropdown" aria-hidden="true">
-                    <img id="userMenuAvatarImgDropdown" src="" alt="" style="display:none;" onerror="if(this.parentElement){this.parentElement.classList.add('avatar--fallback');const ini=this.parentElement.querySelector('.avatar__initials');if(ini)ini.style.display='flex';}" />
-                    <span class="avatar__initials" id="userMenuInitialDropdown"></span>
-                  </span>
-                  <div class="user-menu__info">
-                    <span class="user-menu__name" id="userMenuName"></span>
-                    <span class="user-menu__mail" id="userMenuEmailFull"></span>
-                  </div>
-                </div>
-              </div>
-              <div class="user-menu__sep" role="separator"></div>
-              <button class="menu__item" type="button" role="menuitem" data-user-action="settings">
-                <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-                <span>Settings</span>
-              </button>
-              <div class="menu__sep" role="separator"></div>
-
-              <button class="menu__item menu__item--danger" type="button" role="menuitem" data-user-action="logout">
+            <div class="dropdown-menu user-menu" id="userMenu" role="menu" hidden style="position: absolute; bottom: calc(100% + 8px); left: 0; right: auto; width: 160px; min-width: 160px; max-width: 160px; z-index: 10000; box-shadow: var(--shadow-float); border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 4px;">
+              <button class="menu__item menu__item--danger" type="button" role="menuitem" data-user-action="logout" style="width: 100%; border: none; background: transparent; cursor: pointer; text-align: left; display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 13px; color: var(--danger); border-radius: 6px;">
                 <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
                 <span>Sign out</span>
               </button>

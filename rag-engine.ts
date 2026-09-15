@@ -649,12 +649,13 @@ export interface SearchHit {
 export function searchProjectRag(
   projectId: string,
   query: string,
-  options?: { topK?: number; threshold?: number; strategy?: string }
+  options?: { topK?: number; threshold?: number; strategy?: string; tokenBudget?: number }
 ): {
   query: string;
   results: SearchHit[];
   totalChunksSearched: number;
   timeMs: number;
+  tokensUsed?: number;
 } {
   const startTime = Date.now();
   const qTrim = (query || "").trim();
@@ -663,8 +664,9 @@ export function searchProjectRag(
   }
 
   const settings = getProjectRagSettings(projectId);
-  const topK = options?.topK || settings.retrievalTopK || 5;
-  const threshold = options?.threshold !== undefined ? options.threshold : settings.similarityThreshold || 0.70;
+  const topK = options?.topK || settings.retrievalTopK || 10;
+  const threshold = options?.threshold !== undefined ? options.threshold : settings.similarityThreshold || 0.65;
+  const tokenBudget = options?.tokenBudget;
 
   const chunks = listKnowledgeChunks(projectId);
   if (!chunks || chunks.length === 0) {
@@ -735,13 +737,24 @@ export function searchProjectRag(
   // Sort descending by score
   scoredList.sort((a, b) => b.score - a.score);
 
-  // Take topK
-  const hits: SearchHit[] = scoredList.slice(0, topK).map(({ chunk, score, reason }) => {
+  // Take hits within topK and tokenBudget (if provided)
+  const hits: SearchHit[] = [];
+  let currentEstimatedTokens = 0;
+
+  for (const { chunk, score, reason } of scoredList) {
+    if (hits.length >= topK) break;
+
+    // Approximate token estimation: ~3.8 chars per token + metadata overhead
+    const chunkTokens = Math.ceil(chunk.content.length / 3.8) + 10;
+    if (tokenBudget && tokenBudget > 0 && hits.length > 0 && currentEstimatedTokens + chunkTokens > tokenBudget) {
+      continue; // Skip chunk if it exceeds budget, but check smaller subsequent high-scoring chunks
+    }
+
     const ext = path.extname(chunk.file_id);
     const lines = chunk.content.split("\n");
     const snippet = lines.slice(0, 5).join("\n") + (lines.length > 5 ? "\n..." : "");
 
-    return {
+    hits.push({
       id: chunk.id,
       file: chunk.file_id,
       filename: path.basename(chunk.file_id),
@@ -753,14 +766,17 @@ export function searchProjectRag(
       reason,
       content: chunk.content,
       snippet,
-    };
-  });
+    });
+
+    currentEstimatedTokens += chunkTokens;
+  }
 
   return {
     query: qTrim,
     results: hits,
     totalChunksSearched: chunks.length,
     timeMs: Date.now() - startTime,
+    tokensUsed: currentEstimatedTokens,
   };
 }
 

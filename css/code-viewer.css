@@ -652,9 +652,41 @@ span.token,
 }
 
 /* Word Wrap Support */
+.code-workspace.is-wrapped .code-workspace__code-pane {
+  overflow-x: hidden !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.code-workspace.is-wrapped .code-line {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
 .code-workspace.is-wrapped .code-line__code {
   white-space: pre-wrap !important;
-  word-break: break-all !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  padding-right: 14px;
+}
+
+.code-workspace:not(.is-wrapped) .code-workspace__code-pane {
+  overflow-x: auto !important;
+}
+
+.code-workspace:not(.is-wrapped) .code-line {
+  width: max-content !important;
+  min-width: 100% !important;
+}
+
+.code-workspace:not(.is-wrapped) .code-line__code {
+  white-space: pre !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
 }
 
 /* Resizing handles for Code Workspace */

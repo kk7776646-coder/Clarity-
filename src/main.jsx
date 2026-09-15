@@ -23,6 +23,7 @@ import "../js/lib/store.js";
 import "../js/lib/markdown.js";
 import "../js/lib/highlighter.js";
 import "../js/data/nav.js";
+import "../js/data/providers.js";
 import "../js/services/api.js";
 import "../js/services/settings.js";
 import "../js/services/theme.js";

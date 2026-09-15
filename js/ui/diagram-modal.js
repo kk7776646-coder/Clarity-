@@ -253,6 +253,65 @@ window.Clarity = window.Clarity || {};
       }
     });
 
+    // Touch pan & pinch-to-zoom interactions
+    let initialTouchPinchDist = null;
+    let initialTouchZoom = 1;
+    let isTouchPanning = false;
+
+    stage.addEventListener("touchstart", (e) => {
+      if (e.target.closest("button") || e.target.closest(".diagram-modal-header")) return;
+      if (e.touches.length === 1) {
+        isTouchPanning = true;
+        startX = e.touches[0].clientX - panX;
+        startY = e.touches[0].clientY - panY;
+      } else if (e.touches.length === 2) {
+        isTouchPanning = false;
+        initialTouchZoom = zoom;
+        initialTouchPinchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+      }
+    }, { passive: false });
+
+    stage.addEventListener("touchmove", (e) => {
+      if (e.touches.length === 1 && isTouchPanning) {
+        e.preventDefault();
+        panX = e.touches[0].clientX - startX;
+        panY = e.touches[0].clientY - startY;
+        updateTransform();
+      } else if (e.touches.length === 2 && initialTouchPinchDist) {
+        e.preventDefault();
+        const dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        if (initialTouchPinchDist > 0) {
+          const factor = dist / initialTouchPinchDist;
+          const newZoom = Math.min(Math.max(initialTouchZoom * factor, 0.2), 5.0);
+          zoom = Number(newZoom.toFixed(2));
+          updateTransform();
+        }
+      }
+    }, { passive: false });
+
+    stage.addEventListener("touchend", (e) => {
+      if (e.touches.length === 1) {
+        isTouchPanning = true;
+        startX = e.touches[0].clientX - panX;
+        startY = e.touches[0].clientY - panY;
+        initialTouchPinchDist = null;
+      } else if (e.touches.length === 0) {
+        isTouchPanning = false;
+        initialTouchPinchDist = null;
+      }
+    });
+
+    stage.addEventListener("touchcancel", () => {
+      isTouchPanning = false;
+      initialTouchPinchDist = null;
+    });
+
     // Wheel zoom
     stage.addEventListener("wheel", (e) => {
       e.preventDefault();

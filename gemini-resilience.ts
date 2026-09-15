@@ -100,22 +100,15 @@ export function isRetryableError(err: any): boolean {
 export function getGeminiModelCascade(primaryModel?: string): string[] {
   const norm = (primaryModel || "").trim().toLowerCase();
 
-  const defaults = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-flash", "gemini-pro", "gemini-3.6-flash"];
+  const defaults = ["gemini-3-flash-preview", "gemini-3.7-flash", "gemini-2.5-flash", "gemini-3.1-pro-preview", "gemini-2.5-pro"];
 
-  if (!norm || norm.includes("flash") || norm.includes("pro") || norm.includes("gemini")) {
-    const cascade = norm && !norm.includes("3.6") && !norm.includes("3.8") ? [norm] : [];
-    for (const d of defaults) {
-      if (!cascade.includes(d)) {
-        cascade.push(d);
-      }
-    }
-    return cascade;
+  const cascade: string[] = [];
+  if (norm) {
+    cascade.push(norm);
   }
-
-  const cascade = [primaryModel!];
-  for (const m of defaults) {
-    if (m !== primaryModel && !cascade.includes(m)) {
-      cascade.push(m);
+  for (const d of defaults) {
+    if (!cascade.includes(d)) {
+      cascade.push(d);
     }
   }
   return cascade;
@@ -157,7 +150,7 @@ export async function streamGeminiWithResilience(options: GeminiStreamOptions): 
     systemInstruction,
     config = {},
     onChunk,
-    initialTimeoutMs = 6500,
+    initialTimeoutMs = 25000,
   } = options;
   const modelsToTry = getGeminiModelCascade(modelName);
   let lastError: any = null;
@@ -225,6 +218,12 @@ export async function streamGeminiWithResilience(options: GeminiStreamOptions): 
         const hasMoreModels = mIdx < modelsToTry.length - 1;
         const errStr = String(err?.message || err).toLowerCase();
         const isRateLimit = errStr.includes("429") || errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("rate limit");
+        const isNotFoundOrDeprecated = errStr.includes("404") || errStr.includes("not found") || errStr.includes("no longer available") || errStr.includes("deprecated");
+
+        if (isNotFoundOrDeprecated && hasMoreModels) {
+          console.warn(`[Gemini Resilience] Model '${candidateModel}' is unavailable/deprecated. Fast-failing over to '${modelsToTry[mIdx + 1]}'`);
+          break; // Fast failover to next model without retrying
+        }
 
         if (retryable) {
           console.warn(
@@ -334,6 +333,12 @@ export async function generateGeminiWithResilience(
         const hasMoreModels = mIdx < modelsToTry.length - 1;
         const errStr = String(err?.message || err).toLowerCase();
         const isRateLimit = errStr.includes("429") || errStr.includes("quota") || errStr.includes("resource_exhausted") || errStr.includes("rate limit");
+        const isNotFoundOrDeprecated = errStr.includes("404") || errStr.includes("not found") || errStr.includes("no longer available") || errStr.includes("deprecated");
+
+        if (isNotFoundOrDeprecated && hasMoreModels) {
+          console.warn(`[Gemini Resilience] Model '${candidateModel}' is unavailable/deprecated. Fast-failing over to '${modelsToTry[mIdx + 1]}'`);
+          break; // Fast failover to next model without retrying
+        }
 
         if (retryable) {
           console.warn(

@@ -34,7 +34,7 @@ window.Clarity.composer = {
             '<input type="file" id="composerFileInput" hidden multiple accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md,.csv,.json,.xml,.yaml,.yml,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.rs,.php,.rb,.sql,.html,.css,.scss,.sh,.zip,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tiff">',
           '</div>',
           '<div class="composer-card__input-wrap">',
-            '<textarea id="composerInput" rows="1" placeholder="Ask Clarity about your project..." aria-label="Message input"></textarea>',
+            '<textarea id="composerInput" rows="1" placeholder="Ask Clarity" aria-label="Message input"></textarea>',
           '</div>',
           '<div class="composer-card__footer-right">',
             '<button class="composer-btn composer-btn--send" id="composerSend" type="button" title="Send message" aria-label="Send message" disabled>',
@@ -67,7 +67,7 @@ window.Clarity.composer = {
       if (projName) {
         input.placeholder = "Ask anything about " + projName + "...";
       } else {
-        input.placeholder = "Ask Clarity about your project...";
+        input.placeholder = "Ask Clarity";
       }
     }
 
@@ -76,22 +76,23 @@ window.Clarity.composer = {
     const sendBtn = container.querySelector("#composerSend");
     const card = container.querySelector("#composerCard");
 
-    // Auto-grow textarea smoothly
+    // Auto-grow textarea smoothly based on typed content
     const autoResize = () => {
       if (!input) return;
-      input.style.height = "22px";
+      input.style.height = "auto";
       const scrollH = input.scrollHeight;
-      const targetH = Math.min(Math.max(scrollH, 22), 180);
+      const targetH = Math.min(Math.max(scrollH, 32), 220);
       input.style.height = targetH + "px";
-      input.style.overflowY = scrollH > 180 ? "auto" : "hidden";
+      input.style.overflowY = scrollH > 220 ? "auto" : "hidden";
     };
+    this.autoResize = autoResize;
 
     const updateSendState = () => {
       this._syncSendButton();
     };
 
     if (input) {
-      autoResize();
+      setTimeout(autoResize, 0);
       input.addEventListener("input", () => {
         autoResize();
         updateSendState();
@@ -106,7 +107,12 @@ window.Clarity.composer = {
         }
       });
 
+      input.addEventListener("keyup", autoResize);
+      input.addEventListener("change", autoResize);
+      input.addEventListener("paste", () => setTimeout(autoResize, 10));
+
       input.addEventListener("focus", () => {
+        autoResize();
         if (window.Clarity && window.Clarity.chat && window.Clarity.chat.setRobotState && !window.Clarity.composer._isStreaming) {
           window.Clarity.chat.setRobotState("attention");
           setTimeout(() => {

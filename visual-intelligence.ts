@@ -1,6 +1,13 @@
 import { Resvg } from "@resvg/resvg-js";
 import sharp from "sharp";
 import { ProjectAnalysis, ExtractedFile } from "./project-analyzer";
+import { 
+  renderProfessionalArchitectureSvg, 
+  renderProfessionalWorkflowSvg, 
+  renderProfessionalRagArchitectureSvg, 
+  renderProfessionalFileArchitectureSvg 
+} from "./architecture-diagram-renderer";
+import { resolveArchitectureIcon } from "./architecture-icon-registry";
 
 export interface DetectedScreenshot {
   id: string;
@@ -20,42 +27,84 @@ export interface ProjectVisualIntelligence {
   techStackPng: Buffer;
 }
 
-/**
- * Render any SVG string into a high-res PNG Buffer using resvg WASM
- */
-export function renderSvgToPngBuffer(svgString: string, width = 1280): Buffer {
-  try {
-    const resvg = new Resvg(svgString, {
-      fitTo: {
-        mode: "width",
-        value: width,
-      },
-    });
-    const pngData = resvg.render();
-    return pngData.asPng();
-  } catch (err) {
-    console.error("resvg rendering error:", err);
-    return Buffer.from("");
-  }
+export function sanitizeSvgForXml(svgString: string): string {
+  if (!svgString) return "";
+  // Escape raw unescaped ampersands in XML text nodes so SVG parsers don't throw xmlParseEntityRef errors
+  let clean = svgString.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#[0-9]+;|#x[0-9a-fA-F]+;)/g, "&amp;");
+
+  // Resolve custom CSS variables to explicit hex colors for SVG renderers
+  clean = clean
+    .replace(/var\(--[a-zA-Z0-9-]+,\s*(#?[a-fA-F0-9]+)\)/g, "$1")
+    .replace(/var\(--surface-muted\)/g, "#f8fafc")
+    .replace(/var\(--surface\)/g, "#ffffff")
+    .replace(/var\(--ink-muted\)/g, "#64748b")
+    .replace(/var\(--ink\)/g, "#0f172a")
+    .replace(/var\(--accent\)/g, "#2563eb")
+    .replace(/var\(--line\)/g, "#e2e8f0");
+
+  return clean;
 }
 
 /**
- * Render any SVG string into a high-quality JPG Buffer using resvg + sharp
+ * Render any SVG string into a high-res PNG Buffer using sharp / resvg
+ */
+export async function renderSvgToPngBuffer(svgString: string, width = 1920): Promise<Buffer> {
+  const cleanSvg = sanitizeSvgForXml(svgString);
+
+  try {
+    const buf = await sharp(Buffer.from(cleanSvg))
+      .resize(width)
+      .png()
+      .toBuffer();
+    if (buf && buf.length > 0) return buf;
+  } catch (err) {
+    console.error("sharp PNG render error, trying resvg fallback:", err);
+  }
+
+  try {
+    const resvg = new Resvg(cleanSvg, {
+      fitTo: { mode: "width", value: width },
+    });
+    const pngData = resvg.render();
+    const buf = pngData.asPng();
+    if (buf && buf.length > 0) return buf;
+  } catch (err) {
+    console.error("resvg rendering error:", err);
+  }
+
+  return Buffer.from("");
+}
+
+/**
+ * Render any SVG string into a high-quality JPG Buffer using sharp
  */
 export async function renderSvgToJpgBuffer(svgString: string, width = 1920, quality = 92): Promise<Buffer> {
+  const cleanSvg = sanitizeSvgForXml(svgString);
+
   try {
-    const pngBuffer = renderSvgToPngBuffer(svgString, width);
-    if (!pngBuffer || pngBuffer.length === 0) {
-      return Buffer.from("");
-    }
-    return await sharp(pngBuffer)
+    const buf = await sharp(Buffer.from(cleanSvg))
+      .resize(width)
       .flatten({ background: '#ffffff' })
       .jpeg({ quality, chromaSubsampling: '4:4:4' })
       .toBuffer();
+    if (buf && buf.length > 0) return buf;
   } catch (err) {
-    console.error("JPG rendering error:", err);
-    return Buffer.from("");
+    console.error("sharp JPG render error:", err);
   }
+
+  try {
+    const pngBuffer = await renderSvgToPngBuffer(svgString, width);
+    if (pngBuffer && pngBuffer.length > 0) {
+      return await sharp(pngBuffer)
+        .flatten({ background: '#ffffff' })
+        .jpeg({ quality, chromaSubsampling: '4:4:4' })
+        .toBuffer();
+    }
+  } catch (err) {
+    console.error("JPG fallback rendering error:", err);
+  }
+
+  return Buffer.from("");
 }
 
 /**
@@ -313,426 +362,28 @@ function getNodeColors(type: string): { bg: string; stroke: string; text: string
  * Generate Real Programmatic System Architecture Diagram in SVG
  */
 export function generateArchitectureDiagramSvg(analysis: ProjectAnalysis): string {
-  const title = escapeSvgXml(analysis.projectName || "System Architecture");
-  
-  // Extract real nodes and edges from project evidence
-  let nodes = analysis.architecture?.nodes || [];
-  let edges = analysis.architecture?.edges || [];
-
-  // Robust fallbacks
-  if (nodes.length === 0) {
-    nodes = analysis.architecture?.fileNodes || [];
-    edges = analysis.architecture?.fileEdges || [];
-  }
-  if (nodes.length === 0) {
-    // Dynamically build nodes if absolutely empty to keep the diagram real
-    nodes = [
-      { id: "client_node", label: analysis.projectName + " Client", type: "frontend", description: "Frontend Entrypoint", files: [] }
-    ];
-    if (analysis.apiIntelligence?.endpoints && analysis.apiIntelligence.endpoints.length > 0) {
-      nodes.push({ id: "api_node", label: "REST APIs", type: "route", description: "Project API Layer", files: [] });
-      edges.push({ id: "edge_1", source: "client_node", target: "api_node", type: "HTTP_REQUEST", label: "Calls", status: "VERIFIED", evidence: [] });
-    }
-    if (analysis.databaseIntelligence?.detected) {
-      nodes.push({ id: "db_node", label: "Database Engine", type: "database", description: "Durable Data Store", files: [] });
-      const srcId = nodes.find(n => n.id === "api_node") ? "api_node" : "client_node";
-      edges.push({ id: "edge_2", source: srcId, target: "db_node", type: "QUERIES", label: "Queries", status: "VERIFIED", evidence: [] });
-    }
-  }
-
-  // Remove duplicate nodes to prevent overlapping layout
-  const seenIds = new Set<string>();
-  const uniqueNodes = nodes.filter(n => {
-    if (seenIds.has(n.id)) return false;
-    seenIds.add(n.id);
-    return true;
-  });
-
-  // Assign layers to nodes
-  const layerMap: Record<number, typeof uniqueNodes> = {
-    0: [], // User
-    1: [], // Frontend
-    2: [], // APIs
-    3: [], // Processing / Backend
-    4: [], // DB / Storage
-    5: []  // External APIs
-  };
-
-  uniqueNodes.forEach(node => {
-    const t = (node.type || "").toLowerCase();
-    const lbl = (node.label || "").toLowerCase();
-    
-    let layer = 3; // Default Core Processing / Backend
-    if (t === "user") {
-      layer = 0;
-    } else if (["frontend", "page", "component", "ui"].includes(t) || lbl.endsWith(".html") || lbl.endsWith(".css") || lbl.endsWith(".tsx") || lbl.endsWith(".jsx")) {
-      layer = 1;
-    } else if (["route", "api"].includes(t)) {
-      layer = 2;
-    } else if (["database", "table", "storage"].includes(t)) {
-      layer = 4;
-    } else if (["external", "cloud"].includes(t)) {
-      layer = 5;
-    }
-    layerMap[layer].push(node);
-  });
-
-  // Keep only active layers to eliminate large empty white gaps
-  const activeLayers = Object.entries(layerMap)
-    .map(([key, nodeList]) => ({ layerId: Number(key), nodeList }))
-    .filter(al => al.nodeList.length > 0);
-
-  const containerSpacing = 210;
-  const diagramHeight = 120 + activeLayers.length * containerSpacing;
-  const diagramWidth = 1200;
-
-  // Layer Title Definitions
-  const layerTitles: Record<number, string> = {
-    0: "USER &amp; CLIENT PORTAL",
-    1: "FRONTEND &amp; PRESENTER LAYER",
-    2: "API ROUTERS &amp; MIDDLEWARE",
-    3: "CORE SERVICES &amp; PROCESS ENGINE",
-    4: "DATA INDEX &amp; STORAGE SERVICES",
-    5: "EXTERNAL CLOUD GATEWAYS"
-  };
-
-  // Node position map
-  const positions: Record<string, { x: number; y: number }> = {};
-
-  let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${diagramWidth} ${diagramHeight}" width="${diagramWidth}" height="${diagramHeight}">
-    <defs>
-      <filter id="shadowFilter" x="-10%" y="-10%" width="130%" height="130%">
-        <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0F172A" flood-opacity="0.06" />
-      </filter>
-      <filter id="badgeShadow" x="-10%" y="-10%" width="130%" height="130%">
-        <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0F172A" flood-opacity="0.08" />
-      </filter>
-      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-        <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#64748B" />
-      </marker>
-      <linearGradient id="userGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#FFFFFF"/>
-        <stop offset="100%" stop-color="#EFF6FF"/>
-      </linearGradient>
-      <linearGradient id="frontendGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#FFFFFF"/>
-        <stop offset="100%" stop-color="#ECFDF5"/>
-      </linearGradient>
-      <linearGradient id="apiGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#FFFFFF"/>
-        <stop offset="100%" stop-color="#EEF2FF"/>
-      </linearGradient>
-      <linearGradient id="backendGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#FFFFFF"/>
-        <stop offset="100%" stop-color="#F5F3FF"/>
-      </linearGradient>
-      <linearGradient id="dbGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#FFFFFF"/>
-        <stop offset="100%" stop-color="#FEF3C7"/>
-      </linearGradient>
-      <linearGradient id="authGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#FFFFFF"/>
-        <stop offset="100%" stop-color="#FDF2F8"/>
-      </linearGradient>
-      <linearGradient id="externalGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#FFFFFF"/>
-        <stop offset="100%" stop-color="#F0F9FF"/>
-      </linearGradient>
-      <linearGradient id="ragGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#FFFFFF"/>
-        <stop offset="100%" stop-color="#ECFEFF"/>
-      </linearGradient>
-      <linearGradient id="defaultGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#FFFFFF"/>
-        <stop offset="100%" stop-color="#F8FAFC"/>
-      </linearGradient>
-    </defs>
-
-    <!-- Canvas Background -->
-    <rect width="${diagramWidth}" height="${diagramHeight}" fill="#FFFFFF" />
-    <rect x="20" y="20" width="${diagramWidth - 40}" height="${diagramHeight - 40}" rx="16" fill="none" stroke="#F1F5F9" stroke-width="1.5" />
-
-    <!-- Top Infographic Header -->
-    <g transform="translate(45, 55)">
-      <text font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="800" fill="#0F172A">${title}</text>
-      <text x="0" y="22" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="700" letter-spacing="0.08em" fill="#64748B">REAL-TIME ARCHITECTURE &amp; ARTIFACT TRACE</text>
-    </g>
-  `;
-
-  // Draw Layer Boxes and Calculate Positions
-  activeLayers.forEach((layerData, activeIdx) => {
-    const title = layerTitles[layerData.layerId] || "SYSTEM CONTAINER";
-    const y = 110 + activeIdx * containerSpacing;
-    const K = layerData.nodeList.length;
-
-    // Outer Layer Container (Grouped Subsystems)
-    svgContent += `
-      <!-- Layer Container ${activeIdx} -->
-      <rect x="40" y="${y - 15}" width="${diagramWidth - 80}" height="140" rx="14" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1.25" stroke-dasharray="4 4" />
-      <text x="60" y="${y + 10}" font-family="system-ui, -apple-system, sans-serif" font-size="10.5" font-weight="800" letter-spacing="0.06em" fill="#94A3B8">${title}</text>
-    `;
-
-    // Position each node horizontally centered
-    const cardWidth = 220;
-    const availableWidth = diagramWidth - 140; // Spacing left/right
-    layerData.nodeList.forEach((node, i) => {
-      let x = diagramWidth / 2 - cardWidth / 2;
-      if (K > 1) {
-        x = 70 + i * (availableWidth - cardWidth) / (K - 1);
-      }
-      positions[node.id] = { x, y: y + 25 };
-    });
-  });
-
-  // Filter edges to only connect active nodes
-  const activeEdges = edges.filter(e => positions[e.source] && positions[e.target]);
-
-  // Draw connection paths
-  activeEdges.forEach(edge => {
-    const pSrc = positions[edge.source];
-    const pTgt = positions[edge.target];
-
-    const x1 = pSrc.x + 110;
-    const y1 = pSrc.y + 74;
-    const x2 = pTgt.x + 110;
-    const y2 = pTgt.y;
-
-    const cpY1 = y1 + (y2 - y1) * 0.4;
-    const cpY2 = y2 - (y2 - y1) * 0.4;
-    const pathData = `M ${x1} ${y1} C ${x1} ${cpY1}, ${x2} ${cpY2}, ${x2} ${y2}`;
-
-    svgContent += `
-      <!-- Connection ${edge.source} -> ${edge.target} -->
-      <path d="${pathData}" fill="none" stroke="#94A3B8" stroke-width="1.5" marker-end="url(#arrow)" />
-    `;
-
-    // Render connection label badge at midpoint
-    if (edge.label && edge.label.trim().length > 0) {
-      const midX = (x1 + x2) / 2;
-      const midY = (y1 + y2) / 2;
-      const cleanLabel = escapeSvgXml(edge.label);
-      const labelLen = cleanLabel.length * 7 + 16;
-
-      svgContent += `
-        <g transform="translate(${midX - labelLen / 2}, ${midY - 11})" filter="url(#badgeShadow)">
-          <rect width="${labelLen}" height="22" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" />
-          <text x="${labelLen / 2}" y="15" font-family="system-ui, -apple-system, sans-serif" font-size="9.5" font-weight="700" fill="#334155" text-anchor="middle">${cleanLabel}</text>
-        </g>
-      `;
-    }
-  });
-
-  // Draw node cards on top of lines
-  activeLayers.forEach((layerData) => {
-    layerData.nodeList.forEach((node) => {
-      const pos = positions[node.id];
-      const colors = getNodeColors(node.type);
-      const safeLabel = escapeSvgXml(node.label || "Module");
-      const safeDesc = escapeSvgXml(node.description || "System Component");
-      const icon = getTechIconSvg(node.type, node.technology || "", node.label || "");
-
-      svgContent += `
-        <g transform="translate(${pos.x}, ${pos.y})" filter="url(#shadowFilter)">
-          <!-- Node Card Background -->
-          <rect width="220" height="74" rx="12" fill="${colors.bg}" stroke="${colors.stroke}" stroke-width="1.5" />
-          
-          <!-- Colored left pill identifier instead of side-tab borders -->
-          <rect x="0" y="16" width="4" height="42" rx="2" fill="${colors.stroke}" />
-
-          <!-- Icon Wrapper Background -->
-          <rect x="14" y="15" width="44" height="44" rx="10" fill="${colors.iconBg}" stroke="${colors.stroke}" stroke-width="0.75" stroke-opacity="0.3" />
-          
-          <!-- Technology Icon -->
-          <g transform="translate(14, 15)">
-            ${icon}
-          </g>
-
-          <!-- Typography Details -->
-          <text x="68" y="32" font-family="system-ui, -apple-system, sans-serif" font-size="12.5" font-weight="700" fill="${colors.text}">${safeLabel}</text>
-          <text x="68" y="50" font-family="system-ui, -apple-system, sans-serif" font-size="10.5" font-weight="500" fill="#64748B">${safeDesc}</text>
-        </g>
-      `;
-    });
-  });
-
-  svgContent += `</svg>`;
-  return svgContent;
+  return renderProfessionalArchitectureSvg(analysis);
 }
 
 /**
  * Generate Real Programmatic Workflow Diagram in SVG
  */
 export function generateWorkflowDiagramSvg(analysis: ProjectAnalysis): string {
-  const steps = analysis.dataFlow?.steps || [];
-  const title = escapeSvgXml(analysis.projectName || "Workflow Sequence");
-
-  if (steps.length === 0) {
-    // Dynamic fallback representing standard web/API/service flow
-    return generateArchitectureDiagramSvg(analysis);
-  }
-
-  const diagramWidth = 1200;
-  const cardHeight = 110;
-  const cardSpacing = 160;
-  const diagramHeight = 150 + steps.length * cardSpacing;
-
-  let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${diagramWidth} ${diagramHeight}" width="${diagramWidth}" height="${diagramHeight}">
-    <defs>
-      <filter id="shadowFilter" x="-10%" y="-10%" width="130%" height="130%">
-        <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0F172A" flood-opacity="0.06" />
-      </filter>
-      <marker id="wfArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-        <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#3B82F6" />
-      </marker>
-    </defs>
-
-    <!-- Canvas Background -->
-    <rect width="${diagramWidth}" height="${diagramHeight}" fill="#FFFFFF" />
-    <rect x="20" y="20" width="${diagramWidth - 40}" height="${diagramHeight - 40}" rx="16" fill="none" stroke="#F1F5F9" stroke-width="1.5" />
-
-    <!-- Top Infographic Header -->
-    <g transform="translate(45, 55)">
-      <text font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="800" fill="#0F172A">${title}</text>
-      <text x="0" y="22" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="700" letter-spacing="0.08em" fill="#64748B">STEP-BY-STEP SYSTEM EXECUTION PIPELINE</text>
-    </g>
-  `;
-
-  // Draw Sequence Stages Winding Path
-  steps.forEach((step, idx) => {
-    const y = 140 + idx * cardSpacing;
-    const isLeft = true; // Horizontal card placement
-    const cardX = 120;
-    const cardWidth = 960;
-
-    const safeTitle = escapeSvgXml(step.title || `Pipeline Stage ${step.step}`);
-    const safeDesc = escapeSvgXml(step.description || "System data processing step.");
-    const safeSource = escapeSvgXml(step.source || "Client");
-    const safeTarget = escapeSvgXml(step.target || "Server");
-
-    // Line connect downward
-    if (idx < steps.length - 1) {
-      const startX = cardX + cardWidth / 2;
-      const startY = y + cardHeight;
-      const endY = y + cardSpacing;
-      svgContent += `
-        <line x1="${startX}" y1="${startY}" x2="${startX}" y2="${endY}" stroke="#3B82F6" stroke-width="2" stroke-dasharray="4 4" marker-end="url(#wfArrow)" />
-      `;
-    }
-
-    svgContent += `
-      <!-- Workflow Card ${idx + 1} -->
-      <g transform="translate(${cardX}, ${y})" filter="url(#shadowFilter)">
-        <rect width="${cardWidth}" height="${cardHeight}" rx="14" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" />
-        
-        <!-- Step Number Bubble -->
-        <rect x="18" y="16" width="36" height="36" rx="8" fill="#EFF6FF" stroke="#3B82F6" stroke-width="1.5" />
-        <text x="36" y="38" font-family="system-ui, sans-serif" font-size="14" font-weight="800" fill="#1D4ED8" text-anchor="middle">${step.step}</text>
-
-        <!-- Step Details -->
-        <text x="72" y="36" font-family="system-ui, sans-serif" font-size="15" font-weight="800" fill="#0F172A">${safeTitle}</text>
-        <text x="72" y="58" font-family="system-ui, sans-serif" font-size="12" fill="#475569">${safeDesc}</text>
-        
-        <!-- Metadata Pill Boxes (Source -> Target) -->
-        <g transform="translate(72, 74)">
-          <!-- Source -->
-          <rect width="110" height="20" rx="6" fill="#F1F5F9" />
-          <text x="55" y="14" font-family="system-ui, sans-serif" font-size="9.5" font-weight="700" fill="#475569" text-anchor="middle">Src: ${safeSource}</text>
-
-          <!-- Arrow -->
-          <text x="125" y="14" font-family="system-ui, sans-serif" font-size="11" font-weight="900" fill="#3B82F6">➔</text>
-
-          <!-- Target -->
-          <g transform="translate(150, 0)">
-            <rect width="110" height="20" rx="6" fill="#EFF6FF" />
-            <text x="55" y="14" font-family="system-ui, sans-serif" font-size="9.5" font-weight="700" fill="#2563EB" text-anchor="middle">Tgt: ${safeTarget}</text>
-          </g>
-        </g>
-      </g>
-    `;
-  });
-
-  svgContent += `</svg>`;
-  return svgContent;
+  return renderProfessionalWorkflowSvg(analysis);
 }
 
 /**
  * Generate Real Programmatic RAG Pipeline Visual in SVG
  */
 export function generateRagPipelineDiagramSvg(analysis: ProjectAnalysis): string {
-  // Build a beautiful diagram representing the AST analysis, code digestion, index, and report compilation
-  const title = escapeSvgXml(analysis.projectName || "Codebase Knowledge Indexer");
+  return renderProfessionalRagArchitectureSvg(analysis);
+}
 
-  const stages = [
-    { num: 1, title: "Static Ingestion", desc: "Collects real project files, configurations and repository source structures.", badge: "Repository" },
-    { num: 2, title: "AST Structural Parsing", desc: `Discovers file imports, route mappings and system interactions.`, badge: "Analysis" },
-    { num: 3, title: "Cross-Reference Validation", desc: "Verifies intact references, databases, external calls and APIs.", badge: "Diagnostics" },
-    { num: 4, title: "Deterministic Report Compilation", desc: "Builds comprehensive production-grade reports and technical documentation.", badge: "Publisher" }
-  ];
-
-  const diagramWidth = 1200;
-  const diagramHeight = 720;
-
-  let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${diagramWidth} ${diagramHeight}" width="${diagramWidth}" height="${diagramHeight}">
-    <defs>
-      <filter id="shadowFilter" x="-10%" y="-10%" width="130%" height="130%">
-        <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0F172A" flood-opacity="0.06" />
-      </filter>
-      <marker id="ragArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-        <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#0891B2" />
-      </marker>
-    </defs>
-
-    <!-- Canvas Background -->
-    <rect width="${diagramWidth}" height="${diagramHeight}" fill="#FFFFFF" />
-    <rect x="20" y="20" width="${diagramWidth - 40}" height="${diagramHeight - 40}" rx="16" fill="none" stroke="#F1F5F9" stroke-width="1.5" />
-
-    <!-- Top Infographic Header -->
-    <g transform="translate(45, 55)">
-      <text font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="800" fill="#0F172A">${title}</text>
-      <text x="0" y="22" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="700" letter-spacing="0.08em" fill="#0891B2">CLARITY TECHNICAL AUDIT &amp; EXTRACTION ENGINE</text>
-    </g>
-
-    <!-- Horizontal Flow Track -->
-    <line x1="100" y1="360" x2="1100" y2="360" stroke="#0891B2" stroke-width="2" stroke-dasharray="6 6" />
-  `;
-
-  // Draw Stages
-  stages.forEach((stage, idx) => {
-    const cardWidth = 220;
-    const x = 70 + idx * (1060 - cardWidth) / (stages.length - 1);
-    const y = 230;
-
-    svgContent += `
-      <!-- Connecting Arrow -->
-      ${idx < stages.length - 1 ? `<line x1="${x + cardWidth}" y1="310" x2="${x + cardWidth + 30}" y2="310" stroke="#0891B2" stroke-width="2" marker-end="url(#ragArrow)" />` : ""}
-
-      <g transform="translate(${x}, ${y})" filter="url(#shadowFilter)">
-        <rect width="${cardWidth}" height="200" rx="14" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" />
-        
-        <!-- Top Tech Badge -->
-        <rect x="16" y="18" width="56" height="20" rx="6" fill="#ECFEFF" />
-        <text x="44" y="31" font-family="system-ui, sans-serif" font-size="8.5" font-weight="800" fill="#0891B2" text-anchor="middle">${stage.badge.toUpperCase()}</text>
-
-        <!-- Stage Number -->
-        <circle cx="190" cy="28" r="14" fill="#E2E8F0" />
-        <text x="190" y="32" font-family="system-ui, sans-serif" font-size="11" font-weight="800" fill="#475569" text-anchor="middle">${stage.num}</text>
-
-        <!-- Details -->
-        <text x="16" y="70" font-family="system-ui, sans-serif" font-size="13.5" font-weight="800" fill="#0F172A">${escapeSvgXml(stage.title)}</text>
-        <rect x="16" y="80" width="188" height="1.25" fill="#E2E8F0" />
-        
-        <!-- Long Description wrapping manually -->
-        <foreignObject x="16" y="94" width="188" height="100">
-          <div xmlns="http://www.w3.org/1999/xhtml" style="font-family:system-ui, sans-serif; font-size:10.5px; color:#475569; line-height:1.45; font-weight:500;">
-            ${escapeSvgXml(stage.desc)}
-          </div>
-        </foreignObject>
-      </g>
-    `;
-  });
-
-  svgContent += `</svg>`;
-  return svgContent;
+/**
+ * Generate Real Programmatic File-Level Architecture Diagram in SVG
+ */
+export function generateFileArchitectureDiagramSvg(analysis: ProjectAnalysis): string {
+  return renderProfessionalFileArchitectureSvg(analysis);
 }
 
 /**

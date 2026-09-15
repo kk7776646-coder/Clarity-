@@ -32,7 +32,10 @@ window.Clarity.theme = {
   },
 
   resolve() {
-    return this.state.mode === 'system' ? this.state.system : this.state.mode;
+    if (this.state.mode === 'system' || !this.state.mode) {
+      return 'light';
+    }
+    return this.state.mode;
   },
 
   applyTheme() {

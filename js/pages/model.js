@@ -1,18 +1,18 @@
 window.Clarity = window.Clarity || {};
 window.Clarity.pages = window.Clarity.pages || {};
 
-const MODEL_PROVIDERS = [
-  { id: "openrouter", label: "OpenRouter", defaultBase: "https://openrouter.ai/api/v1", needsKey: true },
-  { id: "z.ai", label: "Z.ai", defaultBase: "https://api.z.ai/api/paas/v4", needsKey: true },
-  { id: "openai", label: "OpenAI", defaultBase: "https://api.openai.com/v1", needsKey: true },
-  { id: "gemini", label: "Google Gemini", defaultBase: "https://generativelanguage.googleapis.com/v1beta/openai/", needsKey: true },
-  { id: "anthropic", label: "Anthropic", defaultBase: "https://api.anthropic.com/v1", needsKey: true },
-  { id: "groq", label: "Groq", defaultBase: "https://api.groq.com/openai/v1", needsKey: true },
-  { id: "mistral", label: "Mistral AI", defaultBase: "https://api.mistral.ai/v1", needsKey: true },
-  { id: "together", label: "Together AI", defaultBase: "https://api.together.xyz/v1", needsKey: true },
-  { id: "ollama", label: "Ollama (local)", defaultBase: "http://localhost:11434/v1", needsKey: false },
-  { id: "azure", label: "Azure OpenAI", defaultBase: "", needsKey: true },
-  { id: "custom", label: "Custom / Other (OpenAI-compatible)", defaultBase: "", needsKey: true },
+const MODEL_PROVIDERS = (window.Clarity && window.Clarity.providers && window.Clarity.providers.PROVIDERS) || [
+  { id: "gemini", label: "Google Gemini", defaultBase: "https://generativelanguage.googleapis.com/v1beta/openai/", needsKey: true, modelIdPlaceholder: "gemini-2.5-flash", keyPlaceholder: "AIzaSy..." },
+  { id: "openai", label: "OpenAI", defaultBase: "https://api.openai.com/v1", needsKey: true, modelIdPlaceholder: "gpt-4o", keyPlaceholder: "sk-proj-..." },
+  { id: "openrouter", label: "OpenRouter", defaultBase: "https://openrouter.ai/api/v1", needsKey: true, modelIdPlaceholder: "meta-llama/llama-3.3-70b-instruct", keyPlaceholder: "sk-or-v1-..." },
+  { id: "anthropic", label: "Anthropic", defaultBase: "https://api.anthropic.com/v1", needsKey: true, modelIdPlaceholder: "claude-3-5-sonnet-20241022", keyPlaceholder: "sk-ant-..." },
+  { id: "groq", label: "Groq", defaultBase: "https://api.groq.com/openai/v1", needsKey: true, modelIdPlaceholder: "llama-3.3-70b-versatile", keyPlaceholder: "gsk_..." },
+  { id: "mistral", label: "Mistral AI", defaultBase: "https://api.mistral.ai/v1", needsKey: true, modelIdPlaceholder: "mistral-large-latest", keyPlaceholder: "your-mistral-api-key" },
+  { id: "together", label: "Together AI", defaultBase: "https://api.together.xyz/v1", needsKey: true, modelIdPlaceholder: "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", keyPlaceholder: "your-together-api-key" },
+  { id: "z.ai", label: "Z.ai (GLM)", defaultBase: "https://api.z.ai/api/paas/v4", needsKey: true, modelIdPlaceholder: "glm-4-plus", keyPlaceholder: "your-z-ai-api-key" },
+  { id: "ollama", label: "Ollama (local)", defaultBase: "http://localhost:11434/v1", needsKey: false, modelIdPlaceholder: "llama3.2", keyPlaceholder: "(No API key required for local Ollama)" },
+  { id: "azure", label: "Azure OpenAI", defaultBase: "", needsKey: true, modelIdPlaceholder: "your-deployment-name", keyPlaceholder: "your-azure-api-key" },
+  { id: "custom", label: "Custom / Other (OpenAI-compatible)", defaultBase: "", needsKey: true, modelIdPlaceholder: "custom-model-id", keyPlaceholder: "sk-..." },
 ];
 
 function escapeAttr(s) { return String(s ?? "").replace(/"/g, "&quot;"); }
@@ -101,6 +101,14 @@ function modelCardHtml(model) {
   const lastTested = model.lastTestedAt ? new Date(model.lastTestedAt * 1000).toLocaleString() : null;
   const lastErr = model.lastError ? '<div class="muted" style="font-size:12px;color:var(--color-danger,#c0392b);margin-top:4px;">' + window.Clarity.utils.escapeHtml(model.lastError) + '</div>' : '';
 
+  const formattedCtx = model.contextWindow
+    ? (Number(model.contextWindow) >= 1000000
+        ? (Number(model.contextWindow) / 1000000).toFixed(Number(model.contextWindow) % 1000000 === 0 ? 0 : 1) + "M"
+        : (Number(model.contextWindow) >= 1000
+            ? Math.round(Number(model.contextWindow) / 1000) + "k"
+            : model.contextWindow)) + " ctx"
+    : "? ctx";
+
   return '<article class="card model-card ' + (isActive ? "is-active" : "") + ' ' + (enabled ? "" : "is-disabled") + '" data-model-id="' + escapeAttr(model.id) + '">' +
     '<div class="card__body">' +
       '<div class="model-card__head">' +
@@ -117,7 +125,7 @@ function modelCardHtml(model) {
       (lastTested ? '<div class="muted" style="font-size:12px;">Last tested: ' + window.Clarity.utils.escapeHtml(lastTested) + '</div>' : '') +
       lastErr +
       '<div class="model-card__foot">' +
-        '<span class="muted">' + (model.contextWindow || "?") + ' ctx</span>' +
+        '<span class="muted" title="' + (model.contextWindow ? Number(model.contextWindow).toLocaleString() + ' tokens max context' : '') + '">' + formattedCtx + '</span>' +
         '<div class="hstack" style="gap:6px;">' +
           (isUserModel ? '<button class="btn btn--ghost btn--sm" type="button" data-action="toggle-enabled" data-model-id="' + escapeAttr(model.id) + '" title="' + (enabled ? "Disable" : "Enable") + '">' + (enabled ? "Disable" : "Enable") + '</button>' : '') +
           '<button class="btn btn--' + (isActive ? "primary" : "outline") + ' btn--sm" type="button" data-action="select" data-model-id="' + escapeAttr(model.id) + '"' + (enabled ? "" : " disabled") + '>' + (isActive ? "Active" : "Select") + '</button>' +
@@ -201,16 +209,165 @@ function bindModelPageEvents() {
   });
 }
 
+function getCanonicalProviders() {
+  if (window.Clarity && window.Clarity.providers && Array.isArray(window.Clarity.providers.PROVIDERS)) {
+    return window.Clarity.providers.PROVIDERS;
+  }
+  return MODEL_PROVIDERS;
+}
+
+function getProviderConfig(providerId) {
+  if (window.Clarity && window.Clarity.providers && typeof window.Clarity.providers.getProvider === "function") {
+    const p = window.Clarity.providers.getProvider(providerId);
+    if (p) return p;
+  }
+  const list = getCanonicalProviders();
+  const cleanId = String(providerId || "").toLowerCase().trim();
+  return list.find(p => p.id === cleanId) || null;
+}
+
+function setupProviderBaseUrlBinding({
+  providerSel,
+  baseInput,
+  baseHint,
+  resetBaseBtn,
+  modelNameInput,
+  keyInput,
+  keyLabel,
+  initialProvider,
+  isEdit = false,
+  hasExistingKey = false,
+  onProviderChange = null
+}) {
+  let previousProviderId = providerSel?.value || initialProvider;
+  let userManuallyEditedBase = false;
+
+  const providerList = getCanonicalProviders();
+
+  function isKnownDefaultUrl(url) {
+    if (!url) return true;
+    const trimmed = url.trim();
+    return providerList.some(p => p.defaultBase && p.defaultBase === trimmed);
+  }
+
+  function updateBaseUrlUI() {
+    const provId = providerSel?.value || "gemini";
+    const provObj = getProviderConfig(provId);
+    const defaultUrl = provObj?.defaultBase || "";
+    const currentVal = baseInput?.value?.trim() || "";
+
+    if (resetBaseBtn) {
+      if (defaultUrl && currentVal !== defaultUrl) {
+        resetBaseBtn.style.display = "inline-block";
+      } else {
+        resetBaseBtn.style.display = "none";
+      }
+    }
+
+    if (baseHint) {
+      if (!defaultUrl) {
+        baseHint.textContent = "Custom provider endpoint required.";
+      } else if (currentVal === defaultUrl) {
+        baseHint.textContent = "Standard default endpoint for " + (provObj?.label || provId) + ".";
+      } else {
+        baseHint.textContent = "Custom endpoint configured.";
+      }
+    }
+  }
+
+  baseInput?.addEventListener("input", () => {
+    const provId = providerSel?.value || "gemini";
+    const provObj = getProviderConfig(provId);
+    const defaultUrl = provObj?.defaultBase || "";
+    const currentVal = baseInput?.value?.trim() || "";
+    
+    if (defaultUrl && currentVal === defaultUrl) {
+      userManuallyEditedBase = false;
+    } else if (currentVal !== "") {
+      userManuallyEditedBase = true;
+    }
+    updateBaseUrlUI();
+  });
+
+  resetBaseBtn?.addEventListener("click", () => {
+    const provId = providerSel?.value || "gemini";
+    const provObj = getProviderConfig(provId);
+    if (baseInput && provObj) {
+      baseInput.value = provObj.defaultBase || "";
+      userManuallyEditedBase = false;
+      updateBaseUrlUI();
+    }
+  });
+
+  providerSel?.addEventListener("change", () => {
+    const newProvId = providerSel.value;
+    const newProv = getProviderConfig(newProvId);
+    const oldProv = getProviderConfig(previousProviderId);
+
+    const currentBase = baseInput?.value?.trim() || "";
+    const wasPreviousDefault = !currentBase || (oldProv && currentBase === oldProv.defaultBase);
+    const wasAnyDefault = isKnownDefaultUrl(currentBase);
+
+    if (baseInput && newProv) {
+      if (!userManuallyEditedBase || wasPreviousDefault || wasAnyDefault) {
+        baseInput.value = newProv.defaultBase || "";
+        userManuallyEditedBase = false;
+      }
+      baseInput.placeholder = newProv.defaultBase || "https://api.example.com/v1";
+    }
+
+    if (newProv) {
+      if (modelNameInput && (!modelNameInput.value || (oldProv && modelNameInput.value === oldProv.modelIdPlaceholder))) {
+        modelNameInput.placeholder = newProv.modelIdPlaceholder || "model-id";
+      }
+      if (keyInput) {
+        if (!isEdit || !hasExistingKey) {
+          keyInput.placeholder = newProv.keyPlaceholder || "sk-...";
+        }
+      }
+      if (keyLabel) {
+        if (newProv.needsKey === false) {
+          keyLabel.innerHTML = 'API key <span class="muted">(Optional / Not required for local Ollama)</span>';
+        } else {
+          keyLabel.innerHTML = 'API key' + (isEdit ? ' <span class="muted">(leave blank to keep current)</span>' : ' <span class="req">*</span>');
+        }
+      }
+    }
+
+    if (typeof onProviderChange === "function") {
+      onProviderChange(newProv, oldProv);
+    }
+
+    previousProviderId = newProvId;
+    updateBaseUrlUI();
+  });
+
+  // Initial update
+  updateBaseUrlUI();
+}
+
 function openModelModal(existing) {
   const isEdit = !!existing;
+  const initialProvider = (existing && existing.provider) || "gemini";
+  const defaultBaseForInitial = window.Clarity.providers?.getDefaultBaseUrl(initialProvider) || "";
+  const initialBase = existing ? (existing.baseUrl || defaultBaseForInitial) : defaultBaseForInitial;
+
   const m = existing || {
-    id: "", name: "", provider: "openai", baseUrl: "", apiKey: "",
+    id: "",
+    name: "",
+    provider: initialProvider,
+    baseUrl: initialBase,
+    apiKey: "",
     modelName: "",
     capabilities: { text: true, vision: false, codeGeneration: false, imageGeneration: false, fileAnalysis: false, streaming: true },
-    status: "untested", enabled: true,
+    status: "untested",
+    enabled: true,
   };
 
-  const providerOptions = MODEL_PROVIDERS.map(p =>
+  const providerList = getCanonicalProviders();
+  const currentProvObj = getProviderConfig(m.provider);
+
+  const providerOptions = providerList.map(p =>
     '<option value="' + p.id + '" ' + (p.id === m.provider ? "selected" : "") + '>' + p.label + '</option>'
   ).join("");
 
@@ -221,25 +378,23 @@ function openModelModal(existing) {
     ? '<div class="muted" style="margin-top:4px;">Current key on file: <code>' + window.Clarity.utils.escapeHtml(m.apiKeyMasked || '••••••') + '</code></div>'
     : '';
 
-  const readonlyAttr = isEdit ? 'readonly tabindex="-1" style="background:var(--surface-muted);color:var(--ink-muted);cursor:not-allowed;pointer-events:none;"' : '';
-
   const body = [
     '<form id="modelForm" class="model-form" autocomplete="off">',
       '<div class="model-form__section">',
         '<div class="model-form__row">',
           '<label class="model-form__label" for="mf-name">Display name <span class="req">*</span></label>',
-          '<input class="input model-form__input" id="mf-name" type="text" name="name" required value="' + escapeAttr(m.name) + '" placeholder="My Llama">',
+          '<input class="input model-form__input" id="mf-name" type="text" name="name" required value="' + escapeAttr(m.name) + '" placeholder="e.g. Gemini 2.5 Flash">',
         '</div>',
         '<div class="model-form__row model-form__row--2">',
           '<div class="model-form__field">',
             '<label class="model-form__label" for="mf-id">Registry ID <span class="req">*</span></label>',
-            '<input class="input model-form__input" id="mf-id" type="text" name="id" required value="' + escapeAttr(m.id) + '" placeholder="my-llama">',
-            '<div class="muted">Local identifier; never sent to provider.</div>',
+            '<input class="input model-form__input" id="mf-id" type="text" name="id" required value="' + escapeAttr(m.id) + '" ' + (isEdit ? 'readonly style="background:var(--surface-muted);color:var(--ink-muted);"' : '') + ' placeholder="gemini-2.5-flash">',
+            '<div class="muted">Local identifier; unique key in Clarity.</div>',
           '</div>',
           '<div class="model-form__field">',
             '<label class="model-form__label" for="mf-modelName">Provider model ID <span class="req">*</span></label>',
-            '<input class="input model-form__input" id="mf-modelName" type="text" name="modelName" required value="' + escapeAttr(m.modelName) + '" placeholder="meta-llama/llama-3.3-70b-instruct">',
-            '<div class="muted">Exact ID the provider API expects.</div>',
+            '<input class="input model-form__input" id="mf-modelName" type="text" name="modelName" required value="' + escapeAttr(m.modelName) + '" placeholder="' + escapeAttr(currentProvObj?.modelIdPlaceholder || 'gemini-2.5-flash') + '">',
+            '<div class="muted">Exact model ID expected by provider API.</div>',
           '</div>',
         '</div>',
       '</div>',
@@ -247,16 +402,20 @@ function openModelModal(existing) {
         '<div class="model-form__row model-form__row--2">',
           '<div class="model-form__field">',
             '<label class="model-form__label" for="mf-provider">Provider <span class="req">*</span></label>',
-            '<select class="input model-form__input" id="mf-provider" name="provider" ' + readonlyAttr + '>' + providerOptions + '</select>',
+            '<select class="input model-form__input" id="mf-provider" name="provider">' + providerOptions + '</select>',
           '</div>',
           '<div class="model-form__field">',
-            '<label class="model-form__label" for="mf-base">Base URL <span class="req">*</span></label>',
-            '<input class="input model-form__input" id="mf-base" type="text" name="baseUrl" ' + readonlyAttr + ' value="' + escapeAttr(m.baseUrl) + '" placeholder="https://openrouter.ai/api/v1">',
+            '<div class="hstack" style="justify-content:space-between;align-items:baseline;">',
+              '<label class="model-form__label" for="mf-base">Base URL <span class="req">*</span></label>',
+              '<button type="button" id="mf-reset-base" class="btn btn--ghost btn--xs" style="padding:0 4px;font-size:11px;color:var(--accent,#3b82f6);display:none;">↺ Reset to default</button>',
+            '</div>',
+            '<input class="input model-form__input" id="mf-base" type="text" name="baseUrl" value="' + escapeAttr(m.baseUrl) + '" placeholder="https://generativelanguage.googleapis.com/v1beta/openai/">',
+            '<div class="muted" id="mf-base-hint" style="font-size:11.5px;margin-top:2px;">Default provider endpoint auto-populated.</div>',
           '</div>',
         '</div>',
         '<div class="model-form__row">',
-          '<label class="model-form__label" for="mf-key">API key' + (isEdit ? ' <span class="muted">(leave blank to keep current)</span>' : '') + '</label>',
-          '<input class="input model-form__input" id="mf-key" type="password" name="apiKey" ' + readonlyAttr + ' value="" placeholder="' + (isEdit && m.hasApiKey ? '•••••••••••• (Saved securely)' : (isEdit ? '(Empty)' : 'sk-...')) + '" autocomplete="new-password">',
+          '<label class="model-form__label" for="mf-key" id="mf-key-label">API key' + (isEdit ? ' <span class="muted">(leave blank to keep current)</span>' : '') + '</label>',
+          '<input class="input model-form__input" id="mf-key" type="password" name="apiKey" value="" placeholder="' + (isEdit && m.hasApiKey ? '•••••••••••• (Saved securely)' : escapeAttr(currentProvObj?.keyPlaceholder || 'AIzaSy...')) + '" autocomplete="new-password">',
           maskedKeyNote,
         '</div>',
         '<fieldset class="model-form__caps">',
@@ -285,11 +444,23 @@ function openModelModal(existing) {
 
   const providerSel = document.getElementById("mf-provider");
   const baseInput = document.getElementById("mf-base");
-  providerSel?.addEventListener("change", () => {
-    const p = MODEL_PROVIDERS.find(x => x.id === providerSel.value);
-    if (p) {
-      baseInput.value = p.defaultBase || "";
-    }
+  const baseHint = document.getElementById("mf-base-hint");
+  const resetBaseBtn = document.getElementById("mf-reset-base");
+  const modelNameInput = document.getElementById("mf-modelName");
+  const keyInput = document.getElementById("mf-key");
+  const keyLabel = document.getElementById("mf-key-label");
+
+  setupProviderBaseUrlBinding({
+    providerSel,
+    baseInput,
+    baseHint,
+    resetBaseBtn,
+    modelNameInput,
+    keyInput,
+    keyLabel,
+    initialProvider,
+    isEdit,
+    hasExistingKey: !!m.hasApiKey,
   });
 
   document.getElementById("modelTestBtn")?.addEventListener("click", async () => {
@@ -297,6 +468,10 @@ function openModelModal(existing) {
     if (!payload.id || !payload.modelName) {
       showTestResult("Registry ID and Provider Model ID are required.", false);
       return;
+    }
+    const prov = getProviderConfig(payload.provider);
+    if (!payload.baseUrl && prov?.defaultBase) {
+      payload.baseUrl = prov.defaultBase;
     }
     if (!payload.baseUrl && payload.provider !== "ollama" && payload.provider !== "anthropic") {
       showTestResult("Base URL is required for this provider.", false);
@@ -320,7 +495,7 @@ function openModelModal(existing) {
         else if (type === "connection_error") msg = "✗ Connection failed: Provider unreachable.";
         else if (type === "rate_limit") msg = "✗ Connection failed: Rate limited by provider.";
         else if (type === "missing_api_key") msg = "✗ API key required.";
-        else if (type === "missing_base_url") msg = "✗ API key required.";
+        else if (type === "missing_base_url") msg = "✗ Base URL required.";
         else msg = "✗ Connection failed: " + (res.error || "Unknown error");
       }
       showTestResult(msg + (res.note ? " — " + res.note : ""), ok);
@@ -343,6 +518,10 @@ function openModelModal(existing) {
     if (!payload.id || !payload.modelName) {
       window.Clarity.toast.show("Registry ID and Provider Model ID are required", "danger");
       return;
+    }
+    const prov = getProviderConfig(payload.provider);
+    if (!payload.baseUrl && prov?.defaultBase) {
+      payload.baseUrl = prov.defaultBase;
     }
     try {
       if (isEdit) {
@@ -399,12 +578,16 @@ function collectEditModelForm() {
 let _modelMappings = [];
 
 function openAddModelsModal() {
+  const providerList = getCanonicalProviders();
+  const initialProvider = "gemini";
+  const initialProvObj = getProviderConfig(initialProvider) || providerList[0];
+
   _modelMappings = [
     { id: "", modelName: "", displayName: "" },
   ];
 
-  const providerOptions = MODEL_PROVIDERS.map(p =>
-    '<option value="' + p.id + '">' + p.label + '</option>'
+  const providerOptions = providerList.map(p =>
+    '<option value="' + p.id + '" ' + (p.id === initialProvider ? "selected" : "") + '>' + p.label + '</option>'
   ).join("");
 
   const body = [
@@ -421,13 +604,17 @@ function openAddModelsModal() {
             '<select class="input model-form__input" id="mf-provider" name="provider">' + providerOptions + '</select>',
           '</div>',
           '<div class="model-form__field">',
-            '<label class="model-form__label" for="mf-base">Base URL <span class="req">*</span></label>',
-            '<input class="input model-form__input" id="mf-base" type="text" name="baseUrl" value="" placeholder="https://openrouter.ai/api/v1">',
+            '<div class="hstack" style="justify-content:space-between;align-items:baseline;">',
+              '<label class="model-form__label" for="mf-base">Base URL <span class="req">*</span></label>',
+              '<button type="button" id="mf-reset-base" class="btn btn--ghost btn--xs" style="padding:0 4px;font-size:11px;color:var(--accent,#3b82f6);display:none;">↺ Reset to default</button>',
+            '</div>',
+            '<input class="input model-form__input" id="mf-base" type="text" name="baseUrl" value="' + escapeAttr(initialProvObj?.defaultBase || "") + '" placeholder="https://generativelanguage.googleapis.com/v1beta/openai/">',
+            '<div class="muted" id="mf-base-hint" style="font-size:11.5px;margin-top:2px;">Default provider endpoint auto-populated.</div>',
           '</div>',
         '</div>',
         '<div class="model-form__row">',
-          '<label class="model-form__label" for="mf-key">API key <span class="req">*</span></label>',
-          '<input class="input model-form__input" id="mf-key" type="password" name="apiKey" value="" placeholder="sk-or-v1-..." autocomplete="new-password">',
+          '<label class="model-form__label" for="mf-key" id="mf-key-label">API key <span class="req">*</span></label>',
+          '<input class="input model-form__input" id="mf-key" type="password" name="apiKey" value="" placeholder="' + escapeAttr(initialProvObj?.keyPlaceholder || 'AIzaSy...') + '" autocomplete="new-password">',
           '<div class="muted">One API key can power multiple models. It is stored once and reused for every model in this form.</div>',
         '</div>',
       '</div>',
@@ -435,7 +622,7 @@ function openAddModelsModal() {
       '<div class="model-form__section">',
         '<div class="model-form__section-title">Models using this API key</div>',
         '<div id="modelMappingsContainer">',
-          createModelMappingHTML(0, _modelMappings[0]),
+          createModelMappingHTML(0, _modelMappings[0], initialProvObj),
         '</div>',
         '<button type="button" class="btn btn--outline btn--sm" id="addMappingBtn" style="margin-top:8px;">',
           '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
@@ -454,41 +641,44 @@ function openAddModelsModal() {
 
   window.Clarity.modal.open("Add Models", body, actions);
 
-  document.getElementById("mf-provider")?.addEventListener("change", () => {
-    const sel = document.getElementById("mf-provider");
-    const baseInput = document.getElementById("mf-base");
-    const keyInput = document.getElementById("mf-key");
-    if (sel && baseInput) {
-      const providerId = sel.value;
-      const state = window.Clarity.store.getState();
-      const existingForProvider = state.models?.find(m => m.provider === providerId && m.hasApiKey);
-      if (existingForProvider) {
-        baseInput.value = existingForProvider.baseUrl || "";
-        if (keyInput) {
-          keyInput.value = "••••••••";
-          keyInput.placeholder = "Reusing existing stored key";
-        }
-      } else {
-        const p = MODEL_PROVIDERS.find(x => x.id === providerId);
-        if (p) {
-          baseInput.value = p.defaultBase || "";
-        }
-        if (keyInput) {
-          keyInput.value = "";
-          keyInput.placeholder = "sk-or-v1-...";
-        }
+  const sel = document.getElementById("mf-provider");
+  const baseInput = document.getElementById("mf-base");
+  const baseHint = document.getElementById("mf-base-hint");
+  const resetBaseBtn = document.getElementById("mf-reset-base");
+  const keyInput = document.getElementById("mf-key");
+  const keyLabel = document.getElementById("mf-key-label");
+
+  setupProviderBaseUrlBinding({
+    providerSel: sel,
+    baseInput,
+    baseHint,
+    resetBaseBtn,
+    modelNameInput: null,
+    keyInput,
+    keyLabel,
+    initialProvider,
+    isEdit: false,
+    hasExistingKey: false,
+    onProviderChange: (newProv, oldProv) => {
+      const mappingContainer = document.getElementById("modelMappingsContainer");
+      if (mappingContainer && newProv) {
+        mappingContainer.querySelectorAll(".model-mapping").forEach((row) => {
+          const mnameInput = row.querySelector("input[name$='[modelName]']");
+          if (mnameInput && (!mnameInput.value || (oldProv && mnameInput.placeholder === oldProv.modelIdPlaceholder))) {
+            mnameInput.placeholder = newProv.modelIdPlaceholder || "model-id";
+          }
+        });
       }
     }
   });
-  // Trigger change immediately to apply autofill for default selected provider
-  document.getElementById("mf-provider")?.dispatchEvent(new Event("change"));
 
   document.getElementById("addMappingBtn")?.addEventListener("click", () => {
     _modelMappings.push({ id: "", modelName: "", displayName: "" });
     const idx = _modelMappings.length - 1;
     const container = document.getElementById("modelMappingsContainer");
+    const currentProv = getProviderConfig(sel?.value) || providerList[0];
     if (container) {
-      container.insertAdjacentHTML("beforeend", createModelMappingHTML(idx, _modelMappings[idx]));
+      container.insertAdjacentHTML("beforeend", createModelMappingHTML(idx, _modelMappings[idx], currentProv));
     }
   });
 
@@ -509,6 +699,11 @@ function openAddModelsModal() {
         failCount++;
         errors.push("Mapping '" + (payload.id || 'unnamed') + "' is missing required fields.");
         continue;
+      }
+
+      const prov = getProviderConfig(payload.provider);
+      if (!payload.baseUrl && prov?.defaultBase) {
+        payload.baseUrl = prov.defaultBase;
       }
 
       try {
@@ -539,10 +734,12 @@ function openAddModelsModal() {
   });
 }
 
-function createModelMappingHTML(index, mapping) {
+function createModelMappingHTML(index, mapping, provObj) {
   const removeBtn = index === 0
     ? ''
     : '<button type="button" class="btn btn--ghost btn--sm" onclick="removeModelMapping(' + index + ')" style="margin-left:auto;">Remove</button>';
+
+  const placeholderModelName = provObj?.modelIdPlaceholder || "meta-llama/llama-3.3-70b-instruct";
 
   return [
     '<div class="model-mapping card" id="modelMapping' + index + '" data-mapping-index="' + index + '" style="padding:12px;margin-bottom:12px;">',
@@ -552,16 +749,16 @@ function createModelMappingHTML(index, mapping) {
       '</div>',
       '<div class="model-form__row">',
         '<label class="model-form__label" for="mapping-name-' + index + '">Display name <span class="req">*</span></label>',
-        '<input class="input model-form__input" id="mapping-name-' + index + '" type="text" name="mappings[' + index + '][displayName]" value="' + escapeAttr(mapping.displayName || "") + '" placeholder="Llama 3.3 70B">',
+        '<input class="input model-form__input" id="mapping-name-' + index + '" type="text" name="mappings[' + index + '][displayName]" value="' + escapeAttr(mapping.displayName || "") + '" placeholder="e.g. Primary Model">',
       '</div>',
       '<div class="model-form__row model-form__row--2">',
         '<div class="model-form__field">',
           '<label class="model-form__label" for="mapping-id-' + index + '">Registry ID <span class="req">*</span></label>',
-          '<input class="input model-form__input" id="mapping-id-' + index + '" type="text" name="mappings[' + index + '][id]" required value="' + escapeAttr(mapping.id || "") + '" placeholder="llama-3-70b">',
+          '<input class="input model-form__input" id="mapping-id-' + index + '" type="text" name="mappings[' + index + '][id]" required value="' + escapeAttr(mapping.id || "") + '" placeholder="model-' + (index + 1) + '">',
         '</div>',
         '<div class="model-form__field">',
           '<label class="model-form__label" for="mapping-mname-' + index + '">Provider model ID <span class="req">*</span></label>',
-          '<input class="input model-form__input" id="mapping-mname-' + index + '" type="text" name="mappings[' + index + '][modelName]" required value="' + escapeAttr(mapping.modelName || "") + '" placeholder="meta-llama/llama-3.3-70b-instruct">',
+          '<input class="input model-form__input" id="mapping-mname-' + index + '" type="text" name="mappings[' + index + '][modelName]" required value="' + escapeAttr(mapping.modelName || "") + '" placeholder="' + escapeAttr(placeholderModelName) + '">',
         '</div>',
       '</div>',
       '<fieldset class="model-form__caps" style="margin-top:8px;">',

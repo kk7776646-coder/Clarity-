@@ -80,6 +80,8 @@ window.Clarity.app = {
       }
       if (scrim) scrim.hidden = !isOpen;
     };
+    window.Clarity.app.setSidebarOpen = setSidebarOpen;
+    window.Clarity.app.closeSidebar = () => setSidebarOpen(false);
 
 if (brand) {
       brand.addEventListener("click", (event) => {
@@ -207,20 +209,23 @@ if (sidebarCollapse) {
       syncBurgerAffordance();
     }
 
+    const handleNewChatAction = () => {
+      if (window.Clarity.uiChat && typeof window.Clarity.uiChat.startNewConversation === "function") {
+        window.Clarity.uiChat.startNewConversation();
+      }
+      window.location.hash = "#/chat";
+      // Auto close sidebar drawer
+      setSidebarOpen(false);
+    };
+
     const newChatBtn = document.getElementById("newChatBtn");
     if (newChatBtn) {
-      newChatBtn.addEventListener("click", () => {
-        window.Clarity.uiChat.startNewConversation();
-        window.location.hash = "#/chat";
-      });
+      newChatBtn.addEventListener("click", handleNewChatAction);
     }
 
     const sidebarNewChat = document.getElementById("sidebarNewChat");
     if (sidebarNewChat) {
-      sidebarNewChat.addEventListener("click", () => {
-        window.Clarity.uiChat.startNewConversation();
-        window.location.hash = "#/chat";
-      });
+      sidebarNewChat.addEventListener("click", handleNewChatAction);
     }
 
     const refreshConv = document.getElementById("refreshConversations");
@@ -296,6 +301,10 @@ if (sidebarCollapse) {
     }
     const main = document.getElementById("main");
     if (!main) return;
+
+    if (window.innerWidth < 1024 && typeof this.closeSidebar === "function") {
+      this.closeSidebar();
+    }
 
     if (rawPath.startsWith("#/chat/")) {
       const cid = rawPath.replace("#/chat/", "");

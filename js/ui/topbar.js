@@ -139,6 +139,11 @@ window.Clarity.uiTopbar = {
 
     button.addEventListener("click", (event) => {
       event.stopPropagation();
+      const sidebar = document.getElementById("sidebar");
+      // Do not open sign out menu when sidebar is collapsed / closed
+      if (sidebar && sidebar.classList.contains("is-rail")) {
+        return;
+      }
       if (menu.hidden) open();
       else close();
     });

@@ -648,7 +648,7 @@ Return ONLY valid JSON:
 \`\`\``;
       const aiResp = await generateGeminiWithResilience({
         apiKey,
-        modelName: modelName || "gemini-2.5-flash",
+        modelName: modelName || "gemini-3-flash-preview",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         temperature: 0.3,
       });
@@ -760,7 +760,7 @@ Return ONLY valid JSON:
 \`\`\``;
       const aiResp = await generateGeminiWithResilience({
         apiKey,
-        modelName: modelName || "gemini-2.5-flash",
+        modelName: modelName || "gemini-3-flash-preview",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         temperature: 0.3,
       });
@@ -1314,7 +1314,7 @@ FORMAT:
 
       const aiPromise = generateGeminiWithResilience({
         apiKey,
-        modelName: modelName || "gemini-2.5-flash",
+        modelName: modelName || "gemini-3-flash-preview",
         contents: [{ role: "user", parts: [{ text: aiPrompt }] }],
         temperature: 0.3,
       });
