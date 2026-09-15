@@ -44,6 +44,7 @@ import { renderSvgToPngBuffer, renderSvgToJpgBuffer, generateArchitectureDiagram
 import { executeCopilotTurn } from "./copilot-engine.js";
 import { indexProject, updateFileKnowledge, deleteFileKnowledge, getProjectKnowledge, searchKnowledge, deleteProjectKnowledge } from "./knowledge-engine.js";
 import { registerRagRoutes } from "./rag-routes.js";
+import { UniversalExplanationEngine } from "./study-learning-engine";
 import {
   detectModelSpecs,
   estimateTokens,
@@ -141,7 +142,7 @@ import {
   syncDiskFromDatabase,
 } from "./project-storage.js";
 
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const SESSION_COOKIE = "clarity_session";
 
 // ---------------------------------------------------------------------------
@@ -688,8 +689,14 @@ async function hydrateFromDatabase() {
     if (dbModelsList && dbModelsList.length > 0) {
       for (const m of dbModelsList) {
         const item = mapDbRowToModelItem(m, m.user_id || initialUser.id);
-        if (item.provider === "gemini" && !item.modelName) {
-          item.modelName = item.id;
+        if (item.provider === "gemini") {
+          if (!item.modelName) {
+            item.modelName = item.id;
+          }
+          if (item.modelName === "gemini-2.5-flash" || item.modelName === "gemini-3.5-flash") {
+            item.modelName = "gemini-3.6-flash";
+            try { dbSaveModel(item); } catch {}
+          }
         }
         setUserModel(item.user_id || initialUser.id, item);
       }
@@ -702,7 +709,7 @@ async function hydrateFromDatabase() {
         provider: "gemini",
         baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
         apiKey: defaultApiKey,
-        modelName: "gemini-2.5-flash",
+        modelName: "gemini-3.6-flash",
         modelType: "text",
         capabilities: {
           text: true,
@@ -881,6 +888,8 @@ async function startServer() {
       status: "ok",
       service: "clarity",
       supabase: supabaseHealth,
+      geminiKeyLength: process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.length : 0,
+      googleKeyLength: process.env.GOOGLE_API_KEY ? process.env.GOOGLE_API_KEY.length : 0,
     });
   });
 
@@ -1979,7 +1988,7 @@ ${params.textMsg}`;
     return { knowledgeContext, promptWithContext, isGreeting, tokensUsed };
   }
 
-  function buildNaturalAiSystemInstruction(isGreeting: boolean, think: boolean, userName?: string): string {
+  function buildNaturalAiSystemInstruction(isGreeting: boolean, think: boolean, userName?: string, textMsg: string = ""): string {
     const cleanUserName = (userName || "").trim();
     let sys = `You are Clarity, an exceptional AI assistant engineered for natural, context-aware, technically accurate, and visually intelligent communication.
 
@@ -2027,19 +2036,7 @@ CORE DIRECTIVES & RESPONSE PHILOSOPHY
    - Strictly avoid robotic preamble or filler phrases (e.g., "Here is your requested output", "Sure, I can assist you with that", "Below is the information you asked for").
    - Match the user's conversational intent without turning every prompt into a rigid corporate memo.
 
-2. **Adaptive, Context-Driven Structure**:
-   - Never dump responses into a single unreadable wall of text.
-   - Do NOT rigidly force every answer into standard boilerplate headers ("Overview", "Architecture", "Advantages", "Disadvantages", "Conclusion").
-   - Intelligently adapt your response architecture to what the user asks:
-     • **Conceptual explanations** ("What is RAG?"): Direct clear concept explanation, followed by core principles and concise bullet highlights.
-     • **Workflow / Lifecycle inquiries** ("How does RAG work?"): Sequential, numbered step-by-step pipeline (1., 2., 3., 4.) with clear phase labels.
-     • **Comparisons** ("Compare PostgreSQL and SQLite"): High-signal Markdown tables comparing concrete trade-offs, performance, and best use cases.
-     • **Troubleshooting & Fixes** ("Why is this failing?"): Crisp diagnosis of root cause + numbered resolution steps + clean code snippets.
-     • **Code Solutions** ("Write a TypeScript handler"): Concise explanation + complete, production-ready code blocks.
-     • **Project / Codebase Questions**: Ground answers strictly in the real project context, referencing real files, functions, and endpoints.
-     • **Architecture / System Design**: Concrete explanation (include visual diagram ONLY if explicitly asked by user).
-
-3. **High-Readability Markdown Formatting**:
+2. **High-Readability Markdown Formatting**:
    - Keep paragraphs short (2-3 sentences) separated by clean blank lines.
    - Use headings (##, ###) purposefully to distinguish major sections.
    - Use unordered bullet lists (- or *) and ordered lists (1., 2.) with proper indentation.
@@ -2047,29 +2044,22 @@ CORE DIRECTIVES & RESPONSE PHILOSOPHY
    - Use inline \`code\` for function names, file paths, variables, and HTTP methods.
    - Use blockquotes (> Note:) for essential caveats or pro tips.
 
-4. **Contextual Emojis & Symbols (Targeted & Sparse)**:
+3. **Contextual Emojis & Symbols (Targeted & Sparse)**:
    - Use emojis sparingly where they genuinely guide the eye:
      💡 Insight/Tip | ⚠️ Warning/Pitfall | ✅ Verified/Success | 🔍 Diagnosis | 📌 Key Takeaway | 🚀 Deployment/Next Step | 🛠️ Implementation | 📂 Files | ⚙️ Config | 🧠 AI/Logic | 🔒 Security/Auth | 📊 Metrics
    - Use direction symbols (→, ←, ↓, ↑, •, ✓, ✕) to clarify data flow or status.
    - NEVER spam emojis on every line, and NEVER include emojis inside code blocks, variable names, or JSON keys.
 
-5. **Direct Answers & Explicit-Only Diagrams (STRICT NO-UNSOLICITED-DIAGRAMS RULE)**:
-   - **DO NOT GENERATE DIAGRAMS UNLESS EXPLICITLY REQUESTED**: Do NOT output Mermaid diagrams, flowcharts, or visual maps for casual questions, code explanations, or standard queries. Generate a diagram ONLY when the user explicitly asks for one (e.g., "diagram banao", "show a flowchart", "make a architecture diagram", "draw workflow").
-   - **CONCISE & DIRECT RESPONSES**: Answer the user's prompt directly, clearly, and concisely without unnecessary fluff, unwanted extras, or unrequested visual blocks.
-   - **WHEN DIAGRAMS ARE REQUESTED**: Use clean, modern Mermaid syntax with realistic emojis/icons in nodes (e.g. [🐍 Python Basics], [📊 Pandas DataFrames]). NEVER put raw HTML tags (like <i>, <b>, <br>, <span>, &amp;) inside Mermaid node labels.
-
-6. **Strict Language Mirroring & Multilingual Fluency (CRITICAL RULE)**:
-   - **Detect and match the language of the user's latest prompt with 100% precision.**
-   - **If the user asks/writes in English** (e.g. "hi", "hello", "how are you", "what is this", "explain this file", "help me"): You MUST respond in pure **English** (e.g., "Hi! How can I help you today?"). NEVER reply in Hinglish or Hindi when the user writes in English!
-   - **If the user asks/writes in Hinglish** (Hindi in Roman alphabet, e.g. "kaise ho", "kya haal hai", "clarity kisne banaya", "ye code kaise chalega"): Respond in natural, friendly, accurate **Hinglish**.
-   - **If the user asks/writes in Hindi script** (Devanagari, e.g. "नमस्ते", "आप कैसे हैं"): Respond in **Hindi**.
-   - **Language Switching**: If the user switches language from Hindi/Hinglish to English or vice-versa at any point, IMMEDIATELY switch to their new language in your next reply.
-
-7. **Personalized User Interaction & Name Usage**:
+4. **Personalized User Interaction & Name Usage**:
    ${cleanUserName ? `- The user's name is "${cleanUserName}".
-   - When the user begins a conversation or greets you (e.g. "hi", "hello", "how are you"), address them warmly by their name "${cleanUserName}" in their exact language (e.g., in English: "Hi ${cleanUserName}! 👋 How can I help you today?" or "I'm doing great, ${cleanUserName}! 🚀 How can I help you today?"; in Hinglish: "Hi ${cleanUserName}! 👋 Kaise ho? Main Clarity hoon. Aaj kya madad chahiye?").
-   - In subsequent technical messages and regular replies, speak naturally and conversationally. Use their name ONLY when it feels natural, supportive, or genuinely relevant.
-   - DO NOT mechanically repeat or force the user's name in every single message or every paragraph.` : `- Address the user warmly, naturally, and supportively without robotic repetition.`}`;
+   - When the user begins a conversation or greets you (e.g. "hi", "hello", "how are you"), address them warmly by their name "${cleanUserName}" in their exact language (e.g., in English: "Hi ${cleanUserName}! 👋 How can I help you today?"; in Hinglish: "Hi ${cleanUserName}! 👋 Kaise ho? Main Clarity hoon. Aaj kya madad chahiye?").
+   - **STRICT CONSTRAINT**: You MUST NOT use the user's name in normal technical, educational, or code explanation answers. Keep technical and educational responses entirely focused on the content and questions, without mentioning the user's name, to maintain a professional, clean, and helpful tone.` : `- Address the user warmly, naturally, and supportively without robotic repetition.`}`;
+
+    if (textMsg) {
+      const engineCtx = UniversalExplanationEngine.orchestrate(textMsg);
+      const engineDirectives = UniversalExplanationEngine.getPromptDirectives(engineCtx);
+      sys += `\n\n${engineDirectives}`;
+    }
 
     if (isGreeting) {
       sys += `\n\nCRITICAL GREETING INSTRUCTION:
@@ -2102,9 +2092,12 @@ Following the details block, provide your beautiful, structured final response.`
   // Chat Streaming Endpoint (SSE)
   // -------------------------------------------------------------------------
   app.post("/api/conversations/:cid/chat", async (req, res) => {
+    const requestStartMs = Date.now();
     const cid = req.params.cid;
     let conv = conversations.get(cid);
     const user = resolveUser(req);
+    const authMs = Date.now() - requestStartMs;
+
     if (!user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
@@ -2152,7 +2145,9 @@ Following the details block, provide your beautiful, structured final response.`
       res.write(`data: ${JSON.stringify(payload)}\n\n`);
     };
 
+    const modelLookupStart = Date.now();
     const modelConfig = resolveModelConfig(model_id || conv.model_id || user.active_model_id, user.id);
+    const modelLookupMs = Date.now() - modelLookupStart;
     if (!modelConfig) {
       sendSSE({
         error: {
@@ -2196,7 +2191,7 @@ Following the details block, provide your beautiful, structured final response.`
     // Generate system instruction first
     const isGreeting = isIdentityOrGreeting(textMsg);
     const userName = user?.name || (user?.email ? user.email.split("@")[0] : "");
-    const sysInstruction = buildNaturalAiSystemInstruction(isGreeting, think, userName);
+    const sysInstruction = buildNaturalAiSystemInstruction(isGreeting, think, userName, textMsg);
 
     // Compute dynamic context budget based on actual configured model parameters
     const budget = calculateDynamicContextBudget({
@@ -2206,6 +2201,8 @@ Following the details block, provide your beautiful, structured final response.`
       userPrompt: textMsg,
     });
 
+    const contextBuildStart = Date.now();
+    const ragRetrievalStart = Date.now();
     // Explicitly scope conversation context using buildChatContext respecting dynamic RAG token budget
     const { knowledgeContext, promptWithContext, tokensUsed: ragTokensUsed } = buildChatContext({
       textMsg,
@@ -2214,17 +2211,30 @@ Following the details block, provide your beautiful, structured final response.`
       project_id,
       maxDocumentTokens: budget.ragBudgetTokens,
     });
+    const ragRetrievalMs = Date.now() - ragRetrievalStart;
+    const contextBuildMs = Date.now() - contextBuildStart;
 
     let assistantText = "";
     const assistantMsgId = `msg_${Date.now()}_a`;
 
+    let conversationLoadMs = 0;
+    let providerRequestStartMs = 0;
+    let providerFirstChunkTimeMs = 0;
+    let providerFirstTokenTimeMs = 0;
+    let providerStreamEndTimeMs = 0;
+    let timeToFirstTokenMs = 0;
+    let firstTokenTimeMs = 0;
+    let streamDurationMs = 0;
+
     try {
+      const conversationLoadStart = Date.now();
       // Build conversation history packed dynamically into history budget
       const rawExistingMsgs = Array.from(messages.values())
         .filter((m) => m.conversation_id === cid && m.id !== userMsgId)
         .sort((a, b) => a.created_at - b.created_at);
 
       const { packedHistory: packedHistoryMsgs } = packChatHistoryIntoBudget(rawExistingMsgs, budget.historyBudgetTokens);
+      conversationLoadMs = Date.now() - conversationLoadStart;
 
       const history = [];
       let expectedRole = "user";
@@ -2240,8 +2250,10 @@ Following the details block, provide your beautiful, structured final response.`
       }
 
       if (modelConfig.provider === "gemini") {
-        const apiKey = modelConfig.apiKey;
-        if (!apiKey) throw new Error(`Gemini API key is missing for model '${modelConfig.name}'. Please configure it in your model settings.`);
+        const apiKey = (modelConfig.apiKey || "").trim();
+        if (!apiKey || apiKey.includes("••••") || apiKey === "placeholder") {
+          throw new Error("MODEL_CREDENTIAL_NOT_CONFIGURED");
+        }
 
         const contents = [
           ...history,
@@ -2251,6 +2263,7 @@ Following the details block, provide your beautiful, structured final response.`
           },
         ];
 
+        providerRequestStartMs = Date.now();
         const streamRes = await streamGeminiWithResilience({
           apiKey,
           modelName: modelConfig.modelName,
@@ -2258,10 +2271,21 @@ Following the details block, provide your beautiful, structured final response.`
           systemInstruction: sysInstruction,
           abortSignal: abortController?.signal,
           onChunk: (text) => {
+            const now = Date.now();
+            if (providerFirstChunkTimeMs === 0) {
+              providerFirstChunkTimeMs = now;
+            }
+            if (text && text.trim() && providerFirstTokenTimeMs === 0) {
+              providerFirstTokenTimeMs = now;
+              firstTokenTimeMs = now;
+              timeToFirstTokenMs = providerFirstTokenTimeMs - providerRequestStartMs;
+            }
             assistantText += text;
             sendSSE({ content: text });
           },
         });
+        providerStreamEndTimeMs = Date.now();
+        streamDurationMs = providerFirstChunkTimeMs > 0 ? (providerStreamEndTimeMs - providerFirstChunkTimeMs) : 0;
         if (streamRes?.modelUsed) {
           activeModelId = streamRes.modelUsed;
         }
@@ -2269,8 +2293,10 @@ Following the details block, provide your beautiful, structured final response.`
         // OpenAI compatible endpoint
         const baseUrl = getEffectiveBaseUrl(modelConfig);
         if (!baseUrl) throw new Error("Base URL is missing for this model.");
-        if (!modelConfig.apiKey && modelConfig.provider !== "ollama") {
-          throw new Error(`API key is missing for model '${modelConfig.name}'. Please configure your API key in Model settings.`);
+        
+        const apiKey = (modelConfig.apiKey || "").trim();
+        if ((!apiKey || apiKey.includes("••••") || apiKey === "placeholder") && modelConfig.provider !== "ollama") {
+          throw new Error("MODEL_CREDENTIAL_NOT_CONFIGURED");
         }
 
         const openAiHistory = history.map(h => ({
@@ -2294,6 +2320,7 @@ Following the details block, provide your beautiful, structured final response.`
           top_p: modelConfig.defaultTopP ?? 1.0,
         };
 
+        providerRequestStartMs = Date.now();
         const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
           method: "POST",
           headers,
@@ -2309,6 +2336,10 @@ Following the details block, provide your beautiful, structured final response.`
            const decoder = new TextDecoder("utf-8");
            let sseBuffer = "";
            for await (const chunk of response.body) {
+             const now = Date.now();
+             if (providerFirstChunkTimeMs === 0) {
+               providerFirstChunkTimeMs = now;
+             }
              sseBuffer += decoder.decode(chunk, { stream: true });
              const lines = sseBuffer.split("\n");
              sseBuffer = lines.pop() || "";
@@ -2321,6 +2352,11 @@ Following the details block, provide your beautiful, structured final response.`
                    const parsed = JSON.parse(dataStr);
                    const token = parsed.choices?.[0]?.delta?.content || parsed.choices?.[0]?.text || "";
                    if (token) {
+                     if (providerFirstTokenTimeMs === 0) {
+                       providerFirstTokenTimeMs = now;
+                       firstTokenTimeMs = now;
+                       timeToFirstTokenMs = providerFirstTokenTimeMs - providerRequestStartMs;
+                     }
                      assistantText += token;
                      sendSSE({ content: token });
                    }
@@ -2339,9 +2375,12 @@ Following the details block, provide your beautiful, structured final response.`
                }
              } catch (e) {}
            }
+           providerStreamEndTimeMs = Date.now();
+           streamDurationMs = providerFirstChunkTimeMs > 0 ? (providerStreamEndTimeMs - providerFirstChunkTimeMs) : 0;
         }
       }
 
+      const persistenceStart = Date.now();
       // Save assistant message
       messages.set(assistantMsgId, {
         id: assistantMsgId,
@@ -2354,11 +2393,56 @@ Following the details block, provide your beautiful, structured final response.`
       try {
         dbSaveMessage(assistantMsgId, cid, "assistant", assistantText, activeModelId);
       } catch {}
+      const persistenceMs = Date.now() - persistenceStart;
+      const totalResponseMs = Date.now() - requestStartMs;
+
+      const providerFirstChunkMs = providerFirstChunkTimeMs > 0 ? (providerFirstChunkTimeMs - providerRequestStartMs) : 0;
+      const providerFirstTokenMs = providerFirstTokenTimeMs > 0 ? (providerFirstTokenTimeMs - providerRequestStartMs) : 0;
+      const providerConnectMs = providerFirstChunkMs; // time to connection and first byte
+      const providerStreamingMs = streamDurationMs;
+
+      console.log(`
+=========================================
+CLARITY MODEL RESPONSE LATENCY REPORT
+=========================================
+Selected Model    : ${modelConfig.modelName}
+-----------------------------------------
+1. Session Auth   : ${authMs} ms
+2. Model Lookup   : ${modelLookupMs} ms
+3. Conv Loading   : ${conversationLoadMs} ms
+4. RAG Retrieval  : ${ragRetrievalMs} ms
+5. Context Build  : ${contextBuildMs} ms
+6. Prov Req Start : ${providerRequestStartMs > 0 ? (providerRequestStartMs - requestStartMs) : 0} ms (rel)
+7. Prov Connect   : ${providerConnectMs} ms
+8. Prov First Chk : ${providerFirstChunkMs} ms
+9. Prov First Tok : ${providerFirstTokenMs} ms
+10. TTFT          : ${timeToFirstTokenMs} ms
+11. Stream Dur/Ms : ${providerStreamingMs} ms
+12. Saving/Persist: ${persistenceMs} ms
+-----------------------------------------
+TOTAL LATENCY     : ${totalResponseMs} ms
+=========================================
+`);
 
       sendSSE({
         done: true,
         message_id: assistantMsgId,
         model_id: activeModelId,
+        metrics: {
+          authMs,
+          modelLookupMs,
+          conversationLoadMs,
+          ragRetrievalMs,
+          contextBuildMs,
+          providerRequestStartMs: providerRequestStartMs > 0 ? (providerRequestStartMs - requestStartMs) : 0,
+          providerConnectMs,
+          providerFirstChunkMs,
+          providerFirstTokenMs,
+          timeToFirstTokenMs,
+          providerStreamingMs,
+          persistenceMs,
+          totalResponseMs,
+        }
       });
       res.end();
     } catch (err: any) {
@@ -2367,7 +2451,13 @@ Following the details block, provide your beautiful, structured final response.`
         if (!res.writableEnded) res.end();
         return;
       }
-      console.error("Chat generation error:", formatApiError(err));
+      console.error("Chat generation error:", formatApiError(err), err);
+      try {
+        fs.appendFileSync(
+          path.join(process.cwd(), "debug-error.log"),
+          `[${new Date().toISOString()}] Error: ${err?.message || err}\nStack: ${err?.stack}\n\n`
+        );
+      } catch (e) {}
       if (!res.writableEnded) {
         sendSSE({
           error: {
@@ -2409,7 +2499,7 @@ Following the details block, provide your beautiful, structured final response.`
     const isGreeting = isIdentityOrGreeting(textMsg);
     const think = !!req.body.think;
     const userName = user?.name || (user?.email ? user.email.split("@")[0] : "");
-    const sysInstruction = buildNaturalAiSystemInstruction(isGreeting, think, userName);
+    const sysInstruction = buildNaturalAiSystemInstruction(isGreeting, think, userName, textMsg);
 
     const modelConfig = resolveModelConfig(conv.model_id || user.active_model_id, user.id);
     if (!modelConfig) {
@@ -2487,8 +2577,10 @@ Following the details block, provide your beautiful, structured final response.`
       }
 
       if (modelConfig.provider === "gemini") {
-        const apiKey = modelConfig.apiKey;
-        if (!apiKey) throw new Error(`Gemini API key is missing for model '${modelConfig.name}'. Please configure it in your model settings.`);
+        const apiKey = (modelConfig.apiKey || "").trim();
+        if (!apiKey || apiKey.includes("••••") || apiKey === "placeholder") {
+          throw new Error("MODEL_CREDENTIAL_NOT_CONFIGURED");
+        }
 
         const contents = [
           ...history,
@@ -2516,8 +2608,10 @@ Following the details block, provide your beautiful, structured final response.`
         // OpenAI compatible endpoint
         const baseUrl = getEffectiveBaseUrl(modelConfig);
         if (!baseUrl) throw new Error("Base URL is missing for this model.");
-        if (!modelConfig.apiKey && modelConfig.provider !== "ollama") {
-          throw new Error(`API key is missing for model '${modelConfig.name}'. Please configure your API key in Model settings.`);
+        
+        const apiKey = (modelConfig.apiKey || "").trim();
+        if ((!apiKey || apiKey.includes("••••") || apiKey === "placeholder") && modelConfig.provider !== "ollama") {
+          throw new Error("MODEL_CREDENTIAL_NOT_CONFIGURED");
         }
 
         const openAiHistory = history.map(h => ({
@@ -2878,10 +2972,44 @@ Following the details block, provide your beautiful, structured final response.`
 
         const mermaidCode = generateProfessionalMermaidDiagram(analysis, isWorkflow ? "workflow" : "architecture");
 
+        let svgStr = "";
+        try {
+          if (isWorkflow) {
+            svgStr = renderProfessionalWorkflowSvg(analysis);
+          } else {
+            svgStr = renderProfessionalArchitectureSvg(analysis);
+          }
+        } catch (e) {
+          console.warn("Failed to render professional SVG:", e);
+        }
+
+        let pngBase64 = "";
+        let jpgBase64 = "";
+        if (svgStr) {
+          try {
+            const pngBuf = await renderSvgToPngBuffer(svgStr, 1920);
+            const jpgBuf = await renderSvgToJpgBuffer(svgStr, 1920, 92);
+            pngBase64 = pngBuf.toString("base64");
+            jpgBase64 = jpgBuf.toString("base64");
+          } catch (e) {
+            console.warn("Failed to render PNG/JPG buffers for chat diagram:", e);
+          }
+        }
+
+        const baseFileName = `${proj.name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
+        const pngFilename = `${baseFileName}_${isWorkflow ? "workflow" : "architecture"}.png`;
+        const jpgFilename = `${baseFileName}_${isWorkflow ? "workflow" : "architecture"}.jpg`;
+
         const responseMarkdown = `Here is the verified **${diagramTypeLabel}** for **${proj.name}**:\n\n\`\`\`mermaid\n${mermaidCode}\n\`\`\`\n\n*Interactive controls available: Pan, zoom, full-screen expansion, and export to PNG / SVG.*`;
 
         sendSSE({
           content: responseMarkdown,
+          diagram: svgStr || undefined,
+          diagramTitle: diagramTypeLabel,
+          pngBase64: pngBase64 || undefined,
+          jpgBase64: jpgBase64 || undefined,
+          pngFilename,
+          jpgFilename,
           done: true,
           intent: "CODE_EXPLANATION"
         });

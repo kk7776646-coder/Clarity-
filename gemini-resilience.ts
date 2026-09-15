@@ -38,6 +38,10 @@ export function formatApiError(err: any): string {
   const status = String(err.status || err.code || "");
   const combined = `${status} ${msg}`.toLowerCase();
 
+  if (combined.includes("model_credential_not_configured")) {
+    return "MODEL_CREDENTIAL_NOT_CONFIGURED";
+  }
+
   if (
     combined.includes("401") ||
     combined.includes("unauthorized") ||
@@ -105,6 +109,7 @@ export function isRetryableError(err: any): boolean {
 
   // Non-retryable configuration & auth errors
   if (
+    text.includes("model_credential_not_configured") ||
     text.includes("401") ||
     text.includes("403") ||
     text.includes("404") ||

@@ -1,8 +1,12 @@
 async function runTest() {
   try {
-    const chatRes = await fetch("http://localhost:3000/api/conversations/conv_123/chat", {
+    const cid = "conv_" + Date.now();
+    const chatRes = await fetch(`http://localhost:3000/api/conversations/${cid}/chat`, {
        method: "POST",
-       headers: { "Content-Type": "application/json" },
+       headers: { 
+         "Content-Type": "application/json",
+         "Authorization": "Bearer default_token"
+       },
        body: JSON.stringify({ message: "Hello, who are you? Please reply in one short sentence." })
     });
     

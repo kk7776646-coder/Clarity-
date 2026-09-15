@@ -727,6 +727,58 @@ export function renderProfessionalFileArchitectureSvg(
 }
 
 /**
+ * Clean up raw technical node/workflow labels, removing raw IDs, camelCase,
+ * system-suffixes, and generic letters to produce enterprise-grade, human-readable titles.
+ */
+export function beautifyTechnicalLabel(l: string): string {
+  if (!l) return "";
+  let cleaned = l.trim();
+
+  // Strip common step prefixes like A', B', C', D' or A. , B. , etc.
+  cleaned = cleaned.replace(/^[A-Z]['.]?\s*[:\-]?\s*/i, "");
+
+  // Strip system-suffixes and common file extensions inside node labels
+  cleaned = cleaned.replace(/\.(ts|js|tsx|jsx|html|css|json|py|java|go|rs|md|yaml|yml|sh|sql)$/i, "");
+  cleaned = cleaned.replace(/_node$|_component$|_service$|_module$|_handler$|_controller$|Node$|Component$|Service$|Module$|Handler$|Controller$/gi, " ");
+
+  // Strip camelCase suffixes
+  cleaned = cleaned.replace(/(input|process|ai|alert|db|data|cache|route|gateway|controller)Node$/gi, "$1");
+
+  // Title casing & smart replacements
+  const mapping: Record<string, string> = {
+    "inputnode": "User Input Gateway",
+    "processnode": "Data Processing Engine",
+    "ainode": "AI Inference Controller",
+    "alertnode": "Alert Gateway",
+    "node_server": "Core Server",
+    "node_db": "Database Store",
+    "node_ai": "AI Intelligence Engine",
+    "node_client": "Web Client UI",
+    "client": "Client Application",
+    "server": "Core Backend Server",
+    "db": "Database Store",
+    "database": "Database Store"
+  };
+
+  const lower = cleaned.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (mapping[lower]) {
+    return mapping[lower];
+  }
+
+  // Split camelCase and convert to clean Title Case
+  cleaned = cleaned
+    .replace(/([A-Z])/g, " $1") // split camelCase
+    .replace(/[_\-\.]/g, " ") // replace delimiters with space
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ")
+    .trim();
+
+  return cleaned || "Component";
+}
+
+/**
  * Generate Evidence-Grounded, Publication-Grade Mermaid Diagram Code
  */
 export function generateProfessionalMermaidDiagram(
@@ -744,14 +796,15 @@ export function generateProfessionalMermaidDiagram(
     });
 
     participants.forEach(p => {
-      const cleanLabel = p.replace(/_/g, " ");
-      mm += `    participant ${p} as ${cleanLabel}\n`;
+      const label = p.replace(/_/g, " ");
+      const beautified = beautifyTechnicalLabel(label);
+      mm += `    participant ${p} as ${beautified}\n`;
     });
 
     analysis.dataFlow.steps.forEach(s => {
       const src = (s.source || "Client").replace(/[^a-zA-Z0-9_]/g, "_");
       const tgt = (s.target || "Server").replace(/[^a-zA-Z0-9_]/g, "_");
-      const title = (s.title || "Execute step").replace(/"/g, "'");
+      const title = beautifyTechnicalLabel(s.title || "Execute step").replace(/"/g, "'");
       mm += `    ${src}->>${tgt}: ${title}\n`;
     });
 
@@ -828,7 +881,8 @@ export function generateProfessionalMermaidDiagram(
   }
 
   function cleanLabel(l: string): string {
-    return (l || "Node").replace(/"/g, "'").replace(/[\[\]\(\)\{\}]/g, "");
+    const raw = (l || "Node").replace(/"/g, "'").replace(/[\[\]\(\)\{\}]/g, "");
+    return beautifyTechnicalLabel(raw);
   }
 
   if (clientNodes.length > 0) {
