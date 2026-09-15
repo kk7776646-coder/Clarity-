@@ -30,11 +30,9 @@ window.Clarity.pages.history = async function renderHistoryPage() {
         '<svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px;"><path d="M12 5v14M5 12h14"/></svg>',
         ' New conversation</button></div>',
     '</header>',
-    '<section class="panel"><div class="panel__body">',
     conversations.length === 0
-      ? '<div class="empty-state"><div style="margin-bottom:8px;">' + window.Clarity.icons.clock + '</div>No conversation history<div style="font-size:13px;margin-top:4px;">Start a new chat to begin.</div></div>'
+      ? '<div class="empty-state" style="padding:40px 20px;text-align:center;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg, 12px);"><div style="margin-bottom:8px;">' + window.Clarity.icons.clock + '</div>No conversation history<div style="font-size:13px;margin-top:4px;color:var(--ink-muted);">Start a new chat to begin.</div></div>'
       : '<div class="history-list">' + conversations.map(historyItemHtml).join('') + '</div>',
-    '</div></section>',
     '</div></div>'
   ].join('');
 

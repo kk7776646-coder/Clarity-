@@ -6,15 +6,21 @@ window.Clarity.app = {
     if (window.Clarity.theme && typeof window.Clarity.theme.init === "function") {
       window.Clarity.theme.init();
     }
-    window.Clarity.settings.applyTheme(state.theme || "system");
+    window.Clarity.settings.applyTheme(state.theme || "light");
     document.documentElement.setAttribute("data-density", state.density || "comfortable");
 
     const sidebar = document.getElementById("sidebar");
     if (sidebar) {
       const isMobile = window.innerWidth < 1024;
-      // On mobile start closed (off-canvas), on desktop start open.
+      const storedRail = localStorage.getItem("clarity_sidebar_rail");
+      const isRailStored = storedRail === "true";
+      // On mobile start closed (off-canvas), on desktop restore stored rail state.
       sidebar.classList.toggle("is-open", !isMobile);
-      if (!isMobile) sidebar.classList.remove("is-rail");
+      if (!isMobile && isRailStored) {
+        sidebar.classList.add("is-rail");
+      } else if (!isMobile) {
+        sidebar.classList.remove("is-rail");
+      }
     }
     if (window.Clarity.sources && typeof window.Clarity.sources.toggle === "function") {
       window.Clarity.sources.toggle(false);
@@ -75,15 +81,23 @@ window.Clarity.app = {
       if (!sidebar) return;
       const isOpen = open === undefined ? !sidebar.classList.contains("is-open") : open;
       sidebar.classList.toggle("is-open", isOpen);
-      if (isOpen) {
+      if (isOpen && window.innerWidth < 1024) {
         sidebar.classList.remove("is-rail");
       }
       if (scrim) scrim.hidden = !isOpen;
+      if (window.Clarity.uiTooltip && typeof window.Clarity.uiTooltip.clear === "function") {
+        window.Clarity.uiTooltip.clear();
+      }
+      const floatingBurger = document.getElementById("floatingBurger");
+      if (floatingBurger) {
+        const isMobile = window.innerWidth < 1024;
+        floatingBurger.style.display = (isMobile && !isOpen) ? "inline-flex" : "none";
+      }
     };
     window.Clarity.app.setSidebarOpen = setSidebarOpen;
     window.Clarity.app.closeSidebar = () => setSidebarOpen(false);
 
-if (brand) {
+    if (brand) {
       brand.addEventListener("click", (event) => {
         const isMobile = window.innerWidth < 1024;
         if (isMobile && sidebar) {
@@ -95,6 +109,7 @@ if (brand) {
         if (sidebar && sidebar.classList.contains("is-rail")) {
           event.preventDefault();
           sidebar.classList.remove("is-rail");
+          try { localStorage.setItem("clarity_sidebar_rail", "false"); } catch(e){}
         }
       });
       brand.addEventListener("keydown", (event) => {
@@ -104,10 +119,11 @@ if (brand) {
         if (sidebar && sidebar.classList.contains("is-rail")) {
           event.preventDefault();
           sidebar.classList.remove("is-rail");
+          try { localStorage.setItem("clarity_sidebar_rail", "false"); } catch(e){}
         }
       });
     }
-if (sidebarCollapse) {
+    if (sidebarCollapse) {
       const syncCollapseAffordance = () => {
         const isRail = sidebar && sidebar.classList.contains("is-rail");
         const label = isRail ? "Expand sidebar (Ctrl+B)" : "Collapse sidebar (Ctrl+B)";
@@ -119,9 +135,13 @@ if (sidebarCollapse) {
       sidebarCollapse.addEventListener("click", () => {
         if (!sidebar) return;
         sidebar.classList.toggle("is-rail");
-        if (sidebar.classList.contains("is-rail")) {
+        const isRailNow = sidebar.classList.contains("is-rail");
+        if (isRailNow) {
           sidebar.classList.add("is-open");
         }
+        try {
+          localStorage.setItem("clarity_sidebar_rail", isRailNow ? "true" : "false");
+        } catch(e){}
         syncCollapseAffordance();
         if (window.Clarity.uiTooltip) window.Clarity.uiTooltip.refresh();
       });

@@ -2,6 +2,8 @@ window.Clarity = window.Clarity || {};
 
 window.Clarity.uiSidebar = {
   _conversations: [],
+  _searchQuery: "",
+  _searchBound: false,
 
   async loadConversations() {
     try {
@@ -29,12 +31,40 @@ window.Clarity.uiSidebar = {
     };
     renderLinks((window.Clarity.data && window.Clarity.data.nav) || [], navRoot);
     renderLinks((window.Clarity.data && window.Clarity.data.secondaryNav) || [], secondaryNav);
+    this._bindSearchEvents();
     this._updateRecent();
 
     // Wire tooltip on every interactive sidebar element (only shows when rail).
     const sidebar = document.getElementById("sidebar");
     if (sidebar && window.Clarity.uiTooltip) {
       window.Clarity.uiTooltip.bindSidebar(sidebar);
+    }
+  },
+
+  _bindSearchEvents() {
+    if (this._searchBound) return;
+    const input = document.getElementById("sidebarSearchInput");
+    const clearBtn = document.getElementById("sidebarSearchClear");
+    if (!input) return;
+
+    this._searchBound = true;
+
+    input.addEventListener("input", (e) => {
+      this._searchQuery = e.target.value || "";
+      if (clearBtn) {
+        clearBtn.style.display = this._searchQuery.trim() ? "block" : "none";
+      }
+      this._updateRecent();
+    });
+
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        input.value = "";
+        this._searchQuery = "";
+        clearBtn.style.display = "none";
+        this._updateRecent();
+        input.focus();
+      });
     }
   },
 
@@ -58,22 +88,38 @@ window.Clarity.uiSidebar = {
   _updateRecent() {
     const list = document.getElementById("recentList");
     if (!list) return;
-    const items = this._conversations.slice(0, 5);
+
+    const query = (this._searchQuery || "").trim().toLowerCase();
+    let items = [];
+
+    if (!query) {
+      items = this._conversations.slice(0, 5);
+    } else {
+      items = this._conversations.filter(item => {
+        const title = (item.title || "").toLowerCase();
+        const snippet = (item.content_snippet || "").toLowerCase();
+        return title.includes(query) || snippet.includes(query);
+      }).slice(0, 10);
+    }
+
     if (items.length === 0) {
-      list.innerHTML = '<li class="recent__empty">No recent chats</li>';
+      list.innerHTML = query 
+        ? '<li class="recent__empty" style="padding: 6px 8px; font-size: 11.5px; color: var(--ink-muted);">No matching chats</li>' 
+        : '<li class="recent__empty">No recent chats</li>';
       return;
     }
+
     list.innerHTML = items.map((item) => {
       let timeStr = "";
       if (item.updated_at) {
         const d = new Date(item.updated_at * 1000);
         timeStr = d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
       }
-      let title = item.title || '';
-      if (title.length > 40) {
-        title = title.slice(0, 37) + '...';
+      let title = item.title || 'New conversation';
+      if (title.length > 36) {
+        title = title.slice(0, 33) + '...';
       }
-      return '<li><a class="recent__item" href="#/chat/' + item.id + '"><span class="recent__title">' + window.Clarity.utils.escapeHtml(title || "New conversation") + '</span><span class="recent__time">' + timeStr + '</span></a></li>';
+      return '<li><a class="recent__item" href="#/chat/' + item.id + '"><span class="recent__title">' + window.Clarity.utils.escapeHtml(title) + '</span><span class="recent__time">' + timeStr + '</span></a></li>';
     }).join('');
   },
 

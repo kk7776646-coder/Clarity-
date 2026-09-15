@@ -1581,10 +1581,17 @@ async function startServer() {
     const list = Array.from(conversations.values())
       .filter((c) => c.user_id === user.id || !c.user_id || user.id === initialUser.id)
       .sort((a, b) => b.updated_at - a.updated_at)
-      .map(c => ({
-        ...c,
-        message_count: msgCounts.get(c.id) || 0,
-      }));
+      .map(c => {
+        const convMsgs = Array.from(messages.values())
+          .filter(m => m.conversation_id === c.id)
+          .map(m => m.content || "")
+          .join(" ");
+        return {
+          ...c,
+          message_count: msgCounts.get(c.id) || 0,
+          content_snippet: convMsgs.slice(0, 5000),
+        };
+      });
     res.json({ conversations: list });
   });
 
@@ -1977,7 +1984,7 @@ CORE DIRECTIVES & RESPONSE PHILOSOPHY
      • **Troubleshooting & Fixes** ("Why is this failing?"): Crisp diagnosis of root cause + numbered resolution steps + clean code snippets.
      • **Code Solutions** ("Write a TypeScript handler"): Concise explanation + complete, production-ready code blocks.
      • **Project / Codebase Questions**: Ground answers strictly in the real project context, referencing real files, functions, and endpoints.
-     • **Architecture / System Design**: Concrete explanation + smart visual diagram where beneficial.
+     • **Architecture / System Design**: Concrete explanation (include visual diagram ONLY if explicitly asked by user).
 
 3. **High-Readability Markdown Formatting**:
    - Keep paragraphs short (2-3 sentences) separated by clean blank lines.
@@ -1993,10 +2000,10 @@ CORE DIRECTIVES & RESPONSE PHILOSOPHY
    - Use direction symbols (→, ←, ↓, ↑, •, ✓, ✕) to clarify data flow or status.
    - NEVER spam emojis on every line, and NEVER include emojis inside code blocks, variable names, or JSON keys.
 
-5. **Smart Visual / Diagram Decision Engine**:
-   - Output a \`\`\`mermaid diagram ONLY when visual representation genuinely clarifies complexity (e.g. system architecture, multi-step pipeline, authentication handshake, data flow, ER relationships, state transitions).
-   - Do NOT generate diagrams for simple definitions, casual chit-chat, short factual answers, or basic code examples.
-   - For project architecture diagrams, reference ONLY real files, services, and routes from the workspace. Never invent fictitious modules.
+5. **Direct Answers & Explicit-Only Diagrams (STRICT NO-UNSOLICITED-DIAGRAMS RULE)**:
+   - **DO NOT GENERATE DIAGRAMS UNLESS EXPLICITLY REQUESTED**: Do NOT output Mermaid diagrams, flowcharts, or visual maps for casual questions, code explanations, or standard queries. Generate a diagram ONLY when the user explicitly asks for one (e.g., "diagram banao", "show a flowchart", "make a architecture diagram", "draw workflow").
+   - **CONCISE & DIRECT RESPONSES**: Answer the user's prompt directly, clearly, and concisely without unnecessary fluff, unwanted extras, or unrequested visual blocks.
+   - **WHEN DIAGRAMS ARE REQUESTED**: Use clean, modern Mermaid syntax with realistic emojis/icons in nodes (e.g. [🐍 Python Basics], [📊 Pandas DataFrames]). NEVER put raw HTML tags (like <i>, <b>, <br>, <span>, &amp;) inside Mermaid node labels.
 
 6. **Strict Language Mirroring & Multilingual Fluency (CRITICAL RULE)**:
    - **Detect and match the language of the user's latest prompt with 100% precision.**

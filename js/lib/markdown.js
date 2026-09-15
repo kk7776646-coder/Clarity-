@@ -941,7 +941,11 @@ window.Clarity = window.Clarity || {};
     code = code.replace(/^```(?:mermaid)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
 
     // Replace HTML entities
-    code = code.replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+    code = code.replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+
+    // Strip raw HTML formatting tags inside node labels (e.g. <i>, </i>, <b>, </b>, <em>, <span>, <font>, etc.)
+    code = code.replace(/<\/?(i|b|em|span|small|strong|p|div|font|u|s|sub|sup)\b[^>]*>/gi, "");
+    code = code.replace(/<br\s*\/?>/gi, " ");
 
     var rawLines = code.split("\n");
     var cleanedLines = [];

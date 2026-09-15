@@ -86,6 +86,7 @@ window.Clarity.uiTooltip = (function () {
 
   function show(target, text, opts = {}) {
     if (!target || !text) return;
+    if (window.innerWidth < 1024 || (window.matchMedia && window.matchMedia("(pointer: coarse)").matches)) return;
     if (!activeTip) activeTip = create();
     if (!activeTip || !activeTip.style) return;
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
@@ -117,9 +118,11 @@ window.Clarity.uiTooltip = (function () {
   }
 
   function shouldShow(el) {
+    if (window.innerWidth < 1024) return false;
+    if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return false;
     const sidebar = el.closest(".sidebar");
     if (sidebar && sidebar.classList.contains("is-rail")) return true;
-    // For elements outside the sidebar (e.g. topbar avatar), always show.
+    // For elements outside the sidebar (e.g. topbar avatar), show on desktop only.
     if (!sidebar) return true;
     return false;
   }

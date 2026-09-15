@@ -33,6 +33,18 @@
 
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script>
+      (function() {
+        try {
+          if (window.innerWidth >= 1024 && localStorage.getItem('clarity_sidebar_rail') === 'true') {
+            document.addEventListener('DOMContentLoaded', function() {
+              var sb = document.getElementById('sidebar');
+              if (sb) sb.classList.add('is-rail');
+            });
+          }
+        } catch(e) {}
+      })();
+    </script>
   </head>
 
   <body>
@@ -46,8 +58,7 @@
         <div class="sidebar__head">
           <a class="brand" href="#/" id="sidebarBrand" data-nav-home aria-expanded="true" aria-controls="sidebar">
             <span class="brand__mark" aria-hidden="true">
-              <img class="brand__mark-img brand__mark-img--light" src="/clarity-icon.png" alt="" />
-              <img class="brand__mark-img brand__mark-img--dark" src="/clarity-icon-white.png" alt="" />
+              <img class="brand__mark-img" src="/clarity-icon.png" alt="Clarity" />
             </span>
             <span class="brand__name">Clarity</span>
           </a>
@@ -72,6 +83,13 @@
             <div class="nav-section__head">
               <span class="nav-section__title">Recent</span>
               <a class="nav-section__link" href="#/history">All</a>
+            </div>
+            <div class="sidebar-search" style="padding: 4px 0 8px 0;">
+              <div class="sidebar-search__wrapper" style="position: relative; display: flex; align-items: center;">
+                <svg class="icon sidebar-search__icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 8px; color: var(--ink-muted); pointer-events: none;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="sidebarSearchInput" class="sidebar-search__input" placeholder="Search chats..." aria-label="Search chats by title or content" style="width: 100%; padding: 5px 22px 5px 26px; font-size: 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface-muted); color: var(--ink); outline: none; transition: border-color 0.15s ease, background 0.15s ease;" />
+                <button type="button" id="sidebarSearchClear" class="sidebar-search__clear" aria-label="Clear search" title="Clear search" style="position: absolute; right: 4px; display: none; background: transparent; border: none; padding: 2px; color: var(--ink-muted); cursor: pointer;"><svg class="icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+              </div>
             </div>
             <ul class="recent" id="recentList"></ul>
           </div>

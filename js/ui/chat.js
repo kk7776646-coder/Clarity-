@@ -3512,20 +3512,8 @@ window.Clarity.uiChat = {
       btn.addEventListener("click", btn._batchApplyHandler);
     });
 
-    let activeMessage = null;
-
     convEl.querySelectorAll(".message").forEach(msgEl => {
-      msgEl.removeEventListener("touchstart", msgEl._touchHandler);
-      msgEl._touchHandler = (e) => {
-        if (e.target.closest(".message-control") || e.target.closest(".code-cell__btn") || e.target.closest("[data-code-action]") || e.target.closest(".code-copy") || e.target.closest(".code-download") || e.target.closest(".edit-wrapper")) return;
-
-        if (activeMessage && activeMessage !== msgEl) {
-          activeMessage.classList.remove("message--active");
-        }
-        msgEl.classList.add("message--active");
-        activeMessage = msgEl;
-      };
-      msgEl.addEventListener("touchstart", msgEl._touchHandler, { passive: true });
+      msgEl.classList.remove("message--active");
       this._postProcessMessage(msgEl);
     });
 

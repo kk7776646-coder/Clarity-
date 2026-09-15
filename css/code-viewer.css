@@ -775,19 +775,19 @@ span.token,
   align-items: center;
   justify-content: center;
   gap: 5px;
-  padding: 4px 8px;
-  height: 26px;
-  border-radius: 6px;
+  padding: 3px 6px;
+  height: 24px;
+  border-radius: 4px;
   font-size: 11px;
   font-weight: 500;
   color: var(--code-cell-muted, #71717a);
-  background: var(--code-cell-header-bg, #f4f4f5);
-  border: 1px solid var(--code-cell-border, #e4e4e7);
+  background: transparent !important;
+  border: none !important;
   cursor: pointer;
   opacity: 0;
   transition: all 0.15s ease;
   z-index: 10;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: none !important;
 }
 
 .pre-copy-container:hover .pre-copy-btn,
@@ -796,14 +796,14 @@ span.token,
 }
 
 .pre-copy-btn:hover {
-  color: var(--code-cell-ink, #18181b);
-  background: var(--surface-hover, #e4e4e7);
-  border-color: var(--line, #d4d4d8);
+  color: var(--accent, #3b82f6);
+  background: transparent !important;
+  border: none !important;
 }
 
 .pre-copy-btn--copied {
   color: var(--success, #10b981) !important;
-  background: var(--success-soft, #ecfdf5) !important;
-  border-color: var(--success, #10b981) !important;
+  background: transparent !important;
+  border: none !important;
 }
 

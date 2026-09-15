@@ -138,6 +138,15 @@
   background-color: var(--line-strong);
 }
 
+.sidebar-search__input:focus {
+  border-color: var(--accent) !important;
+  background: var(--surface) !important;
+  box-shadow: 0 0 0 2px var(--accent-soft) !important;
+}
+.sidebar-search__clear:hover {
+  color: var(--ink) !important;
+}
+
 .sidebar__foot {
   flex: none;
   border-top: 1px solid var(--line);
@@ -205,13 +214,26 @@
 .sidebar.is-rail .profile__btn {
   justify-content: center;
   padding: 0;
+  display: flex !important;
+  align-items: center !important;
 }
 
 .sidebar.is-rail .nav__item {
-  width: 36px;
-  height: 36px;
-  min-height: 36px;
-  margin: 0 auto;
+  width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  margin: 2px auto !important;
+  border-radius: 10px !important;
+}
+
+.sidebar.is-rail .nav__item .nav__icon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 20px !important;
+  height: 20px !important;
+  margin: 0 auto !important;
+  opacity: 0.9 !important;
 }
 
 .sidebar.is-rail .chat-sidebar__new {
@@ -221,20 +243,38 @@
 }
 
 .sidebar.is-rail .chat-sidebar__new .btn--primary {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: 10px;
-  justify-content: center;
+  width: 40px !important;
+  height: 40px !important;
+  padding: 0 !important;
+  margin: 0 auto !important;
+  border-radius: 10px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   box-shadow: 0 1px 3px rgba(95, 90, 246, 0.2);
 }
 
 .sidebar.is-rail .chat-sidebar__new .btn--primary span {
-  display: none;
+  display: none !important;
 }
 
 .sidebar.is-rail .brand__mark {
-  margin: 0;
+  margin: 0 auto !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 32px !important;
+  height: 32px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.sidebar.is-rail .brand__mark img {
+  display: block !important;
+  width: 26px !important;
+  height: 26px !important;
+  object-fit: contain !important;
+  margin: 0 auto !important;
 }
 
 /* ------------------------------- Shell ------------------------------ */
@@ -488,6 +528,18 @@
     color: var(--ink) !important;
     cursor: pointer !important;
     transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+    -webkit-tap-highlight-color: transparent !important;
+  }
+
+  /* Hide floating burger button when sidebar is open on mobile */
+  .sidebar.is-open ~ .shell .floating-burger,
+  .sidebar.is-open ~ #floatingBurger,
+  body:has(.sidebar.is-open) #floatingBurger,
+  .app:has(.sidebar.is-open) #floatingBurger {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
 
   .floating-burger:hover {
@@ -663,11 +715,11 @@
   flex-direction: column !important;
 }
 
-/* Restrict the messages and empty state inside the conversation container to the standard 820px line bounds */
+/* Restrict the messages and empty state inside the conversation container to spacious line bounds */
 .conversation > .message,
 .conversation > .chat-empty,
 .conversation > .message-control {
-  max-width: 820px !important;
+  max-width: 920px !important;
   width: 100% !important;
   margin-left: auto !important;
   margin-right: auto !important;
