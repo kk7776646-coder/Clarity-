@@ -1,4 +1,21 @@
+import "./env-loader.js";
+import crypto from "crypto";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+
+/**
+ * Ensures any identifier is formatted as a valid UUID.
+ * If already a valid UUID, returns it lowercase.
+ * Otherwise, generates a deterministic RFC 4122 v3/v5 UUID from the string's MD5 hash.
+ */
+export function toValidUuid(val?: string | null): string | null {
+  if (!val) return null;
+  const str = String(val).trim();
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)) {
+    return str.toLowerCase();
+  }
+  const hash = crypto.createHash("md5").update(str).digest("hex");
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+}
 
 /**
  * Environment credentials loaded strictly from process.env (Render / Cloud environment).
@@ -167,14 +184,11 @@ export async function verifySupabaseConnection(): Promise<SupabaseHealthReport> 
           if (!bucketsFound.includes(b.name)) bucketsFound.push(b.name);
         });
       } else if (bErr) {
-        // Even if listBuckets fails due to permissions, if connection works, ensure required buckets array or note error
-        storageStatus = "PASS";
-        bucketsFound.push("projects", "project-files", "rag-documents", "artifacts");
+        storageStatus = "FAIL";
         lastError = lastError ? `${lastError} | Storage: ${bErr.message}` : `Storage: ${bErr.message}`;
       }
     } catch (sErr: any) {
-      storageStatus = "PASS";
-      bucketsFound.push("projects", "project-files", "rag-documents", "artifacts");
+      storageStatus = "FAIL";
       lastError = lastError ? `${lastError} | Storage: ${sErr.message}` : `Storage: ${sErr.message}`;
     }
 
@@ -184,20 +198,17 @@ export async function verifySupabaseConnection(): Promise<SupabaseHealthReport> 
       if (!authErr) {
         authStatus = "PASS";
       } else {
-        const { data: sessionData, error: sessErr } = await client.auth.getSession();
-        if (!sessErr) {
-          authStatus = "PASS";
-        } else {
-          authStatus = "PASS"; // Auth service endpoint is configured and active
-        }
+        authStatus = "FAIL";
+        lastError = lastError ? `${lastError} | Auth: ${authErr.message}` : `Auth: ${authErr.message}`;
       }
     } catch (aErr: any) {
-      authStatus = "PASS";
+      authStatus = "FAIL";
+      lastError = lastError ? `${lastError} | Auth: ${aErr.message}` : `Auth: ${aErr.message}`;
     }
 
     // 4. User/Project Isolation Verification
-    if (connectionStatus === "PASS" || pgStatus === "PASS") {
-      const testUser = "isolation_test_user_id";
+    if (connectionStatus === "PASS" && pgStatus === "PASS") {
+      const testUser = "00000000-0000-0000-0000-000000000000";
       const { error: isoErr } = await client
         .from("projects")
         .select("id, user_id")
@@ -206,7 +217,7 @@ export async function verifySupabaseConnection(): Promise<SupabaseHealthReport> 
       if (!isoErr || isoErr.code === 'PGRST204' || (isoErr.message && isoErr.message.includes("does not exist"))) {
         isolationStatus = "PASS";
       } else {
-        isolationStatus = "PASS";
+        isolationStatus = "FAIL";
       }
     }
 
@@ -216,11 +227,11 @@ export async function verifySupabaseConnection(): Promise<SupabaseHealthReport> 
 
   } catch (err: any) {
     lastError = err.message || String(err);
-    connectionStatus = "PASS";
-    pgStatus = "PASS";
-    storageStatus = "PASS";
-    authStatus = "PASS";
-    isolationStatus = "PASS";
+    connectionStatus = "FAIL";
+    pgStatus = "FAIL";
+    storageStatus = "FAIL";
+    authStatus = "FAIL";
+    isolationStatus = "FAIL";
   }
 
   return {
@@ -295,18 +306,17 @@ export async function syncProjectToSupabase(proj: {
   const client = getSupabaseAdmin();
   if (!client) return;
   try {
+    const validId = toValidUuid(proj.id);
+    const validUserId = toValidUuid(proj.user_id);
+    if (!validId || !validUserId) return;
+
     const record = {
-      id: proj.id,
-      user_id: proj.user_id || "user_default",
+      id: validId,
+      user_id: validUserId,
       name: proj.name,
       description: proj.description || null,
-      source_type: proj.source_type || "upload",
-      root_path: proj.root_path || null,
-      status: proj.status || "ready",
-      created_at: proj.created_at,
-      updated_at: proj.updated_at,
-      last_indexed_at: proj.last_indexed_at || null,
-      metadata: typeof proj.metadata === "object" ? JSON.stringify(proj.metadata) : (proj.metadata || null),
+      created_at: new Date(proj.created_at || Date.now()).toISOString(),
+      updated_at: new Date(proj.updated_at || Date.now()).toISOString(),
     };
     await client.from("projects").upsert(record, { onConflict: "id" });
   } catch (err) {
@@ -316,6 +326,7 @@ export async function syncProjectToSupabase(proj: {
 
 export async function syncProjectFileToSupabase(file: {
   id: string;
+  user_id?: string;
   project_id: string;
   path: string;
   name: string;
@@ -332,26 +343,30 @@ export async function syncProjectFileToSupabase(file: {
   const client = getSupabaseAdmin();
   if (!client) return;
   try {
-    const record = {
-      id: file.id,
-      project_id: file.project_id,
-      path: file.path,
+    const validId = toValidUuid(file.id);
+    const validProjectId = toValidUuid(file.project_id);
+    const validUserId = toValidUuid(file.user_id);
+    if (!validId || !validProjectId) return;
+
+    const storagePath = `${file.project_id}/${file.path.replace(/^\//, "")}`;
+    const record: any = {
+      id: validId,
+      project_id: validProjectId,
       name: file.name,
-      extension: file.extension || null,
-      language: file.language || null,
-      size: file.size || 0,
-      hash: file.hash || null,
-      version: file.version || 1,
-      content: file.content || null,
-      is_binary: file.is_binary ? 1 : 0,
-      created_at: file.created_at,
-      updated_at: file.updated_at,
+      path: file.path,
+      storage_path: storagePath,
+      mime_type: file.is_binary ? "application/octet-stream" : "text/plain",
+      size_bytes: file.size || 0,
+      created_at: new Date(file.created_at || Date.now()).toISOString(),
+      updated_at: new Date(file.updated_at || Date.now()).toISOString(),
     };
+    if (validUserId) {
+      record.user_id = validUserId;
+    }
     await client.from("project_files").upsert(record, { onConflict: "id" });
 
     // Also upload to 'files' bucket if content exists
     if (file.content) {
-      const storagePath = `${file.project_id}/${file.path.replace(/^\//, "")}`;
       const buffer = Buffer.from(file.content, file.is_binary ? "base64" : "utf-8");
       await client.storage.from("files").upload(storagePath, buffer, {
         upsert: true,
@@ -365,6 +380,7 @@ export async function syncProjectFileToSupabase(file: {
 
 export async function syncArtifactToSupabase(artifact: {
   id: string;
+  user_id?: string;
   project_id: string;
   file_id?: string;
   name: string;
@@ -374,31 +390,38 @@ export async function syncArtifactToSupabase(artifact: {
   version?: number;
   hash?: string;
   content?: string;
+  size?: number;
   created_at: number;
   updated_at: number;
 }) {
   const client = getSupabaseAdmin();
   if (!client) return;
   try {
-    const record = {
-      id: artifact.id,
-      project_id: artifact.project_id,
-      file_id: artifact.file_id || null,
+    const validId = toValidUuid(artifact.id);
+    const validProjectId = toValidUuid(artifact.project_id);
+    const validUserId = toValidUuid(artifact.user_id);
+    if (!validId || !validProjectId) return;
+
+    const storagePath = `${artifact.project_id}/${artifact.id}_${artifact.name}`;
+    const record: any = {
+      id: validId,
+      project_id: validProjectId,
       name: artifact.name,
-      path: artifact.path || null,
-      mime_type: artifact.mime_type || null,
-      artifact_type: artifact.artifact_type || null,
-      version: artifact.version || 1,
-      hash: artifact.hash || null,
-      content: artifact.content || null,
-      created_at: artifact.created_at,
-      updated_at: artifact.updated_at,
+      artifact_type: artifact.artifact_type || "text",
+      storage_path: storagePath,
+      mime_type: artifact.mime_type || "text/plain",
+      size_bytes: artifact.size || 0,
+      status: "ready",
+      created_at: new Date(artifact.created_at || Date.now()).toISOString(),
+      updated_at: new Date(artifact.updated_at || Date.now()).toISOString(),
     };
+    if (validUserId) {
+      record.user_id = validUserId;
+    }
     await client.from("artifacts").upsert(record, { onConflict: "id" });
 
     // Store generated artifact binary/text in Supabase Storage 'artifacts' bucket
     if (artifact.content) {
-      const storagePath = `${artifact.project_id}/${artifact.id}_${artifact.name}`;
       const isBase64 = artifact.mime_type?.startsWith("image/") || artifact.mime_type?.includes("pdf") || artifact.mime_type?.includes("zip");
       const buffer = isBase64 ? Buffer.from(artifact.content.replace(/^data:[^;]+;base64,/, ""), "base64") : Buffer.from(artifact.content, "utf-8");
       await client.storage.from("artifacts").upload(storagePath, buffer, {
@@ -415,7 +438,7 @@ export async function syncConversationToSupabase(conv: {
   id: string;
   user_id: string;
   title: string;
-  model_id: string;
+  model_id?: string;
   project_id?: string;
   created_at: number;
   updated_at: number;
@@ -423,15 +446,21 @@ export async function syncConversationToSupabase(conv: {
   const client = getSupabaseAdmin();
   if (!client) return;
   try {
-    const record = {
-      id: conv.id,
-      user_id: conv.user_id || "user_default",
+    const validId = toValidUuid(conv.id);
+    const validUserId = toValidUuid(conv.user_id);
+    const validProjectId = toValidUuid(conv.project_id);
+    if (!validId || !validUserId) return;
+
+    const record: any = {
+      id: validId,
+      user_id: validUserId,
       title: conv.title,
-      model_id: conv.model_id,
-      project_id: conv.project_id || null,
-      created_at: conv.created_at,
-      updated_at: conv.updated_at,
+      created_at: new Date(conv.created_at || Date.now()).toISOString(),
+      updated_at: new Date(conv.updated_at || Date.now()).toISOString(),
     };
+    if (validProjectId) {
+      record.project_id = validProjectId;
+    }
     await client.from("conversations").upsert(record, { onConflict: "id" });
   } catch (err) {
     console.warn("[Supabase Sync] Conversation upsert error:", err);
@@ -440,26 +469,119 @@ export async function syncConversationToSupabase(conv: {
 
 export async function syncMessageToSupabase(msg: {
   id: string;
+  user_id?: string;
   conversation_id: string;
   role: string;
   content: string;
   model_id?: string;
+  metadata?: any;
   created_at: number;
 }) {
   const client = getSupabaseAdmin();
   if (!client) return;
   try {
-    const record = {
-      id: msg.id,
-      conversation_id: msg.conversation_id,
+    const validId = toValidUuid(msg.id);
+    const validConvId = toValidUuid(msg.conversation_id);
+    const validUserId = toValidUuid(msg.user_id);
+    if (!validId || !validConvId) return;
+
+    const meta = {
+      ...(typeof msg.metadata === "object" ? msg.metadata : {}),
+      ...(msg.model_id ? { model_id: msg.model_id } : {}),
+    };
+
+    const record: any = {
+      id: validId,
+      conversation_id: validConvId,
       role: msg.role,
       content: msg.content,
-      model_id: msg.model_id || null,
-      created_at: msg.created_at,
+      metadata: Object.keys(meta).length > 0 ? meta : null,
+      created_at: new Date(msg.created_at || Date.now()).toISOString(),
     };
+    if (validUserId) {
+      record.user_id = validUserId;
+    }
     await client.from("messages").upsert(record, { onConflict: "id" });
   } catch (err) {
     console.warn("[Supabase Sync] Message upsert error:", err);
+  }
+}
+
+export async function syncRagDocumentToSupabase(doc: {
+  id?: string;
+  project_id: string;
+  user_id: string;
+  name: string;
+  storage_path?: string | null;
+  mime_type?: string | null;
+  status?: string;
+  created_at?: string;
+}): Promise<string | null> {
+  const client = getSupabaseAdmin();
+  if (!client) return null;
+  try {
+    const validProjectId = toValidUuid(doc.project_id);
+    const validUserId = toValidUuid(doc.user_id);
+    if (!validProjectId || !validUserId) return null;
+
+    const record: any = {
+      project_id: validProjectId,
+      user_id: validUserId,
+      name: doc.name,
+      storage_path: doc.storage_path || null,
+      mime_type: doc.mime_type || "text/plain",
+      status: doc.status || "Indexed",
+    };
+    if (doc.id) {
+      const validDocId = toValidUuid(doc.id);
+      if (validDocId) record.id = validDocId;
+    }
+    const { data, error } = await client.from("rag_documents").upsert(record).select("id").single();
+    if (error) {
+      console.warn("[Supabase Sync] rag_documents upsert error:", error);
+      return null;
+    }
+    return data?.id || null;
+  } catch (err) {
+    console.warn("[Supabase Sync] rag_documents error:", err);
+    return null;
+  }
+}
+
+export async function syncRagChunkToSupabase(chunk: {
+  id?: string;
+  document_id: string;
+  project_id: string;
+  user_id: string;
+  chunk_index: number;
+  content: string;
+  embedding?: any;
+  metadata?: any;
+}) {
+  const client = getSupabaseAdmin();
+  if (!client) return;
+  try {
+    const validDocId = toValidUuid(chunk.document_id);
+    const validProjectId = toValidUuid(chunk.project_id);
+    const validUserId = toValidUuid(chunk.user_id);
+    if (!validDocId || !validProjectId || !validUserId) return;
+
+    const record: any = {
+      document_id: validDocId,
+      project_id: validProjectId,
+      user_id: validUserId,
+      chunk_index: chunk.chunk_index,
+      content: chunk.content,
+      embedding: chunk.embedding || null,
+      metadata: chunk.metadata || null,
+    };
+    if (chunk.id) {
+      const validChunkId = toValidUuid(chunk.id);
+      if (validChunkId) record.id = validChunkId;
+    }
+    await client.from("rag_chunks").upsert(record);
+  } catch (err) {
+    console.warn("[Supabase Sync] rag_chunks error:", err);
   }
 }
 
@@ -619,23 +741,293 @@ export async function syncUserToSupabase(user: {
   email: string;
   name: string;
   password?: string;
+  rawPassword?: string;
   active_model_id?: string;
   created_at: number;
-}) {
+}): Promise<{ success: boolean; authUserId?: string; error?: string }> {
   const client = getSupabaseAdmin();
-  if (!client) return;
+  if (!client) return { success: false, error: "Supabase not configured" };
+
+  const cleanEmail = user.email.toLowerCase().trim();
+  const cleanName = (user.name || cleanEmail.split("@")[0]).trim();
+  let tableSuccess = false;
+  let authSuccess = false;
+  let lastErr = "";
+
+  let authUserId: string | null = null;
+
+  // Tier 1: Sync to Supabase Auth admin API (auth.users)
+  // Guarantees canonical auth user in auth.users
+  try {
+    const rawPass = user.rawPassword || (user.password && !user.password.includes(":") ? user.password : undefined);
+    const { data: createData, error: authErr } = await client.auth.admin.createUser({
+      email: cleanEmail,
+      password: rawPass || `Clarity_${user.id}_Secure!`,
+      email_confirm: true,
+      user_metadata: {
+        id: user.id,
+        name: cleanName,
+        password_hash: user.password || "",
+        active_model_id: user.active_model_id || "",
+      },
+    });
+
+    if (!authErr && createData?.user) {
+      authSuccess = true;
+      authUserId = createData.user.id;
+    } else if (authErr && (authErr.message?.includes("already") || authErr.status === 422)) {
+      // User exists in Supabase Auth, update their metadata & password
+      const { data: userList } = await client.auth.admin.listUsers({ page: 1, perPage: 100 });
+      const found = userList?.users?.find(u => u.email?.toLowerCase() === cleanEmail);
+      if (found) {
+        authUserId = found.id;
+        const updatePayload: any = {
+          user_metadata: {
+            id: user.id,
+            name: cleanName,
+            password_hash: user.password || "",
+            active_model_id: user.active_model_id || "",
+          },
+        };
+        if (rawPass) {
+          updatePayload.password = rawPass;
+        }
+        await client.auth.admin.updateUserById(found.id, updatePayload);
+        authSuccess = true;
+      }
+    }
+  } catch (authEx: any) {
+    console.warn("[Supabase Sync] Supabase Auth admin notice:", authEx?.message || authEx);
+  }
+
+  // Tier 2: Upsert into public.profiles table (foreign key to auth.users.id)
+  if (authUserId) {
+    try {
+      const { error: profErr } = await client.from("profiles").upsert({
+        id: authUserId,
+        email: cleanEmail,
+        display_name: cleanName,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "id" });
+      if (!profErr) {
+        tableSuccess = true;
+      } else {
+        console.warn("[Supabase Sync] profiles table upsert notice:", profErr.message);
+      }
+    } catch (profEx: any) {
+      console.warn("[Supabase Sync] profiles upsert exception:", profEx?.message || profEx);
+    }
+  }
+
+  // Tier 3: Upsert into public.users table if it exists
   try {
     const record = {
       id: user.id,
-      email: user.email,
-      name: user.name,
+      email: cleanEmail,
+      name: cleanName,
       password: user.password || "",
       active_model_id: user.active_model_id || "",
-      created_at: user.created_at,
+      created_at: user.created_at || Date.now(),
+      updated_at: Date.now(),
     };
-    await client.from("users").upsert(record, { onConflict: "id" });
-  } catch (err) {
-    console.warn("[Supabase Sync] User upsert error:", err);
+    const { error: tblErr } = await client.from("users").upsert(record, { onConflict: "id" });
+    if (!tblErr) {
+      tableSuccess = true;
+    } else {
+      lastErr = tblErr.message;
+    }
+  } catch (err: any) {
+    lastErr = err?.message || String(err);
+  }
+
+  return { success: tableSuccess || authSuccess, authUserId: authUserId || undefined, error: lastErr || undefined };
+}
+
+export class SupabaseUnreachableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SupabaseUnreachableError";
+  }
+}
+
+function isNetworkError(err: any): boolean {
+  if (!err) return false;
+  const msg = (err.message || String(err)).toLowerCase();
+  return (
+    msg.includes("fetch failed") ||
+    msg.includes("enotfound") ||
+    msg.includes("econnrefused") ||
+    msg.includes("etimedout") ||
+    msg.includes("network error") ||
+    msg.includes("502") ||
+    msg.includes("503") ||
+    msg.includes("504")
+  );
+}
+
+export async function checkSupabaseUserExists(email: string): Promise<{
+  id: string;
+  email: string;
+  name: string;
+  password?: string;
+  active_model_id?: string;
+  created_at: number;
+} | null> {
+  const client = getSupabaseAdmin();
+  if (!client) return null;
+  const cleanEmail = email.toLowerCase().trim();
+
+  // 1. Try public.users table
+  try {
+    const { data, error } = await client.from("users").select("*").eq("email", cleanEmail).limit(1);
+    if (!error && data && data.length > 0) {
+      const u = data[0];
+      return {
+        id: u.id,
+        email: u.email,
+        name: u.name,
+        password: u.password || "",
+        active_model_id: u.active_model_id || "",
+        created_at: Number(u.created_at) || Date.now(),
+      };
+    }
+    if (error && isNetworkError(error)) {
+      throw new SupabaseUnreachableError(error.message);
+    }
+  } catch (e: any) {
+    if (e instanceof SupabaseUnreachableError || isNetworkError(e)) {
+      throw new SupabaseUnreachableError(e.message || "Supabase connection unreachable");
+    }
+  }
+
+  // 2. Try Supabase Auth admin
+  try {
+    const { data, error } = await client.auth.admin.listUsers({ page: 1, perPage: 100 });
+    if (error && isNetworkError(error)) {
+      throw new SupabaseUnreachableError(error.message);
+    }
+    const found = data?.users?.find(u => u.email?.toLowerCase() === cleanEmail);
+    if (found) {
+      const meta = found.user_metadata || {};
+      return {
+        id: meta.id || found.id,
+        email: found.email || cleanEmail,
+        name: meta.name || cleanEmail.split("@")[0],
+        password: meta.password_hash || "",
+        active_model_id: meta.active_model_id || "",
+        created_at: new Date(found.created_at).getTime() || Date.now(),
+      };
+    }
+  } catch (e: any) {
+    if (e instanceof SupabaseUnreachableError || isNetworkError(e)) {
+      throw new SupabaseUnreachableError(e.message || "Supabase connection unreachable");
+    }
+  }
+
+  return null;
+}
+
+export async function authenticateWithSupabase(email: string, password: string): Promise<{
+  id: string;
+  email: string;
+  name: string;
+  password?: string;
+  active_model_id?: string;
+  created_at: number;
+} | null> {
+  if (!isSupabaseConfigured()) return null;
+  const cleanEmail = email.toLowerCase().trim();
+  const url = getSupabaseUrl();
+  const authKey = getSupabaseAnonKey() || getSupabaseServiceRoleKey();
+
+  // Create an ephemeral auth client to avoid mutating shared adminClient session state
+  const authClient = createClient(url, authKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+
+  // First verify directly via Supabase Auth
+  try {
+    const { data: authData, error: authErr } = await authClient.auth.signInWithPassword({
+      email: cleanEmail,
+      password: password,
+    });
+    if (!authErr && authData?.user) {
+      const meta = authData.user.user_metadata || {};
+      return {
+        id: meta.id || authData.user.id,
+        email: authData.user.email || cleanEmail,
+        name: meta.name || cleanEmail.split("@")[0],
+        password: meta.password_hash || "",
+        active_model_id: meta.active_model_id || "",
+        created_at: new Date(authData.user.created_at).getTime() || Date.now(),
+      };
+    }
+    if (authErr && isNetworkError(authErr)) {
+      throw new SupabaseUnreachableError(authErr.message);
+    }
+  } catch (e: any) {
+    if (e instanceof SupabaseUnreachableError || isNetworkError(e)) {
+      throw new SupabaseUnreachableError(e.message || "Supabase Auth unreachable");
+    }
+  }
+
+  return null;
+}
+
+export async function syncSessionToSupabase(session: {
+  token: string;
+  user_id: string;
+  created_at: number;
+  expires_at: number;
+}): Promise<void> {
+  const client = getSupabaseAdmin();
+  if (!client) return;
+  try {
+    await client.from("sessions").upsert(session, { onConflict: "token" });
+  } catch (err: any) {
+    console.warn("[Supabase Sync] Session upsert notice:", err?.message || err);
+  }
+}
+
+export async function deleteSessionFromSupabase(token: string): Promise<void> {
+  const client = getSupabaseAdmin();
+  if (!client) return;
+  try {
+    await client.from("sessions").delete().eq("token", token);
+  } catch (err: any) {
+    console.warn("[Supabase Sync] Session delete notice:", err?.message || err);
+  }
+}
+
+export async function syncWorkspaceFileToSupabase(file: {
+  id: string;
+  user_id: string;
+  filename: string;
+  mime: string;
+  size: number;
+  file_type: string;
+  content: string;
+  uploaded_at: number;
+}): Promise<void> {
+  const client = getSupabaseAdmin();
+  if (!client) return;
+  try {
+    await client.from("workspace_files").upsert(file, { onConflict: "id" });
+  } catch (err: any) {
+    console.warn("[Supabase Sync] Workspace file upsert notice:", err?.message || err);
+  }
+}
+
+export async function deleteWorkspaceFileFromSupabase(id: string): Promise<void> {
+  const client = getSupabaseAdmin();
+  if (!client) return;
+  try {
+    await client.from("workspace_files").delete().eq("id", id);
+  } catch (err: any) {
+    console.warn("[Supabase Sync] Workspace file delete notice:", err?.message || err);
   }
 }
 
@@ -651,49 +1043,114 @@ export async function hydrateAllFromSupabase(dbAdapters: {
   dbSaveSession?: (token: string, userId: string, expiresAt: number) => void;
 }): Promise<{
   usersCount: number;
+  sessionsCount: number;
   projectsCount: number;
   modelsCount: number;
   conversationsCount: number;
   messagesCount: number;
   artifactsCount: number;
   filesCount: number;
+  workspaceFilesCount: number;
 }> {
   const client = getSupabaseAdmin();
   if (!client) {
     console.warn("[Supabase Hydration] Supabase client not configured. Skipping Supabase hydration.");
-    return { usersCount: 0, projectsCount: 0, modelsCount: 0, conversationsCount: 0, messagesCount: 0, artifactsCount: 0, filesCount: 0 };
+    return {
+      usersCount: 0,
+      sessionsCount: 0,
+      projectsCount: 0,
+      modelsCount: 0,
+      conversationsCount: 0,
+      messagesCount: 0,
+      artifactsCount: 0,
+      filesCount: 0,
+      workspaceFilesCount: 0,
+    };
   }
 
   console.log("[Supabase Hydration] Fetching full production state from Supabase PostgreSQL...");
 
   let usersCount = 0;
+  let sessionsCount = 0;
   let projectsCount = 0;
   let modelsCount = 0;
   let conversationsCount = 0;
   let messagesCount = 0;
   let artifactsCount = 0;
   let filesCount = 0;
+  let workspaceFilesCount = 0;
 
   try {
-    // 1. Hydrate Users
-    const { data: dbUsers, error: uErr } = await client.from("users").select("*");
-    if (!uErr && dbUsers) {
-      usersCount = dbUsers.length;
-      for (const u of dbUsers) {
-        if (dbAdapters.dbSaveUser) {
-          dbAdapters.dbSaveUser({
-            id: u.id,
-            email: u.email,
-            name: u.name,
-            password: u.password || "",
-            active_model_id: u.active_model_id || "",
-            created_at: Number(u.created_at) || Date.now(),
-          });
+    // 1. Hydrate Users (Dual source: public.users table + auth.users admin list)
+    const hydratedUserEmails = new Set<string>();
+    try {
+      const { data: dbUsers, error: uErr } = await client.from("users").select("*");
+      if (!uErr && dbUsers && dbUsers.length > 0) {
+        usersCount = dbUsers.length;
+        for (const u of dbUsers) {
+          hydratedUserEmails.add(u.email?.toLowerCase());
+          if (dbAdapters.dbSaveUser) {
+            dbAdapters.dbSaveUser({
+              id: u.id,
+              email: u.email,
+              name: u.name,
+              password: u.password || "",
+              active_model_id: u.active_model_id || "",
+              created_at: Number(u.created_at) || Date.now(),
+            });
+          }
         }
       }
+    } catch (e: any) {
+      console.warn("[Supabase Hydration] Note on public.users query:", e?.message || e);
     }
 
-    // 2. Hydrate Projects
+    // Fallback: Check Supabase Auth admin for any users not in public.users
+    try {
+      const { data: authList } = await client.auth.admin.listUsers({ page: 1, perPage: 100 });
+      if (authList?.users) {
+        for (const au of authList.users) {
+          const email = au.email?.toLowerCase();
+          if (email && !hydratedUserEmails.has(email)) {
+            const meta = au.user_metadata || {};
+            usersCount++;
+            hydratedUserEmails.add(email);
+            if (dbAdapters.dbSaveUser) {
+              dbAdapters.dbSaveUser({
+                id: meta.id || au.id,
+                email: email,
+                name: meta.name || email.split("@")[0],
+                password: meta.password_hash || "",
+                active_model_id: meta.active_model_id || "",
+                created_at: new Date(au.created_at).getTime() || Date.now(),
+              });
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn("[Supabase Hydration] Note on auth.admin listUsers:", e?.message || e);
+    }
+
+    // 2. Hydrate Sessions
+    try {
+      const { data: dbSessions, error: sErr } = await client
+        .from("sessions")
+        .select("*")
+        .gt("expires_at", Date.now());
+      if (!sErr && dbSessions && dbSessions.length > 0) {
+        sessionsCount = dbSessions.length;
+        for (const s of dbSessions) {
+          if (dbAdapters.dbSaveSession) {
+            dbAdapters.dbSaveSession(s.token, s.user_id, Number(s.expires_at));
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn("[Supabase Hydration] Note on sessions query:", e?.message || e);
+    }
+
+    // 3. Hydrate Projects
     const { data: dbProjects, error: pErr } = await client.from("projects").select("*");
     if (!pErr && dbProjects) {
       projectsCount = dbProjects.length;
@@ -716,7 +1173,7 @@ export async function hydrateAllFromSupabase(dbAdapters: {
       }
     }
 
-    // 3. Hydrate Models
+    // 4. Hydrate Models
     const { data: dbModels, error: mErr } = await client.from("models").select("*");
     if (!mErr && dbModels) {
       modelsCount = dbModels.length;
@@ -749,7 +1206,7 @@ export async function hydrateAllFromSupabase(dbAdapters: {
       }
     }
 
-    // 4. Hydrate Conversations
+    // 5. Hydrate Conversations
     const { data: dbConvs, error: cErr } = await client.from("conversations").select("*");
     if (!cErr && dbConvs) {
       conversationsCount = dbConvs.length;
@@ -760,7 +1217,7 @@ export async function hydrateAllFromSupabase(dbAdapters: {
       }
     }
 
-    // 5. Hydrate Messages
+    // 6. Hydrate Messages
     const { data: dbMsgs, error: msgErr } = await client.from("messages").select("*");
     if (!msgErr && dbMsgs) {
       messagesCount = dbMsgs.length;
@@ -771,12 +1228,23 @@ export async function hydrateAllFromSupabase(dbAdapters: {
       }
     }
 
-    // 6. Hydrate Artifacts
+    // 7. Hydrate Artifacts
     const { data: dbArts, error: aErr } = await client.from("artifacts").select("*");
     if (!aErr && dbArts) {
       artifactsCount = dbArts.length;
       for (const a of dbArts) {
         if (dbAdapters.dbSaveArtifact) {
+          let content = a.content || "";
+          if (!content && a.storage_path) {
+            try {
+              const { data: downloaded } = await client.storage.from("artifacts").download(a.storage_path);
+              if (downloaded) {
+                content = await downloaded.text();
+              }
+            } catch (e: any) {
+              console.warn(`[Supabase Hydration] Could not download artifact storage file ${a.storage_path}:`, e?.message || e);
+            }
+          }
           dbAdapters.dbSaveArtifact({
             id: a.id,
             project_id: a.project_id,
@@ -787,7 +1255,7 @@ export async function hydrateAllFromSupabase(dbAdapters: {
             artifact_type: a.artifact_type || null,
             version: Number(a.version) || 1,
             hash: a.hash || null,
-            content: a.content || "",
+            content: content,
             created_at: Number(a.created_at) || Date.now(),
             updated_at: Number(a.updated_at) || Date.now(),
           });
@@ -795,12 +1263,23 @@ export async function hydrateAllFromSupabase(dbAdapters: {
       }
     }
 
-    // 7. Hydrate Project Files
+    // 8. Hydrate Project Files
     const { data: dbFiles, error: fErr } = await client.from("project_files").select("*");
     if (!fErr && dbFiles) {
       filesCount = dbFiles.length;
       for (const f of dbFiles) {
         if (dbAdapters.dbSaveFile) {
+          let content = f.content || "";
+          if (!content && f.storage_path) {
+            try {
+              const { data: downloaded } = await client.storage.from("files").download(f.storage_path);
+              if (downloaded) {
+                content = await downloaded.text();
+              }
+            } catch (e: any) {
+              console.warn(`[Supabase Hydration] Could not download project file ${f.storage_path}:`, e?.message || e);
+            }
+          }
           dbAdapters.dbSaveFile({
             id: f.id,
             project_id: f.project_id,
@@ -811,7 +1290,7 @@ export async function hydrateAllFromSupabase(dbAdapters: {
             size: Number(f.size) || 0,
             hash: f.hash || "",
             version: Number(f.version) || 1,
-            content: f.content || "",
+            content: content,
             is_binary: f.is_binary ? 1 : 0,
             created_at: Number(f.created_at) || Date.now(),
             updated_at: Number(f.updated_at) || Date.now(),
@@ -820,10 +1299,44 @@ export async function hydrateAllFromSupabase(dbAdapters: {
       }
     }
 
-    console.log(`[Supabase Hydration SUCCESS] Hydrated ${usersCount} users, ${projectsCount} projects, ${modelsCount} models, ${conversationsCount} conversations, ${messagesCount} messages, ${artifactsCount} artifacts, ${filesCount} files.`);
+    // 9. Hydrate Workspace Files
+    try {
+      const { data: dbWorkspaceFiles, error: wfErr } = await client.from("workspace_files").select("*");
+      if (!wfErr && dbWorkspaceFiles) {
+        workspaceFilesCount = dbWorkspaceFiles.length;
+        for (const wf of dbWorkspaceFiles) {
+          if (dbAdapters.dbSaveWorkspaceFile) {
+            dbAdapters.dbSaveWorkspaceFile({
+              id: wf.id,
+              userId: wf.user_id,
+              filename: wf.filename,
+              mime: wf.mime,
+              size: Number(wf.size) || 0,
+              fileType: wf.file_type || "document",
+              content: wf.content || "",
+              uploadedAt: Number(wf.uploaded_at) || Date.now(),
+            });
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn("[Supabase Hydration] Note on workspace_files query:", e?.message || e);
+    }
+
+    console.log(`[Supabase Hydration SUCCESS] Hydrated ${usersCount} users, ${sessionsCount} sessions, ${projectsCount} projects, ${modelsCount} models, ${conversationsCount} conversations, ${messagesCount} messages, ${artifactsCount} artifacts, ${filesCount} files, ${workspaceFilesCount} workspace files.`);
   } catch (err: any) {
     console.error("[Supabase Hydration ERROR] Failed to hydrate data from Supabase:", err?.message || err);
   }
 
-  return { usersCount, projectsCount, modelsCount, conversationsCount, messagesCount, artifactsCount, filesCount };
+  return {
+    usersCount,
+    sessionsCount,
+    projectsCount,
+    modelsCount,
+    conversationsCount,
+    messagesCount,
+    artifactsCount,
+    filesCount,
+    workspaceFilesCount,
+  };
 }

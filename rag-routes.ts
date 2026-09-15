@@ -29,6 +29,7 @@ import {
   deleteWorkspaceFile,
 } from "./db.js";
 import { generateGeminiWithResilience } from "./gemini-resilience.js";
+import { isSupabaseConfigured, syncRagDocumentToSupabase, syncRagChunkToSupabase } from "./supabase.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -127,6 +128,36 @@ export function registerRagRoutes(app: express.Application) {
       // 4. Save chunks to SQLite
       if (allNewChunks.length > 0) {
         createKnowledgeChunksBatch(allNewChunks);
+      }
+
+      // 4b. Sync RAG docs & chunks to Supabase if configured
+      if (isSupabaseConfigured()) {
+        try {
+          for (const doc of processedDocs) {
+            const docId = await syncRagDocumentToSupabase({
+              project_id: pid,
+              user_id: (proj as any).user_id || "default",
+              name: doc.name,
+              mime_type: "text/plain",
+              status: doc.status || "Indexed",
+            });
+            if (docId) {
+              const docChunks = allNewChunks.filter(c => c.file_id === doc.id || c.path === doc.path);
+              for (const [idx, chunk] of docChunks.entries()) {
+                await syncRagChunkToSupabase({
+                  document_id: docId,
+                  project_id: pid,
+                  user_id: (proj as any).user_id || "default",
+                  chunk_index: idx,
+                  content: chunk.content,
+                  metadata: { path: chunk.path, start_line: chunk.start_line, end_line: chunk.end_line },
+                });
+              }
+            }
+          }
+        } catch (syncErr) {
+          console.warn("[RAG] Notice syncing RAG documents/chunks to Supabase:", syncErr);
+        }
       }
 
       // 5. Update project last_indexed_at

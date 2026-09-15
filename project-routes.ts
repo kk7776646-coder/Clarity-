@@ -280,6 +280,45 @@ export function registerProjectAndFileRoutes(
     res.json({ files: shared, total: shared.length, success: true });
   });
 
+  app.post("/api/files/shared", (req, res) => {
+    const user = resolveUser(req) || initialUser;
+    const { filename, content, mime = "text/plain" } = req.body || {};
+    if (!filename) {
+      return res.status(400).json({ error: "Filename is required" });
+    }
+    const fid = "file_" + Math.random().toString(36).substring(2, 9);
+    const fileItem: FileItem = {
+      id: fid,
+      user_id: user.id,
+      conversation_id: null,
+      project_id: null,
+      filename,
+      name: filename,
+      mime,
+      size: content ? Buffer.byteLength(content, "utf8") : 0,
+      file_type: "file",
+      content: content || "",
+      uploaded_at: Math.floor(Date.now() / 1000),
+      ok: true,
+    };
+    files.set(fid, fileItem);
+    try {
+      dbSaveWorkspaceFile({
+        id: fid,
+        user_id: user.id,
+        filename,
+        mime,
+        size: fileItem.size,
+        file_type: "file",
+        content: content || "",
+        uploaded_at: Math.floor(Date.now() / 1000),
+      });
+    } catch (e) {
+      console.error("Error saving workspace file to db:", e);
+    }
+    res.status(201).json({ success: true, file: fileItem, id: fid });
+  });
+
   app.get("/api/files", (req, res) => {
     const user = resolveUser(req) || initialUser;
     const userFiles = Array.from(files.values()).filter(
@@ -1022,6 +1061,10 @@ export function registerProjectAndFileRoutes(
       }
     }
     if (!proj) return res.status(404).json({ error: "Project not found" });
+    const user = resolveUser(req);
+    if (user && proj.user_id && proj.user_id !== user.id && user.id !== initialUser.id && proj.user_id !== initialUser.id) {
+      return res.status(403).json({ error: "Access denied to this project", code: "FORBIDDEN" });
+    }
     if (!proj.file_count || proj.file_count === 0) {
       const liveCount = countProjectFiles(pid);
       if (liveCount > 0) proj.file_count = liveCount;

@@ -32,8 +32,17 @@ window.Clarity.auth = {
   },
 
   _fetch(path, options) {
-    const fetchFn = window.Clarity?.api?.fetch || (typeof window !== "undefined" && window.fetch ? window.fetch.bind(window) : fetch);
-    return fetchFn(path, options);
+    const opts = Object.assign({ credentials: "include" }, options || {});
+    let token = null;
+    try { token = localStorage.getItem("clarity_token"); } catch (e) {}
+    const authHeaders = token ? { "Authorization": `Bearer ${token}` } : {};
+    opts.headers = Object.assign({}, authHeaders, opts.headers || {});
+
+    let url = path;
+    if (window.Clarity?.api?._url) {
+      url = window.Clarity.api._url(path);
+    }
+    return fetch(url, opts);
   },
 
   async refresh() {

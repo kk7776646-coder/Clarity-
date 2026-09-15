@@ -10,6 +10,10 @@ import {
   syncMessageToSupabase,
   syncKnowledgeChunkToSupabase,
   syncUserToSupabase,
+  syncSessionToSupabase,
+  deleteSessionFromSupabase,
+  syncWorkspaceFileToSupabase,
+  deleteWorkspaceFileFromSupabase,
   isSupabaseConfigured
 } from "./supabase.js";
 
@@ -1520,8 +1524,11 @@ export function getConversation(id: string) {
   return db.prepare("SELECT * FROM conversations WHERE id = ?").get(id) as any;
 }
 
-export function listConversations(userId: string) {
-  return db.prepare("SELECT * FROM conversations WHERE user_id = ? ORDER BY updated_at DESC").all(userId) as any[];
+export function listConversations(userId?: string) {
+  if (userId) {
+    return db.prepare("SELECT * FROM conversations WHERE user_id = ? ORDER BY updated_at DESC").all(userId) as any[];
+  }
+  return db.prepare("SELECT * FROM conversations ORDER BY updated_at DESC").all() as any[];
 }
 
 export function deleteConversation(id: string) {
@@ -1632,18 +1639,38 @@ export function saveWorkspaceFile(f: {
     f.content || "",
     f.uploaded_at || now
   );
+
+  if (isSupabaseConfigured()) {
+    syncWorkspaceFileToSupabase({
+      id: f.id,
+      user_id: f.user_id,
+      filename: f.filename,
+      mime: f.mime || "text/plain",
+      size: f.size || 0,
+      file_type: f.file_type || "document",
+      content: f.content || "",
+      uploaded_at: f.uploaded_at || now,
+    }).catch(() => {});
+  }
 }
 
 export function getWorkspaceFile(id: string) {
   return db.prepare("SELECT * FROM workspace_files WHERE id = ?").get(id) as any;
 }
 
-export function listWorkspaceFiles(userId: string) {
-  return db.prepare("SELECT * FROM workspace_files WHERE user_id = ? ORDER BY uploaded_at DESC").all(userId) as any[];
+export function listWorkspaceFiles(userId?: string) {
+  if (userId) {
+    return db.prepare("SELECT * FROM workspace_files WHERE user_id = ? ORDER BY uploaded_at DESC").all(userId) as any[];
+  }
+  return db.prepare("SELECT * FROM workspace_files ORDER BY uploaded_at DESC").all() as any[];
 }
 
 export function deleteWorkspaceFile(id: string) {
-  return db.prepare("DELETE FROM workspace_files WHERE id = ?").run(id).changes > 0;
+  const changes = db.prepare("DELETE FROM workspace_files WHERE id = ?").run(id).changes;
+  if (changes > 0 && isSupabaseConfigured()) {
+    deleteWorkspaceFileFromSupabase(id).catch(() => {});
+  }
+  return changes > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1821,6 +1848,15 @@ export function dbSaveSession(token: string, userId: string, expiresAt: number) 
       expires_at = excluded.expires_at
   `);
   ((...args) => { try { return stmt.run(...args); } catch(e) { console.error("SQL ERROR in:", stmt.source, "\nARGS:", args); throw e; } })(token, userId, now, expiresAt);
+
+  if (isSupabaseConfigured()) {
+    syncSessionToSupabase({
+      token,
+      user_id: userId,
+      created_at: now,
+      expires_at: expiresAt,
+    }).catch(() => {});
+  }
 }
 
 export function dbGetSession(token: string): { token: string; user_id: string; created_at: number; expires_at: number } | null {
@@ -1828,8 +1864,15 @@ export function dbGetSession(token: string): { token: string; user_id: string; c
   return row || null;
 }
 
+export function dbListActiveSessions(): { token: string; user_id: string; created_at: number; expires_at: number }[] {
+  return ((db.prepare("SELECT * FROM sessions WHERE expires_at > ?").all(Date.now()) as any[]) || []);
+}
+
 export function dbDeleteSession(token: string) {
   db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
+  if (isSupabaseConfigured()) {
+    deleteSessionFromSupabase(token).catch(() => {});
+  }
 }
 
 export function dbDeleteExpiredSessions() {

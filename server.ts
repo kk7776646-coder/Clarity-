@@ -1,3 +1,4 @@
+import "./env-loader.js";
 import { registerProjectAndFileRoutes } from "./project-routes";
 import { 
   generateProfessionalMermaidDiagram, 
@@ -20,6 +21,13 @@ import {
   isSupabaseConfigured,
   getSupabaseAdmin,
   syncModelToSupabase,
+  syncUserToSupabase,
+  checkSupabaseUserExists,
+  authenticateWithSupabase,
+  syncSessionToSupabase,
+  deleteSessionFromSupabase,
+  hydrateAllFromSupabase,
+  SupabaseUnreachableError,
 } from "./supabase.js";
 import { syncProjectFiles, createTerminalSession, startTerminalSession, stopTerminalSession, sendInputToSession, getProjectSessions, activeSessions, sanitizeSession, resolveProjectWorkspace, detectProject } from "./run-engine";
 import httpProxy from "http-proxy";
@@ -70,6 +78,7 @@ import {
   dbListUsers,
   dbSaveSession,
   dbGetSession,
+  dbListActiveSessions,
   dbDeleteSession,
   getProject as dbGetProject,
   listProjects as dbListProjects,
@@ -525,6 +534,7 @@ async function hydrateFromDatabase() {
         dbSaveMessage,
         dbSaveArtifact,
         dbSaveWorkspaceFile,
+        dbSaveSession,
       });
     }
 
@@ -593,8 +603,8 @@ async function hydrateFromDatabase() {
       }
     }
 
-    // Load workspace files
-    const wsFiles = dbListWorkspaceFiles(initialUser.id);
+    // Load workspace files across all users
+    const wsFiles = dbListWorkspaceFiles();
     for (const wf of wsFiles) {
       files.set(wf.id, {
         id: wf.id,
@@ -632,8 +642,8 @@ async function hydrateFromDatabase() {
       }
     }
 
-    // Load conversations & messages
-    const convs = dbListConversations(initialUser.id);
+    // Load conversations & messages across all users
+    const convs = dbListConversations();
     if (convs.length > 0) {
       conversations.clear();
       messages.clear();
@@ -682,6 +692,12 @@ async function hydrateFromDatabase() {
       dbSaveUser(initialUser);
       const sessExp = Date.now() + 30 * 24 * 3600 * 1000;
       dbSaveSession("default_token", initialUser.id, sessExp);
+    }
+
+    // Hydrate active sessions from SQLite into memory
+    const activeSessionsList = dbListActiveSessions();
+    for (const s of activeSessionsList) {
+      sessions.set(s.token, s.user_id);
     }
 
     // Hydrate models
@@ -735,13 +751,11 @@ async function hydrateFromDatabase() {
 
     // Clean up expired sessions in DB
     dbDeleteExpiredSessions();
-    console.log(`[DB Hydration] Loaded ${projects.size} projects, ${files.size} files, ${models.size} models, ${conversations.size} conversations, ${users.size} users from SQLite.`);
+    console.log(`[DB Hydration] Loaded ${projects.size} projects, ${files.size} files, ${models.size} models, ${conversations.size} conversations, ${users.size} users, ${sessions.size} sessions from SQLite.`);
   } catch (err) {
     console.error("Error hydrating from SQLite database:", err);
   }
 }
-
-hydrateFromDatabase();
 
 // Helper for file type detection
 function detectFileType(filename: string, mime: string): string {
@@ -842,6 +856,17 @@ async function startServer() {
     next();
   });
 
+  function getAuthCookieOptions(req: express.Request) {
+    const isHttps = req.secure || req.headers["x-forwarded-proto"] === "https";
+    return {
+      httpOnly: true,
+      sameSite: (isHttps ? "none" : "lax") as "none" | "lax",
+      secure: isHttps,
+      maxAge: 30 * 24 * 3600 * 1000,
+      path: "/",
+    };
+  }
+
   // Auth resolver middleware
   function resolveUser(req: express.Request): User | null {
     let token = req.cookies?.[SESSION_COOKIE];
@@ -876,6 +901,78 @@ async function startServer() {
       }
     }
     // Do not fall back to initial user in production, force re-authentication.
+    return null;
+  }
+
+  async function resolveUserAsync(req: express.Request): Promise<User | null> {
+    const localUser = resolveUser(req);
+    if (localUser) return localUser;
+
+    let token = req.cookies?.[SESSION_COOKIE];
+    if (!token && req.headers.authorization?.startsWith("Bearer ")) {
+      token = req.headers.authorization.substring(7).trim();
+    }
+    if (!token) return null;
+
+    if (isSupabaseConfigured()) {
+      const supaAdmin = getSupabaseAdmin();
+      if (supaAdmin) {
+        try {
+          const { data: sRows } = await supaAdmin
+            .from("sessions")
+            .select("*")
+            .eq("token", token)
+            .gt("expires_at", Date.now())
+            .limit(1);
+
+          if (sRows && sRows.length > 0) {
+            const sess = sRows[0];
+            dbSaveSession(sess.token, sess.user_id, Number(sess.expires_at));
+            sessions.set(sess.token, sess.user_id);
+
+            let u = users.get(sess.user_id);
+            if (!u) {
+              const dbU = dbGetUser(sess.user_id);
+              if (dbU) {
+                u = {
+                  id: dbU.id,
+                  email: dbU.email,
+                  name: dbU.name,
+                  password: dbU.password || "",
+                  active_model_id: dbU.active_model_id || "",
+                  created_at: dbU.created_at,
+                };
+              } else {
+                const { data: uRows } = await supaAdmin
+                  .from("users")
+                  .select("*")
+                  .eq("id", sess.user_id)
+                  .limit(1);
+                if (uRows && uRows.length > 0) {
+                  const su = uRows[0];
+                  u = {
+                    id: su.id,
+                    email: su.email,
+                    name: su.name,
+                    password: su.password || "",
+                    active_model_id: su.active_model_id || "",
+                    created_at: Number(su.created_at) || Date.now(),
+                  };
+                  dbSaveUser(u);
+                }
+              }
+              if (u) {
+                users.set(u.id, u);
+              }
+            }
+            if (u) return u;
+          }
+        } catch (e) {
+          console.warn("[AUTH] Error resolving session from Supabase:", e);
+        }
+      }
+    }
+
     return null;
   }
 
@@ -961,26 +1058,31 @@ async function startServer() {
   // -------------------------------------------------------------------------
   // Auth API
   // -------------------------------------------------------------------------
-  app.get("/api/auth/me", (req, res) => {
+  app.get("/api/auth/me", async (req, res) => {
     console.log("[API] Auth Me called, path:", req.path);
-    const user = resolveUser(req);
+    const user = await resolveUserAsync(req);
     if (!user) {
       console.log("[API] Auth Me: User not resolved");
-      return res.status(401).json({ user: null });
+      let token = req.cookies?.[SESSION_COOKIE];
+      if (!token && req.headers.authorization?.startsWith("Bearer ")) {
+        token = req.headers.authorization.substring(7).trim();
+      }
+      if (token) {
+        return res.status(401).json({ user: null, error: "Session expired or invalid", code: "SESSION_EXPIRED" });
+      }
+      return res.status(401).json({ user: null, error: "No active session", code: "SESSION_INVALID" });
     }
-    // Ensure default cookie is set if not already
+    // Refresh cookie if needed
     if (!req.cookies?.[SESSION_COOKIE]) {
-      res.cookie(SESSION_COOKIE, "default_token", {
-        httpOnly: true,
-        sameSite: "lax",
-        maxAge: 30 * 24 * 3600 * 1000,
-        path: "/",
-      });
+      let token = req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.substring(7).trim() : null;
+      if (token) {
+        res.cookie(SESSION_COOKIE, token, getAuthCookieOptions(req));
+      }
     }
     res.json({ user: publicUser(user) });
   });
 
-  app.post("/api/auth/signup", (req, res) => {
+  app.post("/api/auth/signup", async (req, res) => {
     console.log("[AUTH] Signup started");
     const { email, password, name } = req.body || {};
     if (!email || !password) {
@@ -991,21 +1093,56 @@ async function startServer() {
       return res.status(400).json({ error: "Please provide a valid email and a password of at least 4 characters" });
     }
 
-    const existing = dbGetUserByEmail(cleanEmail) || Array.from(users.values()).find(u => u.email.toLowerCase() === cleanEmail);
+    let existing = null;
+    try {
+      existing = dbGetUserByEmail(cleanEmail) || Array.from(users.values()).find(u => u.email.toLowerCase() === cleanEmail);
+      if (!existing && isSupabaseConfigured()) {
+        existing = (await checkSupabaseUserExists(cleanEmail)) as any;
+      }
+    } catch (dbErr: any) {
+      if (dbErr instanceof SupabaseUnreachableError) {
+        return res.status(503).json({ error: "Authentication service temporarily unavailable. Please try again.", code: "AUTH_SERVICE_UNAVAILABLE" });
+      }
+      return res.status(503).json({ error: "Database service temporarily unavailable", code: "DATABASE_UNAVAILABLE" });
+    }
     if (existing) {
       return res.status(409).json({ error: "An account with this email already exists" });
     }
 
-    const id = `user_${Date.now()}`;
+    let id = crypto.randomUUID();
     const hashedPassword = hashPassword(String(password));
-    console.log("[AUTH] Signup user created");
+    const userName = String(name || cleanEmail.split("@")[0]).trim();
+    const now = Date.now();
+
+    // If Supabase is configured, create the canonical account in Supabase Auth first
+    if (isSupabaseConfigured()) {
+      try {
+        const syncResult = await syncUserToSupabase({
+          id,
+          email: cleanEmail,
+          name: userName,
+          password: hashedPassword,
+          rawPassword: String(password),
+          active_model_id: "",
+          created_at: now,
+        });
+        if (syncResult?.authUserId) {
+          id = syncResult.authUserId;
+        }
+        console.log("[AUTH] Signup user synced to Supabase successfully, user ID:", id);
+      } catch (syncErr) {
+        console.warn("[AUTH] Supabase sync notice on signup:", syncErr);
+      }
+    }
+
+    console.log("[AUTH] Signup user created:", id);
     const newUser: User = {
       id,
       email: cleanEmail,
-      name: String(name || cleanEmail.split("@")[0]).trim(),
+      name: userName,
       password: hashedPassword,
       active_model_id: "",
-      created_at: Date.now(),
+      created_at: now,
     };
 
     dbSaveUser(newUser);
@@ -1015,13 +1152,13 @@ async function startServer() {
     const expiresAt = Date.now() + 30 * 24 * 3600 * 1000;
     dbSaveSession(token, id, expiresAt);
     sessions.set(token, id);
+    if (isSupabaseConfigured()) {
+      try {
+        await syncSessionToSupabase({ token, user_id: id, created_at: Date.now(), expires_at: expiresAt });
+      } catch {}
+    }
 
-    res.cookie(SESSION_COOKIE, token, {
-      httpOnly: true,
-      sameSite: "lax",
-      maxAge: 30 * 24 * 3600 * 1000,
-      path: "/",
-    });
+    res.cookie(SESSION_COOKIE, token, getAuthCookieOptions(req));
     res.status(201).json({ user: publicUser(newUser), token });
   });
 
@@ -1029,7 +1166,7 @@ async function startServer() {
     console.log("[AUTH] Login started");
     const { email, password } = req.body || {};
     if (!email || !password) {
-      return res.status(400).json({ error: "Email and password are required" });
+      return res.status(400).json({ error: "Email and password are required", code: "INVALID_CREDENTIALS" });
     }
     const cleanEmail = String(email).trim().toLowerCase();
 
@@ -1040,65 +1177,99 @@ async function startServer() {
         break;
       }
     }
-    if (!matched) {
-      const dbU = dbGetUserByEmail(cleanEmail);
-      if (dbU) {
-        matched = {
-          id: dbU.id,
-          email: dbU.email,
-          name: dbU.name,
-          password: dbU.password || "",
-          active_model_id: dbU.active_model_id || "",
-          created_at: dbU.created_at,
-        };
-        users.set(matched.id, matched);
-        console.log("[AUTH] Login user lookup succeeded from local cache");
-      } else if (isSupabaseConfigured()) {
-        const supaAdmin = getSupabaseAdmin();
-        if (supaAdmin) {
-          try {
-            const { data: supaUsers } = await supaAdmin.from("users").select("*").eq("email", cleanEmail).limit(1);
-            if (supaUsers && supaUsers.length > 0) {
-              const su = supaUsers[0];
-              matched = {
-                id: su.id,
-                email: su.email,
-                name: su.name,
-                password: su.password || "",
-                active_model_id: su.active_model_id || "",
-                created_at: Number(su.created_at) || Date.now(),
-              };
-              dbSaveUser(matched);
-              users.set(matched.id, matched);
-              console.log("[AUTH] Login user lookup succeeded from Supabase PostgreSQL");
-            }
-          } catch (e) {
-            console.warn("[AUTH] Supabase user login query error:", e);
+    try {
+      if (!matched) {
+        const dbU = dbGetUserByEmail(cleanEmail);
+        if (dbU) {
+          matched = {
+            id: dbU.id,
+            email: dbU.email,
+            name: dbU.name,
+            password: dbU.password || "",
+            active_model_id: dbU.active_model_id || "",
+            created_at: dbU.created_at,
+          };
+          users.set(matched.id, matched);
+          console.log("[AUTH] Login user lookup succeeded from local cache");
+        } else if (isSupabaseConfigured()) {
+          const supaUser = await checkSupabaseUserExists(cleanEmail);
+          if (supaUser) {
+            matched = {
+              id: supaUser.id,
+              email: supaUser.email,
+              name: supaUser.name,
+              password: supaUser.password || "",
+              active_model_id: supaUser.active_model_id || "",
+              created_at: supaUser.created_at,
+            };
+            dbSaveUser(matched);
+            users.set(matched.id, matched);
+            console.log("[AUTH] Login user lookup succeeded from Supabase PostgreSQL");
           }
         }
       }
+    } catch (lookupErr: any) {
+      if (lookupErr instanceof SupabaseUnreachableError) {
+        return res.status(503).json({ error: "Authentication service temporarily unreachable. Please retry.", code: "AUTH_SERVICE_UNAVAILABLE" });
+      }
+      return res.status(503).json({ error: "Database service temporarily unavailable", code: "DATABASE_UNAVAILABLE" });
     }
 
-    if (!matched || !verifyPassword(String(password), matched.password)) {
-      return res.status(401).json({ error: "Invalid email or password" });
+    let passwordValid = false;
+    if (matched && matched.password) {
+      passwordValid = verifyPassword(String(password), matched.password);
+    }
+
+    // If local verification failed or user wasn't in local DB, attempt Supabase Auth direct authentication
+    if (!passwordValid && isSupabaseConfigured()) {
+      try {
+        const supaAuthUser = await authenticateWithSupabase(cleanEmail, String(password));
+        if (supaAuthUser) {
+          passwordValid = true;
+          if (!matched) {
+            matched = {
+              id: supaAuthUser.id,
+              email: supaAuthUser.email,
+              name: supaAuthUser.name,
+              password: hashPassword(String(password)),
+              active_model_id: supaAuthUser.active_model_id || "",
+              created_at: supaAuthUser.created_at,
+            };
+          } else {
+            matched.password = hashPassword(String(password));
+          }
+          dbSaveUser(matched);
+          users.set(matched.id, matched);
+          console.log("[AUTH] Login authenticated via Supabase Auth successfully");
+        }
+      } catch (authErr: any) {
+        if (authErr instanceof SupabaseUnreachableError) {
+          return res.status(503).json({ error: "Authentication service temporarily unreachable. Please retry.", code: "AUTH_SERVICE_UNAVAILABLE" });
+        }
+        console.warn("[AUTH] Supabase direct auth notice:", authErr);
+      }
+    }
+
+    if (!matched || !passwordValid) {
+      return res.status(401).json({ error: "Invalid email or password", code: "INVALID_CREDENTIALS" });
     }
 
     const token = `sess_${Date.now()}_${crypto.randomBytes(16).toString("hex")}`;
     const expiresAt = Date.now() + 30 * 24 * 3600 * 1000;
     dbSaveSession(token, matched.id, expiresAt);
     sessions.set(token, matched.id);
-    console.log("[AUTH] Session created");
+    if (isSupabaseConfigured()) {
+      try {
+        await syncSessionToSupabase({ token, user_id: matched.id, created_at: Date.now(), expires_at: expiresAt });
+      } catch {}
+    }
+    console.log("[AUTH] Session created for user:", matched.id);
 
-    res.cookie(SESSION_COOKIE, token, {
-      httpOnly: true,
-      sameSite: "lax",
-      maxAge: 30 * 24 * 3600 * 1000,
-      path: "/",
-    });
+    res.cookie(SESSION_COOKIE, token, getAuthCookieOptions(req));
     res.json({ user: publicUser(matched), token });
   });
 
-  app.post("/api/auth/logout", (req, res) => {
+  app.post("/api/auth/logout", async (req, res) => {
     let token = req.cookies?.[SESSION_COOKIE];
     if (!token && req.headers.authorization?.startsWith("Bearer ")) {
       token = req.headers.authorization.substring(7).trim();
@@ -1106,6 +1277,11 @@ async function startServer() {
     if (token) {
       sessions.delete(token);
       dbDeleteSession(token);
+      if (isSupabaseConfigured()) {
+        try {
+          await deleteSessionFromSupabase(token);
+        } catch {}
+      }
     }
     res.clearCookie(SESSION_COOKIE, { path: "/" });
     res.json({ ok: true });
@@ -1726,6 +1902,10 @@ async function startServer() {
       } catch {}
     }
     if (!conv) return res.status(404).json({ error: "Conversation not found", type: "not_found" });
+    const user = resolveUser(req);
+    if (user && conv.user_id && conv.user_id !== user.id && user.id !== initialUser.id && conv.user_id !== initialUser.id) {
+      return res.status(403).json({ error: "Access denied to this conversation", code: "FORBIDDEN" });
+    }
 
     let convMessages = Array.from(messages.values())
       .filter((m) => m.conversation_id === cid)
@@ -1790,13 +1970,50 @@ async function startServer() {
 
   app.get("/api/conversations/:cid/messages", (req, res) => {
     const cid = req.params.cid;
-    if (!conversations.has(cid)) {
+    const conv = conversations.get(cid);
+    if (!conv) {
       return res.status(404).json({ error: "Conversation not found", type: "not_found" });
+    }
+    const user = resolveUser(req);
+    if (user && conv.user_id && conv.user_id !== user.id && user.id !== initialUser.id && conv.user_id !== initialUser.id) {
+      return res.status(403).json({ error: "Access denied to this conversation", code: "FORBIDDEN" });
     }
     const convMessages = Array.from(messages.values())
       .filter((m) => m.conversation_id === cid)
       .sort((a, b) => a.created_at - b.created_at);
     res.json({ messages: convMessages });
+  });
+
+  app.post("/api/conversations/:cid/messages", (req, res) => {
+    const cid = req.params.cid;
+    const conv = conversations.get(cid);
+    if (!conv) {
+      return res.status(404).json({ error: "Conversation not found", type: "not_found" });
+    }
+    const user = resolveUser(req);
+    if (user && conv.user_id && conv.user_id !== user.id && user.id !== initialUser.id && conv.user_id !== initialUser.id) {
+      return res.status(403).json({ error: "Access denied to this conversation", code: "FORBIDDEN" });
+    }
+    const { role = "user", content = "", model_id = conv.model_id || "gemini-2.5-flash" } = req.body || {};
+    if (!content) {
+      return res.status(400).json({ error: "Message content is required" });
+    }
+    const msgId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const newMsg: MessageItem = {
+      id: msgId,
+      conversation_id: cid,
+      role,
+      content,
+      model_id,
+      created_at: Date.now(),
+    };
+    messages.set(msgId, newMsg);
+    try {
+      dbSaveMessage(msgId, cid, role, content, model_id);
+    } catch (e) {
+      console.error("Failed to save message to SQLite:", e);
+    }
+    res.status(201).json({ success: true, message: newMsg, id: msgId });
   });
 
   app.post("/api/conversations/:cid/messages/:msg_id/edit", (req, res) => {
@@ -2815,6 +3032,7 @@ TOTAL LATENCY     : ${totalResponseMs} ms
     try {
       dbCreateProject({
         id: pid,
+        user_id: user.id,
         name,
         created_at: pItem.created_at,
         updated_at: pItem.updated_at,
@@ -3644,6 +3862,19 @@ Fix the issue and output the complete fixed file content:`;
       validation: { status: "unverified", message: "Pending validation" }
     };
     projectArtifacts.set(art.id, art);
+    try {
+      dbCreateArtifact({
+        id: art.id,
+        project_id: pid,
+        name: filename,
+        path: filename,
+        mime_type: art.mimeType,
+        artifact_type: category,
+        content: content || (bufferBase64 ? JSON.stringify({ bufferBase64, filename }) : "")
+      });
+    } catch (e) {
+      console.error("Failed to persist artifact to SQLite:", e);
+    }
     res.json({ artifact: art });
   });
 
@@ -4996,6 +5227,9 @@ ${vq.answer}
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
+
+  console.log("[Boot] Hydrating Clarity database and cloud persistence...");
+  await hydrateFromDatabase();
 
   app.listen(PORT, "0.0.0.0", async () => {
     console.log(`Clarity server listening on http://0.0.0.0:${PORT}`);
